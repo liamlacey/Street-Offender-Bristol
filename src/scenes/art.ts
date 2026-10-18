@@ -22,6 +22,7 @@ export const TEX = {
   debris: (kind: string) => `debris-${kind}`,
   stump: 'stump',
   trunk: 'trunk',
+  pole: 'pole',
 } as const;
 
 export const TREE_KINDS = 4;
@@ -310,6 +311,8 @@ export function createArt(scene: Phaser.Scene): void {
     roundRect(ctx, 38, 0.5, 6, 5, 1.5, '#d9d2ae');
     circle(ctx, 2, 3, 2, '#2d3035');
   });
+  // A pole on its way down (one 16 px long, stretched to each).
+  canvasTexture(scene, TEX.pole, 16, 2, (ctx) => roundRect(ctx, 0, 0, 16, 2, 1, '#3d4248'));
   canvasTexture(scene, TEX.debris('shortpole'), 22, 4, (ctx) => {
     roundRect(ctx, 0, 1, 22, 2, 1, '#2f3338');
     ctx.fillStyle = '#e8e8e8';

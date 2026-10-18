@@ -164,7 +164,7 @@ export class GameScene extends Phaser.Scene {
       treeHeight: (index) => this.trees[index].h,
       audio: () => this.audio,
       weight: () => 1,
-    }, DEPTH.props - 0.1);
+    }, DEPTH.props - 0.1, DEPTH.trees);
     this.addProps();
     this.addTrees();
     this.addLights();

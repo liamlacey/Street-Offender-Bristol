@@ -199,6 +199,21 @@ export function fallen(kind: Exclude<ThingKind, 'tree' | 'fountain' | 'stump'>, 
   }
 }
 
+/** How long something takes to topple over from standing, seconds: the taller it is, the longer (as a falling pole does, with the root of its height). */
+export function toppleTime(heightMetres: number): number {
+  return Math.max(0.35, Math.min(1.6, 0.4 * Math.sqrt(heightMetres)));
+}
+
+/** How the things that stand go over: how tall they are, px, how far from their foot their top ends up lying, px, and whether there's a pole between. */
+export const TOPPLE: Record<Exclude<ThingKind, 'tree' | 'fountain' | 'stump'>, { height: number; reach: number; pole: boolean }> = {
+  lamp: { height: 5.5 * 8, reach: 42, pole: true },
+  signal: { height: 3.5 * 8, reach: 24, pole: true },
+  beacon: { height: 2.6 * 8, reach: 18, pole: true },
+  bollard: { height: 1 * 8, reach: 4, pole: false },
+  postbox: { height: 1.6 * 8, reach: 4, pole: false },
+  phone: { height: 2.5 * 8, reach: 6, pole: false },
+};
+
 /** The glass that breaks when something goes over: how many shards, and how far along the way it fell they land (where its lamp, lenses or panes hit the ground), px. */
 const GLASS: Partial<Record<ThingKind, { count: number; at: number }>> = {
   lamp: { count: 10, at: 42 },

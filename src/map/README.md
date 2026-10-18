@@ -155,6 +155,13 @@ buildings, bridges and big structures (fountains), and what's broken stays
 broken, where it fell, in the way, until the game is restarted. The rules are
 in `src/world/damage.ts` (pure, tested); `src/scenes/Wreckage.ts` applies them.
 
+Whatever stands (a tree, a lamp post, a traffic light, a Belisha beacon, a
+bollard, a post box, a phone box) doesn't just appear fallen: it topples over
+from its foot the way it was hit, slowly at first and then faster and faster,
+in 0.4 × √(its height in metres) seconds (0.35 to 1.6 s: a bollard's over in
+0.4 s, a lamp post takes about 0.9 s and a big tree 1.6 s). What it breaks into
+lands, and what it leaves lying gets in the way, only when it hits the ground.
+
 Whether something gives way depends on how fast the car is going *into* it
 (its speed towards it, in px/s) times the vehicle's weight (a car is 1; vans
 and buses to come), against the thing's strength; breaking through takes some
@@ -163,8 +170,8 @@ bounces off.
 
 | Thing (from OSM) | Material | Strength | What happens |
 | --- | --- | --- | --- |
-| Tree | wood | 140 + 12 × height in m (180 to 420) | Splits at the foot and topples the way it was hit (and away from the side it was hit on), slowly at first, then faster and faster, coming down in 0.8 to 1.6 s (longer the bigger it is): a stump, the trunk lying along the ground (solid), the crown at its end; as it lands, leaves flying and clumps of them and broken branches strewn round it (more the bigger the tree); no shadow any more |
-| Street lamp, Belisha beacon, traffic light | metal with electrics | 150, 110, 170 | Bends over at the foot and lies the way it was hit (a heavy pole: shoved, not thrown); goes out (a traffic light's head lies loose), its glass smashed and strewn where its lamp (or lenses) hit the ground, and sparks and fizzes for 5 s |
+| Tree | wood | 140 + 12 × height in m (180 to 420) | Splits at the foot and topples the way it was hit (and away from the side it was hit on): a stump, the trunk lying along the ground (solid), the crown at its end; as it lands, leaves flying and clumps of them and broken branches strewn round it (more the bigger the tree); no shadow any more |
+| Street lamp, Belisha beacon, traffic light | metal with electrics | 150, 110, 170 | Bends over at the foot and topples the way it was hit, its lamp (or head, or globe) swinging down, and lies there (a heavy pole: shoved, not thrown); goes out (a traffic light's head lies loose), its glass smashed and strewn where its lamp (or lenses) hit the ground, and sparks and fizzes for 5 s |
 | Bollard | metal | 210 | Knocked flat, shoved along |
 | Post box | iron | 300 | Knocked off its foot, a heavy lump |
 | Phone box | glass | 170 | Goes over, its panes smashed and strewn round it |

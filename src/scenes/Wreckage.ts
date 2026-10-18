@@ -15,6 +15,8 @@ import {
   fallen,
   fallenTree,
   shards,
+  TOPPLE,
+  toppleTime,
   gapFor,
   giveWay,
   impactSpeed,
@@ -25,29 +27,35 @@ import type { LooseProp, Post, Wall } from '../world/world';
 import { ART_SCALE, TEX } from './art';
 import type { CarEffects } from './CarEffects';
 
+/** What's got glass in it, to smash as it lands. */
+const GLASSY = new Set(['lamp', 'signal', 'beacon', 'phone']);
 /** How long a broken light's wires go on sparking, seconds. */
 const SPARKING = 5;
-/** How high a fallen tree's crown lies, px (as its treetop: the crown's drawn a little below). */
+/** How high a fallen tree's crown lies, px (as its treetop: the crown's drawn a little below), and the top of anything else. */
 const LYING = 2 * 8;
+const LYING_LOW = 0.5 * 8;
 
-/** A tree going over: it leans slowly at first, then faster and faster till it hits the ground. */
-interface Falling {
-  index: number;
+/** Something going over: it leans slowly at first, then faster and faster till it hits the ground. */
+interface Toppling {
   x: number;
   y: number;
   z: number;
-  /** Its height standing, px. */
+  /** Its height standing, and its top's lying, px. */
   height: number;
-  fall: ReturnType<typeof fallenTree>;
-  /** How far from its foot the crown ends up, px. */
+  lying: number;
+  /** Which way it falls, and how far from its foot its top ends up, px. */
+  angle: number;
   reach: number;
-  trunk: Phaser.GameObjects.Image;
+  /** Its trunk or pole, if it has one, and how thick it's drawn, px; and its top (a lamp, a light's head), drawn up where it is. */
+  pole?: { image: Phaser.GameObjects.Image; width: number; at: number };
+  top?: Phaser.GameObjects.Image;
+  /** Told where its top is each frame (a tree's crown is drawn by the scene). */
+  move?: (x: number, y: number, h: number) => void;
   /** When it started going over, and how long it takes to come down, seconds. */
   start: number;
   time: number;
-  /** How the car that brought it down was going, for where its leaves fly. */
-  vx: number;
-  vy: number;
+  /** What happens when it hits the ground. */
+  land: () => void;
 }
 
 export interface WreckageHooks {
@@ -78,8 +86,8 @@ export class Wreckage {
   private readonly wrecks: { x: number; y: number; z: number; image: Phaser.GameObjects.Image }[] = [];
   /** Where broken lights are still sparking, and till when (seconds). */
   private readonly sparking: { x: number; y: number; until: number }[] = [];
-  /** Trees on their way down. */
-  private readonly falling: Falling[] = [];
+  /** Things on their way down. */
+  private readonly falling: Toppling[] = [];
   private nextSpark = 0;
   private readonly rand = Phaser.Math.RND;
 
@@ -90,6 +98,8 @@ export class Wreckage {
     private readonly effects: CarEffects,
     private readonly hooks: WreckageHooks,
     private readonly depth: number,
+    /** What's drawn up high (a falling lamp, a light's head). */
+    private readonly aboveDepth: number,
   ) {}
 
   /**
@@ -141,26 +151,45 @@ export class Wreckage {
       const fall = fallenTree(post.x, post.y, height, car.vx, car.vy, car.x, car.y);
       // The stump's low enough to drive over: it's just drawn.
       this.addWreck(TEX.stump, post.x, post.y, z, 0, 1);
-      const trunk = this.scene.add.image(post.x, post.y, TEX.trunk).setDepth(this.depth);
-      const metres = height / 8;
-      this.falling.push({
-        index: post.index,
+      const [vx, vy] = [car.vx, car.vy];
+      this.topple({
         x: post.x,
         y: post.y,
         z,
         height,
-        fall,
+        lying: LYING,
+        angle: fall.angle,
         reach: Math.hypot(fall.crownX - post.x, fall.crownY - post.y),
-        trunk,
-        start: this.scene.time.now / 1000,
-        // Bigger trees take longer to come down.
-        time: Math.max(0.8, Math.min(1.6, 0.6 + metres * 0.06)),
-        vx: car.vx,
-        vy: car.vy,
+        pole: { image: this.scene.add.image(post.x, post.y, TEX.trunk).setDepth(this.depth), width: 7, at: 0.85 },
+        move: (x, y, h) => this.hooks.treeFell(post.index, x, y, h),
+        land: () => this.treeLanded(post.index, fall, z, height, vx, vy),
       });
     } else if (post.thing !== 'fountain' && post.thing !== 'stump') {
-      for (const d of fallen(post.thing, post.x, post.y, car.vx, car.vy, rand)) this.hooks.addDebris(d, level);
-      for (const d of shards(post.thing, post.x, post.y, car.vx, car.vy, rand)) this.hooks.addDebris(d, level);
+      // It snaps or bends at its foot and goes over the way it was hit; its pieces and glass land where it does.
+      const thing = post.thing;
+      const look = TOPPLE[thing];
+      const [x, y, vx, vy] = [post.x, post.y, car.vx, car.vy];
+      const angle = Math.atan2(vy, vx);
+      const texture = thing === 'signal' ? TEX.light('off') : thing === 'beacon' ? TEX.beacon(false) : TEX.prop(thing);
+      const top = this.scene.add.image(x, y, texture).setScale(thing === 'signal' || thing === 'beacon' ? 1.3 / ART_SCALE : 1 / ART_SCALE).setRotation(angle).setDepth(this.aboveDepth);
+      this.topple({
+        x,
+        y,
+        z,
+        height: look.height,
+        lying: LYING_LOW,
+        angle,
+        reach: look.reach,
+        pole: look.pole ? { image: this.scene.add.image(x, y, TEX.pole).setDepth(this.depth), width: 1.6, at: 1 } : undefined,
+        top,
+        land: () => {
+          for (const d of fallen(thing, x, y, vx, vy, rand)) this.hooks.addDebris(d, level);
+          for (const d of shards(thing, x, y, vx, vy, rand)) this.hooks.addDebris(d, level);
+          const [ex, ey] = [x + Math.cos(angle) * look.reach, y + Math.sin(angle) * look.reach];
+          this.effects.burst(GLASSY.has(thing) ? 'glass' : 'stone', ex, ey, 8);
+          this.hooks.audio()?.shatter(GLASSY.has(thing) ? 'glass' : 'metal', 80 + look.height * 3);
+        },
+      });
       if (tough.material === 'electric') this.sparking.push({ x: post.x, y: post.y, until: this.scene.time.now / 1000 + SPARKING });
     }
     this.effects.burst(tough.material, post.x, post.y, tough.material === 'wood' ? 24 : 14);
@@ -192,49 +221,58 @@ export class Wreckage {
     giveWay(car, WALLS[kind]);
   }
 
-  /** Moves the trees coming down, and when one hits the ground: the trunk's in the way, and its leaves and branches fly. */
+  /** Starts something toppling over. */
+  private topple(t: Omit<Toppling, 'start' | 'time'>): void {
+    this.falling.push({ ...t, start: this.scene.time.now / 1000, time: toppleTime(t.height / 8) });
+  }
+
+  /** Moves the things coming down; when one hits the ground, what happens then. */
   private updateFalling(perspective: Perspective, now: number): void {
     for (let i = this.falling.length - 1; i >= 0; i--) {
       const f = this.falling[i];
       const t = Math.min(1, (now - f.start) / f.time);
-      // Toppling: slow to start, faster and faster (as near enough a falling tree does).
+      // Toppling: slow to start, faster and faster (as near enough a falling pole does).
       const lean = (Math.PI / 2) * t * t;
-      const [ux, uy] = [Math.cos(f.fall.angle), Math.sin(f.fall.angle)];
       const out = f.reach * Math.sin(lean);
-      const top = LYING + (f.height - LYING) * Math.cos(lean);
-      const [cx, cy] = [f.x + ux * out, f.y + uy * out];
-      this.hooks.treeFell(f.index, cx, cy, top);
-      // The trunk, from its foot up to the crown, as it is now, in perspective.
-      const s0 = perspective.lift(f.z);
-      const s1 = perspective.lift(f.z + top * 0.85);
-      const [ax, ay] = [perspective.x(f.x, s0), perspective.y(f.y, s0)];
-      const [bx, by] = [perspective.x(cx, s1), perspective.y(cy, s1)];
-      f.trunk
-        .setPosition((ax + bx) / 2, (ay + by) / 2)
-        .setRotation(Math.atan2(by - ay, bx - ax))
-        .setDisplaySize(Math.max(1, Math.hypot(bx - ax, by - ay)), 7);
+      const h = f.lying + (f.height - f.lying) * Math.cos(lean);
+      const [cx, cy] = [f.x + Math.cos(f.angle) * out, f.y + Math.sin(f.angle) * out];
+      f.move?.(cx, cy, h);
+      const s1 = perspective.lift(f.z + h);
+      const [tx, ty] = [perspective.x(cx, s1), perspective.y(cy, s1)];
+      f.top?.setPosition(tx, ty);
+      if (f.pole) {
+        // From its foot up to its top, as it is now, in perspective.
+        const s0 = perspective.lift(f.z);
+        const sp = perspective.lift(f.z + h * f.pole.at);
+        const [ax, ay] = [perspective.x(f.x, s0), perspective.y(f.y, s0)];
+        const [bx, by] = [perspective.x(cx, sp), perspective.y(cy, sp)];
+        f.pole.image
+          .setPosition((ax + bx) / 2, (ay + by) / 2)
+          .setRotation(Math.atan2(by - ay, bx - ax))
+          .setDisplaySize(Math.max(1, Math.hypot(bx - ax, by - ay)), f.pole.width);
+      }
       if (t < 1) continue;
       // Down.
       this.falling.splice(i, 1);
-      f.trunk.destroy();
-      this.landed(f);
+      f.pole?.image.destroy();
+      f.top?.destroy();
+      f.land();
     }
   }
 
-  private landed(f: Falling): void {
-    const { fall } = f;
+  /** A tree's down: its trunk's in the way, and its leaves and branches fly. */
+  private treeLanded(index: number, fall: ReturnType<typeof fallenTree>, z: number, height: number, vx: number, vy: number): void {
     this.walls[0].add({ ...fall.trunk, level: 0 } as Wall);
     const length = Math.hypot(fall.trunk.bx - fall.trunk.ax, fall.trunk.by - fall.trunk.ay);
-    const image = this.addWreck(TEX.trunk, (fall.trunk.ax + fall.trunk.bx) / 2, (fall.trunk.ay + fall.trunk.by) / 2, f.z, fall.angle, 1);
+    const image = this.addWreck(TEX.trunk, (fall.trunk.ax + fall.trunk.bx) / 2, (fall.trunk.ay + fall.trunk.by) / 2, z, fall.angle, 1);
     image.setDisplaySize(length, 7);
-    this.hooks.treeFell(f.index, fall.crownX, fall.crownY, LYING, fall.angle);
+    this.hooks.treeFell(index, fall.crownX, fall.crownY, LYING, fall.angle);
     // Its crown hits the ground: leaves flying, and clumps of them and broken branches strewn about it, more the bigger it is.
-    const metres = f.height / 8;
+    const metres = height / 8;
     const spread = Math.min(length * 1.2, 90);
-    const [vx, vy] = [f.vx * 0.3, f.vy * 0.3];
     const rand = this.rand.frac.bind(this.rand);
-    for (const d of debris('foliage', Math.round(Math.min(16, 4 + metres)), fall.crownX, fall.crownY, vx, vy, rand, spread)) this.hooks.addDebris(d, 0);
-    for (const d of debris('twig', Math.round(Math.min(8, 2 + metres / 2)), fall.crownX, fall.crownY, vx, vy, rand, spread)) this.hooks.addDebris(d, 0);
+    for (const d of debris('foliage', Math.round(Math.min(16, 4 + metres)), fall.crownX, fall.crownY, vx * 0.3, vy * 0.3, rand, spread)) this.hooks.addDebris(d, 0);
+    for (const d of debris('twig', Math.round(Math.min(8, 2 + metres / 2)), fall.crownX, fall.crownY, vx * 0.3, vy * 0.3, rand, spread)) this.hooks.addDebris(d, 0);
     this.effects.burst('plant', fall.crownX, fall.crownY, 30);
     this.effects.burst('wood', (fall.trunk.ax + fall.trunk.bx) / 2, (fall.trunk.ay + fall.trunk.by) / 2, 10);
     this.hooks.audio()?.shatter('plant', 120 + metres * 20);
