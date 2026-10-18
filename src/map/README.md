@@ -29,7 +29,18 @@ bottom of the screen. Google Maps' data can't be used: its terms don't allow it.
   doesn't tag (the top of most of its roof), decides whether its roof is pitched
   (it falls away from a ridge, along or across the building) or flat, measures
   OSM's trees, and finds the trees OSM hasn't got (rough-topped blobs 4 m or more
-  high, away from buildings, water and roads).
+  high, away from buildings, water and roads). It also makes the terrain: the bare
+  ground's height every 4 m (smoothed, with bridge decks laid straight across what
+  they span), stored in the map as 16-bit decimetres in base64.
+
+The hills are in `src/world/`: `terrain.ts` (the height and slope anywhere),
+`perspective.ts` (the old games' perspective: higher than the car is nearer the
+camera, so drawn pushed out from the middle of the view), and `TerrainSheet.ts`
+(the ground and the tyre marks drawn on meshes whose corners follow the hills).
+Buildings, trees and street furniture stand on the ground where they are, the
+ground is shaded by its slope, and the car feels the gradient (`CarPhysics.ts`:
+gravity along the slope, and a top speed that falls climbing and rises
+descending, by the slope's angle).
 - `bristol.json` is the result, which the game loads.
 
 The game's side of it is in `src/world/`: `world.ts` (what you hit, what's loose,

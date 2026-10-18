@@ -3,6 +3,7 @@ import { CarAudio } from '../audio/CarAudio';
 import {
   CAR_LENGTH,
   type CarInput,
+  DEFAULT_TUNING,
   type CarState,
   SURFACE_GRIP,
   createCar,
@@ -25,11 +26,12 @@ import {
 } from '../physics/collisions';
 import { Buildings } from '../world/Buildings';
 import { GroundLayer, paintSurfaces } from '../world/GroundLayer';
+import { Perspective } from '../world/perspective';
+import { Terrain } from '../world/terrain';
 import { SURFACE_KIND, Surface, type SurfaceGrid } from '../world/surface';
 import { CHUNK, type LooseProp, type World, buildWorld, chunkKey } from '../world/world';
 import { ART_SCALE, TEX, TREE_KINDS, TREE_RADIUS, createArt } from './art';
 import { CarEffects } from './CarEffects';
-import { ChunkLayers } from './ChunkLayers';
 import { HudScene, RESET_EVENT, STREET_EVENT } from './HudScene';
 import { SkidMarks } from './SkidMarks';
 
@@ -63,13 +65,16 @@ export class GameScene extends Phaser.Scene {
   private surfaces!: SurfaceGrid;
   private ground!: GroundLayer;
   private buildings!: Buildings;
-  private chunks!: ChunkLayers;
+  private terrain!: Terrain;
+  private readonly perspective = new Perspective();
+  /** The street furniture that never moves, and the height of the ground under each, px. */
+  private props: { x: number; y: number; z: number; image: Phaser.GameObjects.Image }[] = [];
   private walls!: SegmentGrid;
   private posts!: CircleGrid;
   private car!: CarState;
   private carSprite!: Phaser.GameObjects.Image;
   private carShadow!: Phaser.GameObjects.Image;
-  private trees: { x: number; y: number; h: number; image: Phaser.GameObjects.Image }[] = [];
+  private trees: { x: number; y: number; z: number; h: number; image: Phaser.GameObjects.Image }[] = [];
   private loose: { body: LooseProp; image: Phaser.GameObjects.Image }[] = [];
   private looseByChunk = new Map<string, number[]>();
   private effects!: CarEffects;
@@ -103,11 +108,11 @@ export class GameScene extends Phaser.Scene {
     createArt(this);
     this.walls = new SegmentGrid(this.world.walls);
     this.posts = new CircleGrid(this.world.posts);
-    this.chunks = new ChunkLayers(this);
-    this.ground = new GroundLayer(this, this.world, DEPTH.ground);
-    this.skids = new SkidMarks(this, DEPTH.skids);
+    this.terrain = new Terrain(map.terrain, map.pxPerMetre);
+    this.ground = new GroundLayer(this, this.world, this.terrain, DEPTH.ground);
+    this.skids = new SkidMarks(this, this.terrain, DEPTH.skids);
     this.effects = new CarEffects(this, this.skids, DEPTH.effects);
-    this.buildings = new Buildings(this, this.world, DEPTH.buildings);
+    this.buildings = new Buildings(this, this.world, this.terrain, DEPTH.buildings);
     this.addProps();
     this.addTrees();
 
@@ -123,7 +128,8 @@ export class GameScene extends Phaser.Scene {
     this.zoom = this.restZoom();
     cam.setZoom(this.zoom);
     cam.centerOn(this.car.x, this.car.y);
-    this.ground.update(cam.worldView, true);
+    this.updatePerspective();
+    this.ground.update(cam.worldView, this.perspective, true);
 
     const kb = this.input.keyboard!;
     const K = Phaser.Input.Keyboard.KeyCodes;
@@ -164,8 +170,8 @@ export class GameScene extends Phaser.Scene {
   /** Lamp posts, bollards, benches, bins and the rest. */
   private addProps(): void {
     for (const p of this.world.fixed) {
-      const image = this.add.image(p.x, p.y, TEX.prop(p.kind)).setScale(1 / ART_SCALE);
-      this.chunks.add(image, DEPTH.props);
+      const image = this.add.image(p.x, p.y, TEX.prop(p.kind)).setScale(1 / ART_SCALE).setDepth(DEPTH.props).setVisible(false);
+      this.props.push({ x: p.x, y: p.y, z: this.groundAt(p.x, p.y), image });
     }
     this.world.loose.forEach((body, i) => {
       const image = this.add.image(body.x, body.y, TEX.prop(body.kind)).setScale(1 / ART_SCALE).setRotation(body.angle).setDepth(DEPTH.props);
@@ -186,7 +192,7 @@ export class GameScene extends Phaser.Scene {
         .setRotation(((i * 1.7) % 6.28) - 3.14)
         .setDepth(DEPTH.trees)
         .setVisible(false);
-      this.trees.push({ x: t[i], y: t[i + 1], h: t[i + 3], image });
+      this.trees.push({ x: t[i], y: t[i + 1], z: this.groundAt(t[i], t[i + 1]), h: t[i + 3], image });
     }
   }
 
@@ -204,12 +210,13 @@ export class GameScene extends Phaser.Scene {
     if (this.sinking < 0) this.effects.update(this.car, this.input_, SURFACE_KIND[this.surface], dt);
     this.skids.flush();
     this.updateCamera(dt);
+    this.updatePerspective();
     const view = this.cameras.main.worldView;
-    this.ground.update(view);
-    this.chunks.update(this.cameras.main);
-    const height = CAMERA_HEIGHT * (this.restZoom() / this.zoom);
-    this.buildings.update(view, height);
-    this.updateTrees(view, height);
+    this.ground.update(view, this.perspective);
+    this.skids.update(view, this.perspective);
+    this.buildings.update(view, this.perspective);
+    this.updateTrees(view);
+    this.updateProps(view);
     this.updateStreet(dt);
     const speed = Math.hypot(this.car.vx, this.car.vy);
     this.audio?.update({
@@ -252,7 +259,8 @@ export class GameScene extends Phaser.Scene {
     }
     const before = this.surface;
     this.surface = this.surfaces.at(car.x, car.y);
-    stepCar(car, this.input_, dt, SURFACE_GRIP[SURFACE_KIND[this.surface]]);
+    const [sx, sy] = this.terrain.slope(car.x, car.y);
+    stepCar(car, this.input_, dt, SURFACE_GRIP[SURFACE_KIND[this.surface]], DEFAULT_TUNING, { x: sx, y: sy });
 
     const wall = collideCarWithWalls(car, this.walls, undefined, this.contact);
     if (wall > 0) this.hit(wall);
@@ -302,7 +310,7 @@ export class GameScene extends Phaser.Scene {
   /** Moves whatever's been knocked, until it settles. */
   private updateLoose(): void {
     const dt = 1 / 60;
-    for (const { body, image } of this.loose) {
+    for (const { body } of this.loose) {
       if (!body.moved) continue;
       stepBody(body, dt, 3);
       collideBodyWithStatic(body, this.posts);
@@ -323,7 +331,6 @@ export class GameScene extends Phaser.Scene {
           body.vy -= 1.4 * vn * ny;
         }
       }
-      image.setPosition(body.x, body.y).setRotation(body.angle);
       if (Math.hypot(body.vx, body.vy) < 2 && Math.abs(body.spin) < 0.05) {
         body.vx = body.vy = body.spin = 0;
         // Settled, wherever it ended up: it's still loose for the next time it's hit.
@@ -400,19 +407,52 @@ export class GameScene extends Phaser.Scene {
     cam.centerOn(car.x + this.lookX, car.y + this.lookY);
   }
 
+  /** The ground's height at (x, y), px. */
+  private groundAt(x: number, y: number): number {
+    return this.terrain.at(x, y) * this.terrain.px;
+  }
+
+  /** The camera's over the car, looking down from high above the ground it's on. */
+  private updatePerspective(): void {
+    const view = this.cameras.main.worldView;
+    const p = this.perspective;
+    p.cx = view.centerX;
+    p.cy = view.centerY;
+    p.height = CAMERA_HEIGHT * (this.restZoom() / this.zoom);
+    p.ground = this.groundAt(this.car.x, this.car.y);
+  }
+
   /** The trees near the view, their crowns lifted towards the camera like the roofs. */
-  private updateTrees(view: Phaser.Geom.Rectangle, height: number): void {
-    const cx = view.centerX;
-    const cy = view.centerY;
-    const pad = 80;
+  private updateTrees(view: Phaser.Geom.Rectangle): void {
+    const p = this.perspective;
+    const pad = 120;
     for (const t of this.trees) {
       const show = t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
       if (t.image.visible !== show) t.image.setVisible(show);
       if (!show) continue;
       // The crown's a little below the treetop.
-      const crown = Math.min(t.h * 0.85, height * 0.6);
-      const lift = 1 + crown / (height - crown);
-      t.image.setPosition(cx + (t.x - cx) * lift, cy + (t.y - cy) * lift);
+      const s = p.lift(t.z + t.h * 0.85);
+      t.image.setPosition(p.x(t.x, s), p.y(t.y, s));
+    }
+  }
+
+  /** The street furniture near the view, standing on the hills. */
+  private updateProps(view: Phaser.Geom.Rectangle): void {
+    const p = this.perspective;
+    const pad = 120;
+    for (const t of this.props) {
+      const show = t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
+      if (t.image.visible !== show) t.image.setVisible(show);
+      if (!show) continue;
+      const s = p.lift(t.z);
+      t.image.setPosition(p.x(t.x, s), p.y(t.y, s));
+    }
+    for (const { body, image } of this.loose) {
+      const show = body.x > view.left - pad && body.x < view.right + pad && body.y > view.top - pad && body.y < view.bottom + pad;
+      if (image.visible !== show) image.setVisible(show);
+      if (!show) continue;
+      const s = p.lift(this.groundAt(body.x, body.y));
+      image.setPosition(p.x(body.x, s), p.y(body.y, s)).setRotation(body.angle);
     }
   }
 

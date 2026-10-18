@@ -163,6 +163,23 @@ export interface GameMap {
   trees: number[];
   props: Prop[];
   crossings: Crossing[];
+  /** The lie of the land, if measured (see src/map/enrich.ts). */
+  terrain?: TerrainData;
+}
+
+/**
+ * The ground's height above sea level, on a grid over the map: each cell's
+ * height in decimetres above `base`, as little-endian 16-bit numbers, in
+ * base64 (it's a lot of numbers, and this keeps the file small).
+ */
+export interface TerrainData {
+  /** Map px between grid points; the first is at (0, 0). */
+  cell: number;
+  cols: number;
+  rows: number;
+  /** Metres above sea level of the lowest point. */
+  base: number;
+  heights: string;
 }
 
 // --- Reading the XML ---

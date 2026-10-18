@@ -53,7 +53,21 @@ export interface CarTuning {
   handbrakeDecel: number;
   /** How quickly spin from a collision dies away (per second). */
   spinDamping: number;
+  /** Gravity pulling the car down a hill, px/s² for a vertical drop (real gravity, 78 px/s², made a bit stronger so you feel it). */
+  hillGravity: number;
+  /** How much of its top speed the car loses climbing, for each unit of the slope's sine (a 1 in 10 hill's is 0.1). */
+  climbSpeedLoss: number;
+  /** And how much faster it can go downhill. */
+  descentSpeedGain: number;
 }
+
+/** How steep the ground is under the car: its rise per metre east and per metre south (y is down). */
+export interface Slope {
+  x: number;
+  y: number;
+}
+
+export const FLAT: Slope = { x: 0, y: 0 };
 
 /** A quick city car: 400 px/s is 50 m/s, 112 mph. */
 export const DEFAULT_TUNING: CarTuning = {
@@ -69,6 +83,9 @@ export const DEFAULT_TUNING: CarTuning = {
   handbrakeGrip: 1.3,
   handbrakeDecel: 200,
   spinDamping: 3,
+  hillGravity: 160,
+  climbSpeedLoss: 2.5,
+  descentSpeedGain: 1.2,
 };
 
 export type SurfaceKind = 'road' | 'pavement' | 'grass' | 'dirt' | 'mud' | 'water';
@@ -116,14 +133,21 @@ export function stepCar(
   dt: number,
   surface: SurfaceGrip = SURFACE_GRIP.road,
   tuning: CarTuning = DEFAULT_TUNING,
+  slope: Slope = FLAT,
 ): void {
   const cos = Math.cos(car.heading);
   const sin = Math.sin(car.heading);
   let vF = car.vx * cos + car.vy * sin;
   let vR = -car.vx * sin + car.vy * cos;
 
+  // The hill: how steep it is the way the car's pointing (the sine of the angle, + uphill) and across it.
+  const norm = Math.sqrt(1 + slope.x * slope.x + slope.y * slope.y);
+  const climb = (slope.x * cos + slope.y * sin) / norm;
+  const tilt = (-slope.x * sin + slope.y * cos) / norm;
+  const topSpeed = tuning.maxForwardSpeed * (1 - tuning.climbSpeedLoss * Math.max(0, climb) + tuning.descentSpeedGain * Math.max(0, -climb));
+
   if (input.throttle > 0) {
-    vF = Math.min(vF + tuning.engineAccel * input.throttle * dt, Math.max(vF, tuning.maxForwardSpeed));
+    vF = Math.min(vF + tuning.engineAccel * input.throttle * dt, Math.max(vF, topSpeed));
   }
   if (input.brake > 0) {
     if (vF > 1) {
@@ -134,6 +158,14 @@ export function stepCar(
   }
 
   vF -= vF * Math.min(tuning.rollingDrag * surface.drag * dt, 1);
+  // Gravity, down the hill: slowing the car climbing, speeding it descending, and rolling it back if
+  // it stops on a steep one (the handbrake holds it).
+  const held = input.handbrake && Math.abs(vF) < 30;
+  const resting = Math.abs(vF) < 5 && input.throttle === 0 && input.brake === 0 && Math.hypot(climb, tilt) < 0.06;
+  if (!held && !resting) {
+    vF -= tuning.hillGravity * climb * dt;
+    vR -= tuning.hillGravity * tilt * dt;
+  }
   if (input.handbrake) {
     vF = moveTowardZero(vF, tuning.handbrakeDecel * dt);
   }

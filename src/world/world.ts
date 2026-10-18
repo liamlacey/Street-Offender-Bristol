@@ -164,7 +164,7 @@ export function bounds(pts: Pts): [number, number, number, number] {
   return [x0, y0, x1, y1];
 }
 
-/** Light from the south-west, low in the sky: where a building's shadow falls, for its height. */
+/** Light from the top left (the north-west, as in the old games), low in the sky: where a building's shadow falls, for its height. */
 export function shadowOffset(height: number): [number, number] {
   const length = Math.min(height * 0.55, 220);
   return [length * 0.6, length * 0.8];

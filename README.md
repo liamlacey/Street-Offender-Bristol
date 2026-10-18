@@ -5,8 +5,8 @@ phone). Built with [Phaser](https://phaser.io), TypeScript and Vite.
 
 Right now it's a car to drive round the middle of Bristol: about a kilometre square
 centred on Bristol Cathedral, from Brandon Hill and Park Street down to the Floating
-Harbour, Queen Square and Wapping Wharf, built from real map data. Drive on the
-roads, pavements and grass, crash into buildings, walls, lamp posts and trees, knock
+Harbour, Queen Square and Wapping Wharf, built from real map data, hills and all. Drive on the
+roads, pavements and grass (up Park Street's hill slower, down it faster), crash into buildings, walls, lamp posts and trees, knock
 benches and bins flying, and drive into the harbour if you like (the car sinks, and
 you're put back on the road).
 

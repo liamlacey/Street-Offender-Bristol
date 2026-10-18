@@ -112,3 +112,40 @@ describe('stepCar', () => {
     expect(Math.abs(lateralSpeed(grass))).toBeGreaterThan(Math.abs(lateralSpeed(road)) * 2);
   });
 });
+
+describe('hills', () => {
+  /** A slope rising `grade` metres per metre to the east (the way a new car faces). */
+  const hill = (grade: number) => ({ x: grade, y: 0 });
+  const climb = (grade: number, seconds = 10, car = createCar()) => {
+    const full = { ...NO_INPUT, throttle: 1 };
+    for (let t = 0; t < seconds; t += DT) stepCar(car, full, DT, SURFACE_GRIP.road, DEFAULT_TUNING, hill(grade));
+    return car;
+  };
+
+  it('is slower up a hill, and slower the steeper it is', () => {
+    const flat = forwardSpeed(climb(0));
+    const gentle = forwardSpeed(climb(0.05));
+    const steep = forwardSpeed(climb(0.15));
+    expect(gentle).toBeLessThan(flat);
+    expect(steep).toBeLessThan(gentle * 0.8);
+  });
+
+  it('is faster down one', () => {
+    expect(forwardSpeed(climb(-0.12))).toBeGreaterThan(forwardSpeed(climb(0)) * 1.1);
+  });
+
+  it('rolls back down a steep hill when stopped, unless the handbrake is on', () => {
+    const rolling = createCar();
+    for (let t = 0; t < 2; t += DT) stepCar(rolling, NO_INPUT, DT, SURFACE_GRIP.road, DEFAULT_TUNING, hill(0.15));
+    expect(rolling.x).toBeLessThan(-10);
+    const held = createCar();
+    for (let t = 0; t < 2; t += DT) stepCar(held, { ...NO_INPUT, handbrake: true }, DT, SURFACE_GRIP.road, DEFAULT_TUNING, hill(0.15));
+    expect(Math.abs(held.x)).toBeLessThan(1);
+  });
+
+  it('stays put on a gentle one', () => {
+    const car = createCar();
+    for (let t = 0; t < 2; t += DT) stepCar(car, NO_INPUT, DT, SURFACE_GRIP.road, DEFAULT_TUNING, hill(0.03));
+    expect(Math.abs(car.x)).toBeLessThan(0.5);
+  });
+});

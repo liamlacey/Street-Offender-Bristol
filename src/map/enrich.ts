@@ -7,7 +7,7 @@
  */
 
 import { type HeightGrid, type Raster, bestShift, findTrees, heightAt, heightGrid, quantile, sample } from './lidar.ts';
-import { type GameMap, Projection, type Pts, VEHICLE_ROADS, pointInRing, ridgeAxis, ringArea } from './osm.ts';
+import { type GameMap, Projection, type Pts, type TerrainData, VEHICLE_ROADS, pointInRing, ridgeAxis, ringArea } from './osm.ts';
 import { toNationalGrid } from './osgb.ts';
 
 export interface LidarReport {
@@ -120,7 +120,137 @@ export function addLidar(map: GameMap, dsm: Raster, dtm: Raster): LidarReport {
   }
   osm.push(...added);
   report.treesAdded = added.length / 4;
+  map.terrain = terrainOf(map, dtm, (x, y) => grid(x + sx, y + sy));
   return report;
+}
+
+/** The terrain grid's spacing, metres: the hills are smooth enough for this, and it keeps the map small. */
+const TERRAIN_CELL = 4;
+
+/**
+ * The bare ground's height every TERRAIN_CELL metres (the average of the
+ * LIDAR's readings round each point), with the bridges' decks laid across
+ * the water and roads they span rather than dipping down to them.
+ */
+export function terrainOf(map: GameMap, dtm: Raster, toGrid: (x: number, y: number) => [number, number]): TerrainData {
+  const px = map.pxPerMetre;
+  const cell = TERRAIN_CELL * px;
+  const cols = Math.ceil(map.width / cell) + 1;
+  const rows = Math.ceil(map.height / cell) + 1;
+  const z = new Float32Array(cols * rows);
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      let sum = 0;
+      let n = 0;
+      for (let dy = -1.5; dy <= 1.5; dy++) {
+        for (let dx = -1.5; dx <= 1.5; dx++) {
+          const [e, nn] = toGrid(i * cell + dx * px, j * cell + dy * px);
+          const v = sample(dtm, e, nn);
+          if (v === v) {
+            sum += v;
+            n++;
+          }
+        }
+      }
+      z[j * cols + i] = n ? sum / n : NaN;
+    }
+  }
+  fillGaps(z, cols, rows);
+  // Smooth out the bumps (kerbs, walls, what's left where buildings were taken out of the survey).
+  for (let pass = 0; pass < 2; pass++) smooth(z, cols, rows);
+
+  // Bridges: a straight deck from one end to the other, over whatever's below.
+  const at = (x: number, y: number) => z[Math.max(0, Math.min(rows - 1, Math.round(y / cell))) * cols + Math.max(0, Math.min(cols - 1, Math.round(x / cell)))];
+  for (const r of map.roads) {
+    if (!r.bridge || r.pts.length < 4) continue;
+    const n = r.pts.length;
+    const z0 = at(r.pts[0], r.pts[1]);
+    const z1 = at(r.pts[n - 2], r.pts[n - 1]);
+    let total = 0;
+    for (let k = 0; k + 3 < n; k += 2) total += Math.hypot(r.pts[k + 2] - r.pts[k], r.pts[k + 3] - r.pts[k + 1]);
+    let along = 0;
+    const reach = r.width / 2 + cell;
+    for (let k = 0; k + 3 < n; k += 2) {
+      const [ax, ay, bx, by] = [r.pts[k], r.pts[k + 1], r.pts[k + 2], r.pts[k + 3]];
+      const len = Math.hypot(bx - ax, by - ay);
+      for (let i = Math.floor((Math.min(ax, bx) - reach) / cell); i <= Math.ceil((Math.max(ax, bx) + reach) / cell); i++) {
+        for (let j = Math.floor((Math.min(ay, by) - reach) / cell); j <= Math.ceil((Math.max(ay, by) + reach) / cell); j++) {
+          if (i < 0 || j < 0 || i >= cols || j >= rows) continue;
+          const t = len ? Math.max(0, Math.min(1, ((i * cell - ax) * (bx - ax) + (j * cell - ay) * (by - ay)) / (len * len))) : 0;
+          if (Math.hypot(ax + (bx - ax) * t - i * cell, ay + (by - ay) * t - j * cell) > reach) continue;
+          const deck = z0 + ((z1 - z0) * (along + t * len)) / (total || 1);
+          z[j * cols + i] = Math.max(z[j * cols + i], deck);
+        }
+      }
+      along += len;
+    }
+  }
+
+  let base = Infinity;
+  for (const v of z) base = Math.min(base, v);
+  base = Math.floor(base);
+  const bytes = new Uint8Array(cols * rows * 2);
+  for (let k = 0; k < z.length; k++) {
+    const d = Math.max(0, Math.min(65535, Math.round((z[k] - base) * 10)));
+    bytes[k * 2] = d & 255;
+    bytes[k * 2 + 1] = d >> 8;
+  }
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return { cell, cols, rows, base, heights: btoa(binary) };
+}
+
+/** Averages each point with its neighbours. */
+function smooth(z: Float32Array, cols: number, rows: number): void {
+  const out = z.slice();
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      let sum = 0;
+      let weight = 0;
+      for (let dj = -1; dj <= 1; dj++) {
+        for (let di = -1; di <= 1; di++) {
+          const ii = i + di;
+          const jj = j + dj;
+          if (ii < 0 || jj < 0 || ii >= cols || jj >= rows) continue;
+          const w = di === 0 && dj === 0 ? 4 : di === 0 || dj === 0 ? 2 : 1;
+          sum += z[jj * cols + ii] * w;
+          weight += w;
+        }
+      }
+      out[j * cols + i] = sum / weight;
+    }
+  }
+  z.set(out);
+}
+
+/** Fills in the cells with no reading from their neighbours, a ring at a time. */
+function fillGaps(z: Float32Array, cols: number, rows: number): void {
+  for (let pass = 0; pass < 50; pass++) {
+    let missing = 0;
+    const next = z.slice();
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) {
+        if (z[j * cols + i] === z[j * cols + i]) continue;
+        let sum = 0;
+        let n = 0;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ii = i + di;
+          const jj = j + dj;
+          if (ii < 0 || jj < 0 || ii >= cols || jj >= rows) continue;
+          const v = z[jj * cols + ii];
+          if (v === v) {
+            sum += v;
+            n++;
+          }
+        }
+        if (n) next[j * cols + i] = sum / n;
+        else missing++;
+      }
+    }
+    z.set(next);
+    if (!missing) return;
+  }
+  for (let k = 0; k < z.length; k++) if (z[k] !== z[k]) z[k] = 0;
 }
 
 /** Points every `step` px inside some rings (filled even-odd). */

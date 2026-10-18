@@ -1,13 +1,16 @@
 import * as Phaser from 'phaser';
 import { drawGround, surfacePalette, type Palette } from './ground';
 import { artPalette } from './groundArt';
+import type { Perspective } from './perspective';
 import { SurfaceGrid } from './surface';
+import type { Terrain } from './terrain';
+import { TerrainSheet } from './TerrainSheet';
 import { CHUNK, type ChunkIndex, type World, chunkKey } from './world';
 
 /** How many pieces of ground are kept drawn at once (each is 1 MB of texture). */
 const KEEP = 40;
 /** Draw pieces this far beyond the view, px, so they're ready before they come into it. */
-const MARGIN = 220;
+const MARGIN = 320;
 /** Pieces drawn per frame once the game's running, so drawing never holds a frame up for long. */
 const PER_FRAME = 1;
 /** Each piece reaches this far into its neighbours, px. */
@@ -15,13 +18,19 @@ const BLEED = 1;
 
 const EMPTY: ChunkIndex = { areas: [], roads: [], lines: [], buildings: [], crossings: [], trees: [] };
 
+/** Where the light comes from, for shading the hills: the top left of the map (north-west), as for the shadows. */
+const SUN = { x: -0.45, y: -0.6, z: 0.66 };
+/** How much the hills' slopes are darkened or lit. */
+const HILL_SHADE = 1.2;
+
 /**
  * The ground, drawn a 512 px square at a time as the view nears it (the
- * whole map would be far too big a texture for a phone), and forgotten
- * again once it's well out of sight.
+ * whole map would be far too big a texture for a phone), shaded by the lie
+ * of the land and laid over the hills, and forgotten again once it's well
+ * out of sight.
  */
 export class GroundLayer {
-  private readonly pieces = new Map<string, { image: Phaser.GameObjects.Image; key: string; used: number }>();
+  private readonly pieces = new Map<string, { sheet: TerrainSheet; key: string; used: number }>();
   private readonly palette: Palette;
   private readonly scratch: CanvasRenderingContext2D;
   private frame = 0;
@@ -29,6 +38,7 @@ export class GroundLayer {
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly world: World,
+    private readonly terrain: Terrain,
     private readonly depth: number,
   ) {
     const probe = document.createElement('canvas').getContext('2d')!;
@@ -40,8 +50,11 @@ export class GroundLayer {
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroy());
   }
 
-  /** Call once a frame: draws what's coming into view (all of it at once if `all`) and forgets what's long gone. */
-  update(view: Phaser.Geom.Rectangle, all = false): void {
+  /**
+   * Call once a frame: draws what's coming into view (all of it at once if
+   * `all`), lays what's in view over the hills, and forgets what's long gone.
+   */
+  update(view: Phaser.Geom.Rectangle, perspective: Perspective, all = false): void {
     this.frame++;
     const { width, height } = this.world.map;
     const x0 = Math.max(0, Math.floor((view.left - MARGIN) / CHUNK));
@@ -54,13 +67,18 @@ export class GroundLayer {
     for (let i = x0; i <= x1; i++) {
       for (let j = y0; j <= y1; j++) {
         const piece = this.pieces.get(chunkKey(i, j));
-        if (piece) piece.used = this.frame;
-        else missing.push([i, j, Math.hypot(i - cx, j - cy)]);
+        if (piece) {
+          piece.used = this.frame;
+          piece.sheet.update(perspective);
+        } else {
+          missing.push([i, j, Math.hypot(i - cx, j - cy)]);
+        }
       }
     }
     // Nearest first.
     missing.sort((a, b) => a[2] - b[2]);
-    for (const [i, j] of all ? missing : missing.slice(0, PER_FRAME)) this.draw(i, j);
+    for (const [i, j] of all ? missing : missing.slice(0, PER_FRAME)) this.draw(i, j).update(perspective);
+    for (const piece of this.pieces.values()) piece.sheet.setVisible(piece.used === this.frame);
     if (this.pieces.size > KEEP) {
       const old = [...this.pieces.entries()].sort((a, b) => a[1].used - b[1].used);
       for (const [key, piece] of old.slice(0, this.pieces.size - KEEP)) {
@@ -70,23 +88,63 @@ export class GroundLayer {
     }
   }
 
-  private draw(i: number, j: number): void {
+  private draw(i: number, j: number): TerrainSheet {
     const key = `ground:${i},${j}`;
     // A pixel more all round, overlapping the next piece, so no seam shows between them.
     const size = CHUNK + BLEED * 2;
     const texture = this.scene.textures.createCanvas(key, size, size)!;
     const ctx = texture.context;
     const index = this.world.chunks.get(chunkKey(i, j)) ?? EMPTY;
-    drawGround(ctx, this.world.map, index, this.palette, i * CHUNK - BLEED, j * CHUNK - BLEED, size, size, 1, this.scratch);
+    const [x0, y0] = [i * CHUNK - BLEED, j * CHUNK - BLEED];
+    drawGround(ctx, this.world.map, index, this.palette, x0, y0, size, size, 1, this.scratch);
+    this.shadeHills(ctx, x0, y0, size);
     texture.refresh();
-    const image = this.scene.add.image(i * CHUNK - BLEED, j * CHUNK - BLEED, key).setOrigin(0, 0).setDepth(this.depth);
-    this.pieces.set(chunkKey(i, j), { image, key, used: this.frame });
+    const sheet = new TerrainSheet(this.scene, key, x0, y0, size, size, this.depth, this.terrain);
+    this.pieces.set(chunkKey(i, j), { sheet, key, used: this.frame });
+    return sheet;
+  }
+
+  /** Darkens the slopes facing away from the sun and lights those facing it, a couple of metres at a time, blended smooth. */
+  private shadeHills(ctx: CanvasRenderingContext2D, x0: number, y0: number, size: number): void {
+    const step = 2 * this.terrain.px;
+    const n = Math.ceil(size / step) + 1;
+    const shade = this.shadeCanvas(n);
+    const sctx = shade.getContext('2d')!;
+    const image = sctx.createImageData(n, n);
+    const flat = SUN.z;
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        const [gx, gy] = this.terrain.slope(x0 + i * step, y0 + j * step);
+        // The ground's normal, against the sun's direction.
+        const len = Math.hypot(gx * HILL_SHADE, gy * HILL_SHADE, 1);
+        const light = (-gx * HILL_SHADE * SUN.x - gy * HILL_SHADE * SUN.y + SUN.z) / len - flat;
+        const k = (j * n + i) * 4;
+        const lit = light > 0;
+        image.data[k] = image.data[k + 1] = image.data[k + 2] = lit ? 255 : 0;
+        image.data[k + 3] = Math.min(90, Math.abs(light) * (lit ? 200 : 320));
+      }
+    }
+    sctx.putImageData(image, 0, 0);
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(shade, 0, 0, n, n, 0, 0, n * step, n * step);
+    ctx.restore();
+  }
+
+  private shade: HTMLCanvasElement | null = null;
+
+  private shadeCanvas(n: number): HTMLCanvasElement {
+    if (!this.shade || this.shade.width !== n) {
+      this.shade = document.createElement('canvas');
+      this.shade.width = this.shade.height = n;
+    }
+    return this.shade;
   }
 
   private forget(chunk: string): void {
     const piece = this.pieces.get(chunk);
     if (!piece) return;
-    piece.image.destroy();
+    piece.sheet.destroy();
     this.scene.textures.remove(piece.key);
     this.pieces.delete(chunk);
   }

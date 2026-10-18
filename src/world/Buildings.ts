@@ -1,5 +1,7 @@
 import * as Phaser from 'phaser';
 import { type BuildingLook, FLOOR, buildingLook } from './buildingLook';
+import type { Perspective } from './perspective';
+import type { Terrain } from './terrain';
 import type { World } from './world';
 
 /** How far beyond the view a building is still drawn (its walls lean in from out there), px. */
@@ -10,24 +12,33 @@ const PAD = 60;
  * the camera, so it's pushed out from the middle of the view by how tall
  * the building is, and the walls facing the middle are drawn between the
  * ground and the roof. As the view moves, the buildings seem to stand up
- * off the map. Redrawn every frame, only those near the view.
+ * off the map. Each stands on the ground where it is, so a building up a
+ * hill is nearer the camera than one down by the harbour. Redrawn every
+ * frame, only those near the view.
  */
 export class Buildings {
-  private readonly looks: BuildingLook[];
+  /** Each building's look, and the height of the ground it stands on, px. */
+  private readonly looks: (BuildingLook & { ground: number })[];
   private readonly g: Phaser.GameObjects.Graphics;
 
-  constructor(scene: Phaser.Scene, world: World, depth: number) {
+  constructor(scene: Phaser.Scene, world: World, terrain: Terrain, depth: number) {
     const earcut = (data: number[], holes?: number[]) => Phaser.Geom.Polygon.Earcut(data, holes);
-    // Already in height order, lowest first, so taller ones are drawn over them.
-    this.looks = world.map.buildings.filter((b) => b.drawn).map((b) => buildingLook(b, earcut));
+    this.looks = world.map.buildings
+      .filter((b) => b.drawn)
+      .map((b) => {
+        // Its lowest corner, so it never floats above the ground on a slope.
+        let ground = Infinity;
+        const ring = b.rings[0];
+        for (let i = 0; i < ring.length; i += 2) ground = Math.min(ground, terrain.at(ring[i], ring[i + 1]) * terrain.px);
+        return { ...buildingLook(b, earcut), ground };
+      })
+      // Those whose roofs are highest drawn last, over the rest.
+      .sort((a, b) => a.ground + a.b.top - (b.ground + b.b.top));
     this.g = scene.add.graphics().setDepth(depth);
   }
 
-  /**
-   * Call once a frame. `height` is how high the camera is, px: the lower it
-   * is, the more the buildings lean.
-   */
-  update(view: Phaser.Geom.Rectangle, height: number): void {
+  /** Call once a frame. */
+  update(view: Phaser.Geom.Rectangle, perspective: Perspective): void {
     const g = this.g;
     g.clear();
     const cx = view.centerX;
@@ -36,20 +47,17 @@ export class Buildings {
     const right = view.right + PAD;
     const top = view.top - PAD;
     const bottom = view.bottom + PAD;
-    // How much a point at height h is scaled out from the middle of the view.
-    const lift = (h: number) => 1 + Math.min(h, height * 0.8) / (height - Math.min(h, height * 0.8));
-
     for (const look of this.looks) {
       const { b } = look;
+      // How much a point h px up the building is scaled out from the middle of the view.
+      const lift = (h: number) => perspective.lift(look.ground + h);
       const sTop = lift(b.top);
-      // The roof's box and the footprint's, together.
-      const rx0 = cx + (look.x0 - cx) * sTop;
-      const rx1 = cx + (look.x1 - cx) * sTop;
-      const ry0 = cy + (look.y0 - cy) * sTop;
-      const ry1 = cy + (look.y1 - cy) * sTop;
-      if (Math.max(look.x1, rx1) < left || Math.min(look.x0, rx0) > right) continue;
-      if (Math.max(look.y1, ry1) < top || Math.min(look.y0, ry0) > bottom) continue;
       const sBase = lift(b.bottom);
+      // The roof's box and the foot's, together.
+      const [rx0, rx1, ry0, ry1] = [cx + (look.x0 - cx) * sTop, cx + (look.x1 - cx) * sTop, cy + (look.y0 - cy) * sTop, cy + (look.y1 - cy) * sTop];
+      const [fx0, fx1, fy0, fy1] = [cx + (look.x0 - cx) * sBase, cx + (look.x1 - cx) * sBase, cy + (look.y0 - cy) * sBase, cy + (look.y1 - cy) * sBase];
+      if (Math.max(fx1, rx1) < left || Math.min(fx0, rx0) > right) continue;
+      if (Math.max(fy1, ry1) < top || Math.min(fy0, ry0) > bottom) continue;
 
       if (!look.canopy) {
         for (const w of look.walls) {

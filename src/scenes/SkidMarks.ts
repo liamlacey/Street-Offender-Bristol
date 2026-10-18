@@ -1,7 +1,10 @@
 import * as Phaser from 'phaser';
+import type { Perspective } from '../world/perspective';
+import type { Terrain } from '../world/terrain';
+import { TerrainSheet } from '../world/TerrainSheet';
 
 /** World px covered by each skid-mark texture. */
-const CHUNK = 1024;
+const CHUNK = 512;
 /** Texture px per world px: marks are soft anyway, and this keeps memory down on phones. */
 const RESOLUTION = 0.5;
 
@@ -25,10 +28,11 @@ export class SkidMarks {
   private pending: Segment[] = [];
   private readonly pen: Phaser.GameObjects.Graphics;
   /** Chunk textures created so far, and the images showing them. */
-  private readonly chunks = new Map<string, Phaser.GameObjects.Image>();
+  private readonly chunks = new Map<string, TerrainSheet>();
 
   constructor(
     private readonly scene: Phaser.Scene,
+    private readonly terrain: Terrain,
     private readonly depth: number,
   ) {
     this.pen = scene.make.graphics({}, false);
@@ -70,6 +74,17 @@ export class SkidMarks {
     }
   }
 
+  /** Lays the marks near the view over the hills (and hides the rest). Call once a frame. */
+  update(view: Phaser.Geom.Rectangle, perspective: Perspective): void {
+    const pad = 320;
+    for (const [key, sheet] of this.chunks) {
+      const [i, j] = key.slice(5).split(',').map(Number);
+      const near = (i + 1) * CHUNK > view.left - pad && i * CHUNK < view.right + pad && (j + 1) * CHUNK > view.top - pad && j * CHUNK < view.bottom + pad;
+      sheet.setVisible(near);
+      if (near) sheet.update(perspective);
+    }
+  }
+
   private key(i: number, j: number): string {
     return `skid:${i},${j}`;
   }
@@ -78,12 +93,7 @@ export class SkidMarks {
     const key = this.key(i, j);
     if (!this.chunks.has(key)) {
       this.scene.textures.addDynamicTexture(key, CHUNK * RESOLUTION, CHUNK * RESOLUTION);
-      const image = this.scene.add
-        .image(i * CHUNK, j * CHUNK, key)
-        .setOrigin(0, 0)
-        .setScale(1 / RESOLUTION)
-        .setDepth(this.depth);
-      this.chunks.set(key, image);
+      this.chunks.set(key, new TerrainSheet(this.scene, key, i * CHUNK, j * CHUNK, CHUNK, CHUNK, this.depth, this.terrain));
     }
     return this.scene.textures.get(key) as Phaser.Textures.DynamicTexture;
   }
@@ -91,8 +101,8 @@ export class SkidMarks {
   /** Frees the textures (they belong to the game, not the scene, so they'd otherwise outlive it). */
   private destroy(): void {
     this.pen.destroy();
-    for (const [key, image] of this.chunks) {
-      image.destroy();
+    for (const [key, sheet] of this.chunks) {
+      sheet.destroy();
       this.scene.textures.remove(key);
     }
     this.chunks.clear();
