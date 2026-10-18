@@ -6,7 +6,7 @@
  * Britain. Words are painted long along the way, read as you come up to them.
  */
 
-import type { GameMap, Lane, PaintMark, Pts, Road } from '../map/osm';
+import { BUS_STOP_DEPTH, type GameMap, type Lane, type PaintMark, type Pts, type Road } from '../map/osm';
 import { type ChunkIndex, lineLength, offsetLine, pointAlong, subPolyline } from './world';
 
 type Ctx = CanvasRenderingContext2D;
@@ -35,8 +35,10 @@ export function drawLaneFills(ctx: Ctx, roads: Road[]): void {
   ctx.lineCap = 'round';
 }
 
-/** The lanes' lines, words and bikes, and the parking bays. */
-export function drawLanes(ctx: Ctx, roads: Road[]): void {
+/** The lanes' lines, words and bikes, and the parking bays (no words over a bus stop's box, among `paint`). */
+export function drawLanes(ctx: Ctx, roads: Road[], paint: PaintMark[] = []): void {
+  const stops = paint.filter((m) => m.kind === 'busstop');
+  const clear = (x: number, y: number) => !stops.some((m) => Math.hypot(m.x - x, m.y - y) < m.width / 2 + 6 * 8);
   ctx.lineCap = 'butt';
   for (const r of roads) {
     if (!r.lanes) continue;
@@ -48,7 +50,7 @@ export function drawLanes(ctx: Ctx, roads: Road[]): void {
           // A thick solid line along its edge; BUS LANE at its start; a bike in it every so often, if bikes share it.
           stroke(ctx, offsetLine(r.pts, lane.side * inner), WHITE, 2.4);
           const [x, y, angle] = laneAt(r, lane, Math.min(10 * 8, length / 2), lane.width / 2);
-          words(ctx, ['BUS', 'LANE'], x, y, angle, WHITE, lane.width);
+          if (clear(x, y)) words(ctx, ['BUS', 'LANE'], x, y, angle, WHITE, lane.width);
           if (lane.bikes) for (const d of every(length, BIKES_EVERY, 30 * 8)) bike(ctx, ...laneAt(r, lane, d, lane.width / 2), WHITE);
           break;
         }
@@ -143,7 +145,7 @@ export function drawPaint(ctx: Ctx, map: GameMap, index: ChunkIndex): void {
       case 'busstop':
         busStop(ctx, m);
         ctx.restore();
-        words(ctx, ['BUS', 'STOP'], m.x, m.y, m.angle, YELLOW, 3 * 8, 13);
+        words(ctx, ['BUS', 'STOP'], m.x, m.y, m.angle, YELLOW, BUS_STOP_DEPTH, 13);
         continue;
       case 'tactile':
         tactile(ctx, m);
@@ -173,7 +175,7 @@ function giveWay(ctx: Ctx, m: PaintMark): void {
 /** A bus stop's bay along the kerb (on the traffic's left): surfaced red, edged in yellow on the road's side. */
 function busStop(ctx: Ctx, m: PaintMark): void {
   const half = m.width / 2;
-  const d = 3 * 8;
+  const d = BUS_STOP_DEPTH;
   ctx.fillStyle = BUS_RED;
   ctx.fillRect(-d / 2, -half, d, m.width);
   ctx.setLineDash([10, 5]);

@@ -138,6 +138,9 @@ export interface PaintMark {
   red?: boolean;
 }
 
+/** How deep a bus stop's box is, out from the kerb, px. */
+export const BUS_STOP_DEPTH = 3 * PX_PER_METRE;
+
 /** A bus lane's and a cycle lane's width, px. */
 const BUS_LANE = 3.2 * PX_PER_METRE;
 const CYCLE_LANE = 1.5 * PX_PER_METRE;
@@ -1296,7 +1299,12 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     const off = a.oneway ? 0 : a.width / 4;
     return { x: round(x + a.uy * off), y: round(y - a.ux * off), angle: +Math.atan2(a.uy, a.ux).toFixed(3), width: round(across) };
   };
-  /** A bus stop's yellow box along the kerb: on the side its platform (or sign) is, else the left, one-way. */
+  /**
+   * A bus stop's box along the kerb, on the side its platform (or sign) is (else the left, one-way): a
+   * rectangle, only where the road's straight enough for one (22 m long, or as short as 12 m), with no
+   * junction along it and room for it on its own side of the road; and not over one already there.
+   */
+  const busStopBoxes: { x: number; y: number; angle: number; width: number }[] = [];
   const busStopBox = (id: number, x: number, y: number) => {
     const a = approach(id, 'forward');
     if (!a) return null;
@@ -1312,8 +1320,60 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       }
     }
     if (!side) return null;
-    const off = a.width / 2 - 1.3 * PX_PER_METRE;
-    return { x: round(x + lx * off * side), y: round(y + ly * off * side), angle: +Math.atan2(a.uy * side, a.ux * side).toFixed(3), width: 22 * PX_PER_METRE };
+    const depth = BUS_STOP_DEPTH;
+    if ((a.oneway ? a.width : a.width / 2) < depth) return null;
+    const nodes = a.on.way.nodes;
+    const pts = pointsOf(nodes);
+    if (!pts) return null;
+    let at = 0;
+    for (let k = 0; k < a.on.index; k++) at += Math.hypot(pts[k * 2 + 2] - pts[k * 2], pts[k * 2 + 3] - pts[k * 2 + 1]);
+    const total = polylineLength(pts);
+    // Junctions along the way, and how far along each is.
+    const junctions: number[] = [];
+    let run = 0;
+    for (let k = 0; k < nodes.length; k++) {
+      if (k) run += Math.hypot(pts[k * 2] - pts[k * 2 - 2], pts[k * 2 + 1] - pts[k * 2 - 1]);
+      if ((roadNodes.get(nodes[k]) ?? 0) > 1) junctions.push(run);
+    }
+    for (const metres of [22, 18, 15, 12]) {
+      const length = metres * PX_PER_METRE;
+      const from = at - length / 2;
+      const to = at + length / 2;
+      if (from < 0 || to > total || junctions.some((j) => j > from && j < to)) continue;
+      const [ax, ay] = alongPolyline(pts, from);
+      const [bx, by] = alongPolyline(pts, to);
+      // Straight enough: the road between keeps within half a metre of the line from one end to the other.
+      const chord = Math.hypot(bx - ax, by - ay);
+      if (!chord) continue;
+      const [ux, uy] = [(bx - ax) / chord, (by - ay) / chord];
+      let bent = false;
+      let d = 0;
+      for (let k = 0; k + 3 < pts.length && !bent; k += 2) {
+        const seg = Math.hypot(pts[k + 2] - pts[k], pts[k + 3] - pts[k + 1]);
+        if (d + seg > from && d < to) {
+          for (const [px, py] of [[pts[k], pts[k + 1]], [pts[k + 2], pts[k + 3]]]) {
+            const along = (px - ax) * ux + (py - ay) * uy;
+            if (along < -1 || along > chord + 1) continue;
+            if (Math.abs((px - ax) * uy - (py - ay) * ux) > 0.5 * PX_PER_METRE) bent = true;
+          }
+        }
+        d += seg;
+      }
+      if (bent) continue;
+      const off = (a.width / 2 - depth / 2) * side;
+      const [nx, ny] = [uy, -ux];
+      const box = {
+        x: round((ax + bx) / 2 + nx * off),
+        y: round((ay + by) / 2 + ny * off),
+        angle: +Math.atan2(uy * side, ux * side).toFixed(3),
+        width: round(length),
+      };
+      // Not over another stop's box (two stops mapped for one).
+      if (busStopBoxes.some((o) => Math.hypot(o.x - box.x, o.y - box.y) < (o.width + box.width) / 2 && Math.cos(o.angle - box.angle) > 0.7)) return null;
+      busStopBoxes.push(box);
+      return box;
+    }
+    return null;
   };
   /** A line across the way through a node, as wide as the way: where a gate or barrier is. */
   const gateAcross = (id: number, x: number, y: number): Pts | null => {

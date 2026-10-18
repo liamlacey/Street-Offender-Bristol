@@ -146,7 +146,7 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
     drawMarkings(ctx, vehicle, palette.marking);
     for (const i of index.crossings) drawCrossing(ctx, map, map.crossings[i], palette.marking);
     for (const i of index.signals) drawStopLine(ctx, map.signals[i], palette.marking);
-    drawLanes(ctx, vehicle);
+    drawLanes(ctx, vehicle, map.paint);
     drawPaint(ctx, map, index);
   }
 
