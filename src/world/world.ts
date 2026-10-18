@@ -198,6 +198,35 @@ export function shadowOffset(height: number): [number, number] {
   return [length * 0.6, length * 0.8];
 }
 
+/** The point `d` px along a polyline (clamped to its ends), and which way it runs there, smoothed over `smooth` px either side. */
+export function pointAlong(pts: Pts, d: number, smooth = 0): [number, number, number, number] {
+  const at = (dist: number): [number, number] => {
+    let run = 0;
+    for (let i = 0; i + 3 < pts.length; i += 2) {
+      const len = Math.hypot(pts[i + 2] - pts[i], pts[i + 3] - pts[i + 1]);
+      if (run + len >= dist || i + 4 >= pts.length) {
+        const t = len ? Math.max(0, Math.min(1, (dist - run) / len)) : 0;
+        return [pts[i] + (pts[i + 2] - pts[i]) * t, pts[i + 1] + (pts[i + 3] - pts[i + 1]) * t];
+      }
+      run += len;
+    }
+    return [pts[0], pts[1]];
+  };
+  const [x, y] = at(d);
+  const reach = Math.max(smooth, 1);
+  const [ax, ay] = at(d - reach);
+  const [bx, by] = at(d + reach);
+  const len = Math.hypot(bx - ax, by - ay) || 1;
+  return [x, y, (bx - ax) / len, (by - ay) / len];
+}
+
+/** A polyline's length. */
+export function lineLength(pts: Pts): number {
+  let len = 0;
+  for (let i = 0; i + 3 < pts.length; i += 2) len += Math.hypot(pts[i + 2] - pts[i], pts[i + 3] - pts[i + 1]);
+  return len;
+}
+
 /** The part of a polyline from distance `from` to `to` along it. */
 export function subPolyline(pts: Pts, from: number, to: number): Pts {
   const out: Pts = [];

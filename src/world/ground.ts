@@ -12,7 +12,7 @@
 import type { AreaKind, GameMap, Pts, Road } from '../map/osm';
 import { type Paving, VEHICLE_ROADS, ringArea } from '../map/osm';
 import { Surface, surfacePaint } from './surface';
-import { type ChunkIndex, shadowOffset, subPolyline } from './world';
+import { type ChunkIndex, lineLength, pointAlong, shadowOffset, subPolyline } from './world';
 
 type Ctx = CanvasRenderingContext2D;
 type Fill = string | CanvasPattern;
@@ -137,7 +137,7 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
 
   if (!palette.surface) {
     drawMarkings(ctx, vehicle, palette.marking);
-    for (const i of index.crossings) drawCrossing(ctx, map.crossings[i], palette.marking);
+    for (const i of index.crossings) drawCrossing(ctx, map, map.crossings[i], palette.marking);
     for (const i of index.signals) drawStopLine(ctx, map.signals[i], palette.marking);
   }
 
@@ -236,7 +236,7 @@ function drawMarkings(ctx: Ctx, roads: Road[], colour: string): void {
  * you mustn't stop or overtake. A crossing that's just a dropped kerb has
  * nothing painted.
  */
-function drawCrossing(ctx: Ctx, c: GameMap['crossings'][number], colour: string): void {
+function drawCrossing(ctx: Ctx, map: GameMap, c: GameMap['crossings'][number], colour: string): void {
   if (c.kind === 'plain') return;
   const ux = Math.cos(c.angle);
   const uy = Math.sin(c.angle);
@@ -258,20 +258,35 @@ function drawCrossing(ctx: Ctx, c: GameMap['crossings'][number], colour: string)
     for (const d of [-10, 10]) line(ctx, ax + ux * d, ay + uy * d, bx + ux * d, by + uy * d);
   }
   ctx.setLineDash([]);
-  // The zig-zags, along each kerb, both sides of the crossing.
+  // The zig-zags, along each kerb, both sides of the crossing, following the road round its bends
+  // (and stopping where it ends, at a junction).
   ctx.lineWidth = 1.4;
   ctx.lineJoin = 'miter';
+  const road = c.road !== undefined ? map.roads[c.road] : undefined;
+  const length = road ? lineLength(road.pts) : 0;
   for (const side of [-1, 1]) {
     const edge = side * (half - 3);
     for (const way of [-1, 1]) {
       ctx.beginPath();
+      let started = false;
       for (let k = 0; k <= ZIGZAGS; k++) {
-        const d = way * (ZIGZAG_FROM + k * ZIGZAG_STEP);
+        const along = way * (ZIGZAG_FROM + k * ZIGZAG_STEP);
         const out = edge + (k % 2 ? -side * 2.5 : 0);
-        const x = c.x + ux * d - uy * out;
-        const y = c.y + uy * d + ux * out;
-        if (k === 0) ctx.moveTo(x, y);
+        let x: number;
+        let y: number;
+        if (road && c.at !== undefined) {
+          const d = c.at + along;
+          if (d < 0 || d > length) break;
+          const [px, py, tx, ty] = pointAlong(road.pts, d, 16);
+          x = px - ty * out;
+          y = py + tx * out;
+        } else {
+          x = c.x + ux * along - uy * out;
+          y = c.y + uy * along + ux * out;
+        }
+        if (!started) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
+        started = true;
       }
       ctx.stroke();
     }

@@ -151,6 +151,9 @@ export interface Crossing {
   kind: CrossingKind;
   /** For one with lights, the controller that works them. */
   controller?: number;
+  /** The road it crosses (its index in the map's roads) and how far along that road it is, px, so its zig-zags can follow the kerbs. */
+  road?: number;
+  at?: number;
 }
 
 export type CrossingKind = 'zebra' | 'lights' | 'plain';
@@ -880,6 +883,8 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     }
   }
 
+  /** Each road's index in `roads`, by its OSM way. */
+  const roadIndexOfWay = new Map<number, number>();
   // Roads, with their junctions found so the lane markings stop short of them.
   for (const { way, kind } of roadWays) {
     const t = way.tags;
@@ -913,6 +918,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     const pavement = vehicle && kind !== 'service' && kind !== 'track' && t.sidewalk !== 'no' && t.sidewalk !== 'none';
     // Clipping the line loses the distances the markings are measured along, so only roads wholly beyond the edge are dropped.
     if (!pts.some((v, i) => i % 2 === 0 && inside(v, pts[i + 1], pad))) continue;
+    roadIndexOfWay.set(way.id, roads.length);
     roads.push({
       kind,
       ...(t.name ? { name: t.name } : {}),
@@ -979,7 +985,20 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
         const b = xy(on.way.nodes[on.index + 1]);
         if (a && b) {
           const kind = crossingKind(t);
-          crossings.push({ x: round(x), y: round(y), angle: +Math.atan2(b[1] - a[1], b[0] - a[0]).toFixed(3), width: round(roadWidth(on.kind, on.way.tags) * PX_PER_METRE), kind });
+          const road = roadIndexOfWay.get(on.way.id);
+          let at = 0;
+          if (road !== undefined) {
+            const p = roads[road].pts;
+            for (let k = 0; k < on.index; k++) at += Math.hypot(p[k * 2 + 2] - p[k * 2], p[k * 2 + 3] - p[k * 2 + 1]);
+          }
+          crossings.push({
+            x: round(x),
+            y: round(y),
+            angle: +Math.atan2(b[1] - a[1], b[0] - a[0]).toFixed(3),
+            width: round(roadWidth(on.kind, on.way.tags) * PX_PER_METRE),
+            kind,
+            ...(road !== undefined ? { road, at: round(at) } : {}),
+          });
         }
       }
     }

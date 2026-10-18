@@ -85,7 +85,8 @@ churches and flat for the rest.
 
 **Crossings** (`highway=crossing` nodes on roads): a **zebra** (`crossing=zebra`,
 `crossing_ref=zebra`, or zebra `crossing:markings`) gets stripes, zig-zags along
-both kerbs and a flashing Belisha beacon on the pavement at each end; one with
+both kerbs (following the road's line round its bends, for 10 m either side,
+stopping where the road ends) and a flashing Belisha beacon on the pavement at each end; one with
 **lights** (`crossing=traffic_signals`, or a pelican, puffin, toucan or pegasus
 `crossing_ref`) gets two lines of studs and zig-zags, and is worked by the
 nearest controller; any other (unmarked, a dropped kerb) has nothing painted.

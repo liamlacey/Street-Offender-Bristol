@@ -3,7 +3,7 @@ import type { GameMap } from '../map/osm';
 import bristol from '../map/bristol.json';
 import { buildingLook, clipHalfPlane, parseColour } from './buildingLook';
 import { Surface, SurfaceGrid, surfacePaint } from './surface';
-import { CHUNK, buildWorld, chunkKey, shadowOffset, subPolyline } from './world';
+import { CHUNK, buildWorld, chunkKey, lineLength, pointAlong, shadowOffset, subPolyline } from './world';
 
 const map = bristol as unknown as GameMap;
 
@@ -145,5 +145,24 @@ describe('the map\'s extra detail', () => {
     const cathedral = map.buildings.find((b) => b.name === 'Bristol Cathedral')!;
     expect(cathedral.roof).toBe('#6d7577');
     expect(map.buildings.filter((b) => b.roof === '#6d7577' && b.kind !== 'cathedral').length).toBeGreaterThan(5);
+  });
+});
+
+describe('pointAlong', () => {
+  // Along x, then turning a right angle down y.
+  const bend = [0, 0, 100, 0, 100, 100];
+
+  it('finds the point a distance along a line, and which way it runs there', () => {
+    expect(pointAlong(bend, 50)).toEqual([50, 0, 1, 0]);
+    const [x, y, tx, ty] = pointAlong(bend, 150);
+    expect([x, y]).toEqual([100, 50]);
+    expect([tx, ty]).toEqual([0, 1]);
+    expect(lineLength(bend)).toBe(200);
+  });
+
+  it('turns smoothly round a bend when asked to', () => {
+    const [, , tx, ty] = pointAlong(bend, 100, 10);
+    expect(tx).toBeCloseTo(Math.SQRT1_2);
+    expect(ty).toBeCloseTo(Math.SQRT1_2);
   });
 });
