@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PX_PER_METRE, Projection, buildMap, clipLine, clipRing, joinRings, cutSpans, laneArrows, metres, parseOsm, pavementSides, ringArea, roadLanes, roadWidth, sidewalkAlong } from './osm';
+import { PX_PER_METRE, Projection, buildMap, clipLine, clipRing, joinRings, cutSpans, laneArrows, lanesAcross, metres, parseOsm, pavementSides, ringArea, roadLanes, roadWidth, sidewalkAlong } from './osm';
 
 /** A tiny map: a street with a junction, a building with a part on it, a pond, a park inside a multipolygon, a tree and a bench. */
 const XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -178,6 +178,12 @@ describe('road markings', () => {
     // 100 m of road, a junction 30 m along (cut 6 m either side): 24 m kept before it, 64 m after; 4 m cut out of the end.
     expect(cutSpans([0, 800], [[192, 288], [768, 800]])).toEqual([0, 192, 288, 768]);
     expect(cutSpans([0, 800], [[40, 760]])).toEqual([]);
+  });
+
+  it('counts the lanes each way, for the lines between them, only where a side has more than one', () => {
+    expect(lanesAcross({ lanes: '2' }, false)).toBeUndefined();
+    expect(lanesAcross({ lanes: '4', 'lanes:forward': '3' }, false)).toEqual([3, 1]);
+    expect(lanesAcross({ lanes: '3' }, true)).toEqual([3, 0]);
   });
 
   it("paints each lane's arrow before the junction, left to right as the driver sees them", () => {

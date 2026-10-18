@@ -229,18 +229,31 @@ function drawMarkings(ctx: Ctx, roads: Road[], colour: string): void {
   for (const r of roads) {
     // No lines painted on cobbles.
     if (!r.marks || (r.surface && r.surface !== 'asphalt' && r.surface !== 'concrete')) continue;
+    // Where its lanes are: the centre line of a two-way road, and a line between each lane each way where there's more than one.
+    const offsets: number[] = [];
+    const [forward, backward] = r.lanesAcross ?? (r.oneway ? [r.width >= 6 * 8 ? 2 : 1, 0] : [1, 1]);
     if (r.oneway) {
-      // A one-way street wide enough for two lanes gets a line between them.
-      if (r.width < 6 * 8) continue;
+      for (let i = 1; i < forward; i++) offsets.push(r.width / 2 - (i * r.width) / forward);
+    } else {
+      offsets.push(0);
+      for (let i = 1; i < forward; i++) offsets.push(r.width / 2 - (i * r.width) / 2 / forward);
+      for (let i = 1; i < backward; i++) offsets.push(-(r.width / 2 - (i * r.width) / 2 / backward));
     }
+    // Not inside a bus lane (its own solid line's its edge).
+    const bus = (r.lanes ?? []).filter((l) => l.kind === 'bus');
+    const kept = offsets.filter((off) => !bus.some((l) => off * l.side > r.width / 2 - l.width - 6));
+    offsets.length = 0;
+    offsets.push(...kept);
     ctx.setLineDash(r.kind === 'primary' || r.kind === 'trunk' ? [32, 16] : [24, 24]);
     ctx.lineWidth = 1.8;
     for (let k = 0; k + 1 < r.marks.length; k += 2) {
       const piece = subPolyline(r.pts, r.marks[k], r.marks[k + 1]);
       if (piece.length < 4) continue;
-      ctx.beginPath();
-      path(ctx, piece);
-      ctx.stroke();
+      for (const off of offsets) {
+        ctx.beginPath();
+        path(ctx, off ? offsetLine(piece, off) : piece);
+        ctx.stroke();
+      }
     }
   }
   ctx.setLineDash([]);

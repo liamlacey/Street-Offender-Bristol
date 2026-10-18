@@ -146,6 +146,9 @@ export function drawPaint(ctx: Ctx, map: GameMap, index: ChunkIndex): void {
       case 'giveway':
         giveWay(ctx, m);
         break;
+      case 'triangle':
+        triangle(ctx, m);
+        break;
       case 'stop':
         line(ctx, -m.width / 2, 0, m.width / 2, 0, WHITE, 2.6);
         ctx.restore();
@@ -158,7 +161,7 @@ export function drawPaint(ctx: Ctx, map: GameMap, index: ChunkIndex): void {
         ctx.fill();
         break;
       case 'arrow':
-        arrow(ctx, m.turns ?? 'through');
+        arrow(ctx, m.turns ?? 'through', m.width);
         break;
       case 'asl': {
         // The box in front of the traffic's stop line, for bikes: red, a line at each end, a big bike filling it.
@@ -184,19 +187,25 @@ export function drawPaint(ctx: Ctx, map: GameMap, index: ChunkIndex): void {
   }
 }
 
-/** Two dashed lines across the lanes, and the triangle before them, pointing at the driver coming up. */
+/** Two dashed lines across the lanes. */
 function giveWay(ctx: Ctx, m: PaintMark): void {
   ctx.setLineDash([5, 3]);
   line(ctx, -m.width / 2, 0, m.width / 2, 0, WHITE, 1.6);
   line(ctx, -m.width / 2, 5, m.width / 2, 5, WHITE, 1.6);
   ctx.setLineDash([]);
-  const w = Math.min(m.width * 0.6, 3 * 8);
+}
+
+/** The triangle in a lane before give way lines: long and thin, its point at the driver coming up, as wide as fits in the lane. */
+function triangle(ctx: Ctx, m: PaintMark): void {
+  const w = Math.min(m.width * 0.55, 2 * 8);
+  const long = w * 2.6;
   ctx.strokeStyle = WHITE;
   ctx.lineWidth = 1.4;
+  ctx.lineJoin = 'miter';
   ctx.beginPath();
-  ctx.moveTo(-w / 2, 7 * 8);
-  ctx.lineTo(w / 2, 7 * 8);
-  ctx.lineTo(0, 11 * 8);
+  ctx.moveTo(-w / 2, -long / 2);
+  ctx.lineTo(w / 2, -long / 2);
+  ctx.lineTo(0, long / 2);
   ctx.closePath();
   ctx.stroke();
 }
@@ -237,45 +246,63 @@ function tactile(ctx: Ctx, m: PaintMark): void {
 }
 
 /**
- * An arrow in a lane, pointing the way(s) it goes: straight on, left, right,
- * or a little either way, each from the one stem. In the frame where up is the
- * traffic's heading.
+ * An arrow in a lane, pointing the way(s) it goes, as painted in Britain:
+ * a long stem with its head at the far end for straight on, and a branch
+ * curving off it, its head pointing the way, for each turn. In the frame
+ * where up (−y) is the traffic's heading; about 5 m long, as wide as fits.
  */
-function arrow(ctx: Ctx, turns: string): void {
+function arrow(ctx: Ctx, turns: string, laneWidth: number): void {
+  const k = Math.min(1, laneWidth / (3 * 8));
+  ctx.save();
+  ctx.scale(k, 1);
   ctx.strokeStyle = WHITE;
   ctx.fillStyle = WHITE;
-  ctx.lineWidth = 1.6;
   ctx.lineCap = 'butt';
-  const fork = -2;
-  line(ctx, 0, 18, 0, fork, WHITE, 1.6);
-  for (const turn of turns.split(';')) {
-    const dir = TURNS[turn];
-    if (!dir) continue;
-    const [dx, dy] = dir;
-    const len = Math.hypot(dx, dy);
-    const [ux, uy] = [dx / len, dy / len];
-    const [ex, ey] = [ux * 11, fork + uy * 11];
-    line(ctx, 0, fork, ex, ey, WHITE, 1.6);
-    // Its head.
-    const [px, py] = [-uy, ux];
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 1.8;
+  const list = turns.split(';').filter((t) => ARROW_TURNS[t] !== undefined);
+  const straight = list.includes('through');
+  // The stem, from the near end; on to the head if it goes straight on.
+  ctx.beginPath();
+  ctx.moveTo(0, 20);
+  ctx.lineTo(0, straight ? -12 : -2);
+  ctx.stroke();
+  if (straight) head(ctx, 0, -20, 0, -1);
+  for (const t of list) {
+    const bend = ARROW_TURNS[t];
+    if (!bend) continue;
+    // Curving off from partway up the stem, out to the side, its head pointing that way (and a little on).
+    const [ex, ey] = [bend * 8, -10];
     ctx.beginPath();
-    ctx.moveTo(ex + ux * 7, ey + uy * 7);
-    ctx.lineTo(ex + px * 3.2, ey + py * 3.2);
-    ctx.lineTo(ex - px * 3.2, ey - py * 3.2);
-    ctx.closePath();
-    ctx.fill();
+    ctx.moveTo(0, 6);
+    ctx.quadraticCurveTo(0, -6, ex * 0.7, ey);
+    ctx.stroke();
+    const len = Math.hypot(1, 0.25);
+    head(ctx, ex * 0.7, ey, Math.sign(bend) / len, -0.25 / len);
   }
+  ctx.restore();
 }
 
-/** Which way each turn's arrow points, with up the way ahead (−y) and left −x. */
-const TURNS: Record<string, [number, number]> = {
-  through: [0, -1],
-  left: [-1, -0.9],
-  sharp_left: [-1, -0.5],
-  slight_left: [-0.45, -1],
-  right: [1, -0.9],
-  sharp_right: [1, -0.5],
-  slight_right: [0.45, -1],
+/** An arrow's head, its point `(ux, uy)` on from (x, y). */
+function head(ctx: Ctx, x: number, y: number, ux: number, uy: number): void {
+  const [px, py] = [-uy, ux];
+  ctx.beginPath();
+  ctx.moveTo(x + ux * 8, y + uy * 8);
+  ctx.lineTo(x + px * 3.4, y + py * 3.4);
+  ctx.lineTo(x - px * 3.4, y - py * 3.4);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/** Which way each turn's branch goes off the stem (−1 left, 1 right; 0 for straight on, which is the stem itself), and how far. */
+const ARROW_TURNS: Record<string, number> = {
+  through: 0,
+  left: -1,
+  sharp_left: -1.2,
+  slight_left: -0.6,
+  right: 1,
+  sharp_right: 1.2,
+  slight_right: 0.6,
 };
 
 /**

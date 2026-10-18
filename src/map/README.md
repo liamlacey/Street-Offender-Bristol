@@ -102,12 +102,20 @@ the left side's traffic goes the way's way, the right side's against it).
   light's stop line; stretches left under 10 m aren't painted. A lane's name is
   painted 6 m into its first stretch, unless it carries on from the same lane on the
   road before.
-- **Lane arrows** (`turn:lanes`, `:forward`, `:backward`): in each lane, left to right
-  as the driver sees them, 15 m before the way's end (and 35 m, if it's over 60 m
+- **Lane arrows** (`turn:lanes`, `:forward`, `:backward`): in the middle of each lane
+  (between the lane lines), left to right as the driver sees them, a stem with a
+  branch curving off for each turn, 15 m before the way's end (and 35 m, if it's over 60 m
   long; its middle, if it's under 30 m).
+- **Lane lines**: the centre line of a two-way road, and a dashed line between each
+  lane each way where `lanes`, `lanes:forward` or `lanes:backward` say there's more
+  than one (a one-way road wide enough for two and untagged gets one line); none
+  inside a bus lane.
 - **Give way** (`highway=give_way`): two dashed lines across the lanes coming in
-  (the way `direction` says, or towards the nearer junction), and a triangle 7 m
-  before them; **stop** (`highway=stop`): a solid line and STOP; a **mini-roundabout**
+  (the way `direction` says, or towards the nearer junction), and a triangle in the
+  middle of each lane coming in, 9 m back along the road from them (following its
+  bends, onto the piece of road before if it's mapped in pieces; as near as 5 m
+  where there's no more room), long and thin, as wide as fits in the lane; on the
+  same kind of way as the lines (a road's, or a cycle path's); **stop** (`highway=stop`): a solid line and STOP; a **mini-roundabout**
   (`highway=mini_roundabout`): a white circle 4 m across.
 - **Cycle boxes** (`cycleway=asl`): terracotta red (as Bristol's are), 4.5 m deep,
   behind a line across the lanes coming in, a big white bike filling them (side on, as the driver sees it: wheels across the lane).

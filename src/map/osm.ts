@@ -93,6 +93,8 @@ export interface Road {
   surface?: Paving;
   /** Stretches (distances along it, start, end, start, end, ...) with lane markings: not across junctions. */
   marks?: number[];
+  /** How many lanes each way (the way's way, and against it), where there are more than one lane a side: a line's painted between each. */
+  lanesAcross?: [number, number];
   /** Lanes painted along its sides: bus lanes, cycle lanes, parking bays. */
   lanes?: Lane[];
   /** Where they're painted (distances along it, start, end, ...): clear of junctions, crossings and sharp bends. */
@@ -158,7 +160,7 @@ export function cutSpans(spans: number[], cuts: [number, number][]): number[] {
  * a bus stop's box, or tactile paving at a crossing.
  */
 export interface PaintMark {
-  kind: 'giveway' | 'stop' | 'mini' | 'arrow' | 'asl' | 'busstop' | 'tactile';
+  kind: 'giveway' | 'triangle' | 'stop' | 'mini' | 'arrow' | 'asl' | 'busstop' | 'tactile';
   /** Its middle. */
   x: number;
   y: number;
@@ -173,6 +175,9 @@ export interface PaintMark {
   /** A bus stop's box where the road won't take a red bay (a bend, a junction): just its outline. */
   outline?: boolean;
 }
+
+/** How far back from the give way lines their triangle's painted, px. */
+const GIVE_WAY_TRIANGLE = 9 * PX_PER_METRE;
 
 /** How deep a bus stop's box is, out from the kerb, px. */
 export const BUS_STOP_DEPTH = 3 * PX_PER_METRE;
@@ -230,6 +235,19 @@ export function roadLanes(t: Tags, oneway: boolean, width: number): Lane[] | und
     lanes.push({ side, kind: 'parking', width: Math.round(Math.min(half, depth * PX_PER_METRE)), bays: bays as Lane['bays'], ...(loading ? { loading } : {}) });
   }
   return lanes.length ? lanes : undefined;
+}
+
+/**
+ * How many lanes a road has each way (as the way runs, and against it), from
+ * OSM's `lanes`, `lanes:forward` and `lanes:backward`: only where a side has
+ * more than one (one each way is just the centre line).
+ */
+export function lanesAcross(t: Tags, oneway: boolean): [number, number] | undefined {
+  const total = parseInt(t.lanes ?? '', 10) || 0;
+  const forward = parseInt(t['lanes:forward'] ?? '', 10) || (oneway ? total : Math.ceil(total / 2));
+  const backward = oneway ? 0 : parseInt(t['lanes:backward'] ?? '', 10) || Math.max(0, total - forward);
+  if (forward < 2 && backward < 2) return undefined;
+  return [Math.max(1, forward), backward];
 }
 
 /**
@@ -1253,6 +1271,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     // Clipping the line loses the distances the markings are measured along, so only roads wholly beyond the edge are dropped.
     if (!pts.some((v, i) => i % 2 === 0 && inside(v, pts[i + 1], pad))) continue;
     const lanes = vehicle ? roadLanes(t, oneway, width) : undefined;
+    const across = vehicle ? lanesAcross(t, oneway) : undefined;
     let laneSpans: number[] | undefined;
     if (lanes) {
       // Clear of junctions along it (and at its ends), and of sharp bends.
@@ -1283,6 +1302,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       ...(pavement ? { pavement } : {}),
       ...(marks ? { marks } : {}),
       ...(surface ? { surface } : {}),
+      ...(across ? { lanesAcross: across } : {}),
       ...(lanes && laneSpans?.length ? { lanes, laneSpans } : {}),
     });
   }
@@ -1390,6 +1410,52 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     return { x: round(x + a.uy * off), y: round(y - a.ux * off), angle: +Math.atan2(a.uy, a.ux).toFixed(3), width: round(across) };
   };
   /**
+   * The triangles before give way lines: 9 m back along the road from them (following its bends), one
+   * in the middle of each lane coming in, as big as fits in it.
+   */
+  const giveWayTriangles = (id: number, direction?: string): PaintMark[] => {
+    const a = approach(id, direction);
+    if (!a) return [];
+    // Back along whichever road through it the traffic comes in on (the street may be mapped in pieces, the line at a join).
+    let best: { pts: Pts; at: number; forwards: boolean; room: number; way: OsmWay } | null = null;
+    // The same kind of way as the lines are across: a road's for traffic, a cycle path's for bikes.
+    const vehicle = VEHICLE_ROADS.has(a.on.kind);
+    for (const w of waysOfNode.get(id) ?? []) {
+      if (VEHICLE_ROADS.has(w.kind) !== vehicle) continue;
+      const pts = pointsOf(w.way.nodes);
+      if (!pts) continue;
+      let at = 0;
+      for (let k = 0; k < w.index; k++) at += Math.hypot(pts[k * 2 + 2] - pts[k * 2], pts[k * 2 + 3] - pts[k * 2 + 1]);
+      // Is the traffic going this way's way, or against it? (At its end, look at its last piece.)
+      const [wx, wy] = alongPolyline(pts, Math.max(0, Math.min(polylineLength(pts) - 1, at - (w.index === w.way.nodes.length - 1 ? 1 : 0)))).slice(2) as [number, number];
+      const forwards = wx * a.ux + wy * a.uy >= 0;
+      const room = forwards ? at : polylineLength(pts) - at;
+      if (!best || room > best.room) best = { pts, at, forwards, room, way: w.way };
+    }
+    if (!best) return [];
+    const { pts, at, forwards, room } = best;
+    // 9 m back, or as far as that road goes (but not under 5 m: then there's no room for it).
+    const by = Math.min(GIVE_WAY_TRIANGLE, room - PX_PER_METRE);
+    if (by < 5 * PX_PER_METRE) return [];
+    const back = forwards ? at - by : at + by;
+    const [px, py, tx, ty] = alongPolyline(pts, back);
+    const [hx, hy] = forwards ? [tx, ty] : [-tx, -ty];
+    // Its lanes: from the traffic's left kerb, across its half (all of it, one-way).
+    const t = best.way.tags;
+    const oneway = t.oneway === 'yes' || t.oneway === '1' || t.junction === 'roundabout';
+    const kind = roadKind(t);
+    const width = kind ? roadWidth(kind, t) * PX_PER_METRE : a.width;
+    const across = lanesAcross(t, oneway);
+    const count = Math.max(1, across ? (forwards ? across[0] : across[1]) : 1);
+    const laneWidth = (oneway ? width : width / 2) / count;
+    const out: PaintMark[] = [];
+    for (let i = 0; i < count; i++) {
+      const off = width / 2 - (i + 0.5) * laneWidth;
+      out.push({ kind: 'triangle', x: round(px + hy * off), y: round(py - hx * off), angle: +Math.atan2(hy, hx).toFixed(3), width: round(laneWidth) });
+    }
+    return out;
+  };
+  /**
    * A bus stop's box along the kerb, on the side its platform (or sign) is (else the left, one-way): a
    * rectangle, only where the road's straight enough for one (22 m long, or as short as 12 m), with no
    * junction along it and room for it on its own side of the road; and not over one already there.
@@ -1495,6 +1561,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     if (t.highway === 'give_way' || t.highway === 'stop' || t.cycleway === 'asl') {
       const at = acrossLanes(node.id, x, y, t.direction);
       if (at) paint.push({ kind: t.highway === 'give_way' ? 'giveway' : t.highway === 'stop' ? 'stop' : 'asl', ...at });
+      if (at && t.highway === 'give_way') paint.push(...giveWayTriangles(node.id, t.direction));
     }
     if (t.highway === 'mini_roundabout') paint.push({ kind: 'mini', x: round(x), y: round(y), angle: 0, width: 4 * PX_PER_METRE });
     if (t.public_transport === 'stop_position' && (t.bus === 'yes' || !t.tram)) {
