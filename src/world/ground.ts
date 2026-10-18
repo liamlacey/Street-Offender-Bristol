@@ -10,7 +10,7 @@
  */
 
 import type { AreaKind, GameMap, Pts, Road } from '../map/osm';
-import { VEHICLE_ROADS, ringArea } from '../map/osm';
+import { type Paving, VEHICLE_ROADS, ringArea } from '../map/osm';
 import { Surface, surfacePaint } from './surface';
 import { type ChunkIndex, shadowOffset, subPolyline } from './world';
 
@@ -35,6 +35,8 @@ export interface Palette {
   kerb: Fill;
   parapet: Fill;
   asphalt: Fill;
+  /** Each surface, where one's tagged (`asphalt` here is a path's tarmac, paler than a road's). */
+  paving: Record<Paving, Fill>;
   marking: string;
   quay: string;
   pool: string;
@@ -73,6 +75,15 @@ export function surfacePalette(): Palette {
     kerb: pave,
     parapet: pave,
     asphalt: s(Surface.Road),
+    paving: {
+      asphalt: s(Surface.Road),
+      paving: pave,
+      sett: pave,
+      concrete: pave,
+      gravel: s(Surface.Dirt),
+      wood: pave,
+      grass: s(Surface.Grass),
+    },
     marking: s(Surface.Road),
     quay: pave,
     pool: s(Surface.Pool),
@@ -95,7 +106,7 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
   for (const i of index.areas) {
     const a = map.areas[i];
     if (a.kind === 'island') continue;
-    fillRings(ctx, a.rings, palette.area[a.kind]);
+    fillRings(ctx, a.rings, a.surface ? palette.paving[a.surface] : palette.area[a.kind]);
     if (!palette.surface && (a.kind === 'water' || a.kind === 'pool')) {
       // The quayside's coping stones, or a pool's rim.
       strokeRings(ctx, a.rings, a.kind === 'water' ? palette.quay : palette.pool, a.kind === 'water' ? 5 : 3);
@@ -122,7 +133,7 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
   }
   // Kerbs, then the tarmac over them, so the roads run together at junctions.
   for (const r of vehicle) stroke(ctx, r.pts, r.bridge ? palette.parapet : palette.kerb, r.width + (r.bridge ? 7 : KERB * 2));
-  for (const r of vehicle) stroke(ctx, r.pts, palette.asphalt, r.width);
+  for (const r of vehicle) stroke(ctx, r.pts, r.surface && r.surface !== 'asphalt' ? palette.paving[r.surface] : palette.asphalt, r.width);
 
   if (!palette.surface) {
     drawMarkings(ctx, vehicle, palette.marking);
@@ -177,6 +188,7 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
 }
 
 function pathFill(r: Road, p: Palette): Fill {
+  if (r.surface && r.kind !== 'steps') return p.paving[r.surface];
   switch (r.kind) {
     case 'pedestrian':
       return p.plaza;
@@ -196,7 +208,8 @@ function drawMarkings(ctx: Ctx, roads: Road[], colour: string): void {
   ctx.strokeStyle = colour;
   ctx.lineCap = 'butt';
   for (const r of roads) {
-    if (!r.marks) continue;
+    // No lines painted on cobbles.
+    if (!r.marks || (r.surface && r.surface !== 'asphalt' && r.surface !== 'concrete')) continue;
     if (r.oneway) {
       // A one-way street wide enough for two lanes gets a line between them.
       if (r.width < 6 * 8) continue;
@@ -289,9 +302,10 @@ function drawShadows(ctx: Ctx, scratch: Ctx, map: GameMap, index: ChunkIndex, x0
   scratch.fill('nonzero');
   // Trees: a soft round shadow off to the side.
   for (const t of index.trees) {
-    const [x, y, r] = [map.trees[t * 3], map.trees[t * 3 + 1], map.trees[t * 3 + 2]];
+    const [x, y, r, h] = [map.trees[t * 4], map.trees[t * 4 + 1], map.trees[t * 4 + 2], map.trees[t * 4 + 3]];
+    const [sx, sy] = shadowOffset(h * 0.7);
     scratch.beginPath();
-    scratch.arc(x + r * 0.6, y + r * 0.8, r * 0.95, 0, Math.PI * 2);
+    scratch.arc(x + sx, y + sy, r * 0.95, 0, Math.PI * 2);
     scratch.fill();
   }
   ctx.save();

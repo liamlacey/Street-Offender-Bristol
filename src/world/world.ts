@@ -86,7 +86,7 @@ export function buildWorld(map: GameMap): World {
   addRing([0, 0, map.width, 0, map.width, map.height, 0, map.height], 0, true);
 
   const posts: Circle[] = [];
-  for (let i = 0; i < map.trees.length; i += 3) posts.push({ x: map.trees[i], y: map.trees[i + 1], r: TRUNK });
+  for (let i = 0; i < map.trees.length; i += 4) posts.push({ x: map.trees[i], y: map.trees[i + 1], r: TRUNK });
   const loose: LooseProp[] = [];
   const fixed: Prop[] = [];
   map.props.forEach((p, i) => {
@@ -142,9 +142,10 @@ function indexChunks(map: GameMap): Map<string, ChunkIndex> {
     add('buildings', i, x0 - 2, y0 - 2, x1 + Math.max(0, sx) + 2, y1 + Math.max(0, sy) + 2);
   });
   map.crossings.forEach((c, i) => add('crossings', i, c.x - c.width, c.y - c.width, c.x + c.width, c.y + c.width));
-  for (let i = 0; i < map.trees.length; i += 3) {
-    const [x, y, r] = [map.trees[i], map.trees[i + 1], map.trees[i + 2]];
-    add('trees', i / 3, x - r, y - r, x + r * 2.5, y + r * 2.5);
+  for (let i = 0; i < map.trees.length; i += 4) {
+    const [x, y, r, h] = [map.trees[i], map.trees[i + 1], map.trees[i + 2], map.trees[i + 3]];
+    const [sx, sy] = shadowOffset(h * 0.7);
+    add('trees', i / 4, x - r, y - r, x + sx + r, y + sy + r);
   }
   return chunks;
 }

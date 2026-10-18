@@ -36,7 +36,7 @@ describe('buildWorld', () => {
   it('makes benches and bins loose, and lamp posts and trees fixed', () => {
     expect(world.loose.every((l) => l.kind === 'bench' || l.kind === 'bin')).toBe(true);
     expect(world.loose.length).toBeGreaterThan(100);
-    expect(world.posts.length).toBeGreaterThan(map.trees.length / 3);
+    expect(world.posts.length).toBeGreaterThan(map.trees.length / 4);
     expect(world.fixed.some((p) => p.kind === 'signals')).toBe(false);
   });
 
@@ -124,5 +124,26 @@ describe('buildingLook', () => {
     const ys = half.filter((_, i) => i % 2 === 1);
     expect(Math.min(...ys)).toBeCloseTo(20);
     expect(Math.max(...ys)).toBeCloseTo(40);
+  });
+});
+
+describe('the map\'s extra detail', () => {
+  it('has trees found by the LIDAR, each with its height', () => {
+    expect(map.trees.length / 4).toBeGreaterThan(1000);
+    for (let i = 3; i < map.trees.length; i += 4) expect(map.trees[i]).toBeGreaterThanOrEqual(4 * 8);
+  });
+
+  it('has most buildings\' heights measured', () => {
+    expect(map.buildings.filter((b) => b.heightFrom === 'lidar').length).toBeGreaterThan(map.buildings.length / 2);
+  });
+
+  it('has the cobbles of King Street and Queen Square', () => {
+    expect(map.roads.some((r) => r.name === 'King Street' && r.surface === 'sett')).toBe(true);
+  });
+
+  it('colours the landmarks, and their parts', () => {
+    const cathedral = map.buildings.find((b) => b.name === 'Bristol Cathedral')!;
+    expect(cathedral.roof).toBe('#6d7577');
+    expect(map.buildings.filter((b) => b.roof === '#6d7577' && b.kind !== 'cathedral').length).toBeGreaterThan(5);
   });
 });

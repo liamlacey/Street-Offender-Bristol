@@ -25,4 +25,6 @@ npm run map      # rebuild the map from OpenStreetMap (see src/map/README.md)
 `example-code/` holds the code of an earlier game to borrow from (see its README).
 
 Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright),
-available under the Open Database Licence.
+available under the Open Database Licence. Heights and trees from the Environment
+Agency's LIDAR: contains public sector information licensed under the
+[Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).

@@ -6,7 +6,7 @@
  * windows it has. Pure, so it's tested; Buildings.ts draws it.
  */
 
-import { type Building, type Pts, centroid, ringArea } from '../map/osm';
+import { type Building, type Pts, centroid, ridgeAxis, ringArea } from '../map/osm';
 import { buildingSeed } from './world';
 
 /** A storey's height, px. */
@@ -186,36 +186,8 @@ export function buildingLook(b: Building, triangulate: Triangulate): BuildingLoo
   let ridge: BuildingLook['ridge'] = null;
   const c = centroid(outer);
   if (pitched) {
-    // The ridge runs along the building's longest side, through its middle; the two slopes either side are lit differently.
-    let best = 0;
-    let ux = 1;
-    let uy = 0;
-    for (let i = 0; i < outer.length; i += 2) {
-      const j = (i + 2) % outer.length;
-      const dx = outer[j] - outer[i];
-      const dy = outer[j + 1] - outer[i + 1];
-      const len = Math.hypot(dx, dy);
-      if (len > best) {
-        best = len;
-        ux = dx / len;
-        uy = dy / len;
-      }
-    }
-    // Through the middle of the building measured across the ridge, not the average of its corners.
-    let [tmin, tmax, smin, smax] = [Infinity, -Infinity, Infinity, -Infinity];
-    for (let i = 0; i < outer.length; i += 2) {
-      const px = outer[i] - c.x;
-      const py = outer[i + 1] - c.y;
-      const t = px * ux + py * uy;
-      const s = -px * uy + py * ux;
-      tmin = Math.min(tmin, t);
-      tmax = Math.max(tmax, t);
-      smin = Math.min(smin, s);
-      smax = Math.max(smax, s);
-    }
-    const mid = (smin + smax) / 2;
-    const ox = c.x - uy * mid;
-    const oy = c.y + ux * mid;
+    // The ridge runs along the building's longest side (or across it), through its middle; the two slopes either side are lit differently.
+    const { ox, oy, ux, uy, t0, t1, half: halfWidth } = ridgeAxis(outer, b.roofAcross);
     for (const side of [1, -1]) {
       const half = clipHalfPlane(outer, ox, oy, ux, uy, side);
       if (half.length < 6) continue;
@@ -225,8 +197,8 @@ export function buildingLook(b: Building, triangulate: Triangulate): BuildingLoo
       const lit = nx * LIGHT.x + ny * LIGHT.y;
       facets.push({ tris: triangles(half, [], triangulate), colour: shade(roofColour, 0.9 + lit * 0.24) });
     }
-    const hip = b.roofShape === 'hipped' ? (smax - smin) / 2 : 0;
-    if (tmax - tmin > hip * 2) ridge = [ox + ux * (tmin + hip), oy + uy * (tmin + hip), ox + ux * (tmax - hip), oy + uy * (tmax - hip)];
+    const hip = b.roofShape === 'hipped' ? halfWidth : 0;
+    if (t1 - t0 > hip * 2) ridge = [ox + ux * (t0 + hip), oy + uy * (t0 + hip), ox + ux * (t1 - hip), oy + uy * (t1 - hip)];
   }
   const pyramid = !pitched && (b.roofShape === 'pyramidal' || b.roofShape === 'dome' || b.roofShape === 'onion') && b.rings.length === 1;
   if (pyramid) {

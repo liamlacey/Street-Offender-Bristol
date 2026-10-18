@@ -56,18 +56,28 @@ function slabs(base: [number, number, number], slab: number, size: number, joint
 /** Small stone setts in rows, each row offset by half. */
 function setts(size: number): HTMLCanvasElement {
   return tile(size, (ctx, rand) => {
-    ctx.fillStyle = '#6d6760';
+    ctx.fillStyle = '#4f4c48';
     ctx.fillRect(0, 0, size, size);
-    const w = 8;
-    const h = 5;
+    // Tiles seamlessly: whole setts across, and an even number of rows down.
+    const w = 6;
+    const h = 4;
     for (let row = 0; row * h < size; row++) {
       for (let x = row % 2 ? -w / 2 : 0; x < size; x += w) {
         const v = (rand() - 0.5) * 22;
-        ctx.fillStyle = `rgb(${150 + v},${140 + v},${126 + v})`;
-        ctx.fillRect(x + 0.6, row * h + 0.6, w - 1.2, h - 1.2);
+        ctx.fillStyle = `rgb(${118 + v},${114 + v},${108 + v})`;
+        ctx.fillRect(x + 0.5, row * h + 0.5, w - 1, h - 1);
       }
     }
   }, 11);
+}
+
+/** Packed gravel and earth: a path through the park. */
+function gravel(size: number): HTMLCanvasElement {
+  return tile(size, (ctx, rand) => {
+    ctx.fillStyle = '#a8977a';
+    ctx.fillRect(0, 0, size, size);
+    speckle(ctx, rand, size, size * 6, ['#8f7e63', '#bfae90', '#776a55', '#c9bda4'], 1);
+  }, 21);
 }
 
 function asphalt(size: number, base: string, seed: number): HTMLCanvasElement {
@@ -211,13 +221,22 @@ export function artPalette(ctx: Ctx): Palette {
     area,
     pavement,
     path: pattern(slabs([168, 162, 152], 12, 48, 'rgba(60,56,50,0.3)', 15)),
-    plaza: pattern(setts(48)),
+    plaza: area.plaza,
     cycleway: pattern(asphalt(64, '#7a5049', 16)),
     steps: '#b3aa9a',
     track: pattern(soil(64)),
     kerb: '#c2bfb6',
     parapet: '#7c7366',
     asphalt: pattern(asphalt(128, '#48494c', 17)),
+    paving: {
+      asphalt: pattern(asphalt(64, '#5d5e60', 18)),
+      paving: pattern(slabs([168, 162, 152], 12, 48, 'rgba(60,56,50,0.3)', 15)),
+      sett: pattern(setts(48)),
+      concrete: pattern(slabs([176, 174, 168], 32, 64, 'rgba(70,70,66,0.25)', 19)),
+      gravel: pattern(gravel(64)),
+      wood: pattern(planks(64)),
+      grass: lawn,
+    },
     marking: 'rgba(236,233,220,0.9)',
     quay: '#bdb3a0',
     pool: '#d6d1c4',

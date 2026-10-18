@@ -116,7 +116,7 @@ describe('buildMap', () => {
   });
 
   it('keeps trees, props and crossings', () => {
-    expect(map.trees).toHaveLength(3);
+    expect(map.trees).toHaveLength(4);
     expect(map.props).toEqual([expect.objectContaining({ kind: 'bench' })]);
     expect(map.crossings).toEqual([expect.objectContaining({ zebra: true, width: 80 })]);
   });

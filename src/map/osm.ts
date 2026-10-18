@@ -7,6 +7,8 @@
  * `tools/build-map.ts` to make `src/map/bristol.json`.
  */
 
+import { LANDMARKS, STREETS } from './landmarks.ts';
+
 /** Game pixels per metre: a car is about 4.75 m long, 38 px. */
 export const PX_PER_METRE = 8;
 
@@ -35,6 +37,25 @@ export interface Area {
   kind: AreaKind;
   /** The outer ring first, then any holes (filled even-odd). */
   rings: Pts[];
+  /** What it's paved with, if it's tagged and not the usual for its kind. */
+  surface?: Paving;
+}
+
+/** What a road, path or square is surfaced with (tarmac, the usual for roads, is left unsaid). */
+export type Paving = 'asphalt' | 'paving' | 'sett' | 'concrete' | 'gravel' | 'wood' | 'grass';
+
+/** Sorts OSM's `surface` values into the few the game draws. */
+export function paving(surface: string | undefined): Paving | undefined {
+  if (!surface) return undefined;
+  const s = surface.split(/[;:]/)[0];
+  if (s === 'asphalt' || s === 'chipseal' || s === 'tartan') return 'asphalt';
+  if (s === 'paving_stones' || s === 'bricks' || s === 'brick' || s === 'stone' || s === 'composite' || s === 'tiles') return 'paving';
+  if (s === 'sett' || s === 'cobblestone' || s === 'unhewn_cobblestone') return 'sett';
+  if (s === 'concrete' || s === 'metal' || s === 'stepping_stones') return 'concrete';
+  if (s === 'compacted' || s === 'fine_gravel' || s === 'gravel' || s === 'pebblestone' || s === 'dirt' || s === 'ground' || s === 'earth' || s === 'unpaved' || s === 'mud' || s === 'sand') return 'gravel';
+  if (s === 'wood') return 'wood';
+  if (s === 'grass' || s === 'grass_paver') return 'grass';
+  return undefined;
 }
 
 export type RoadKind =
@@ -61,6 +82,8 @@ export interface Road {
   bridge?: boolean;
   /** Whether it has pavements along it. */
   pavement?: boolean;
+  /** What it's surfaced with, if tagged (the drawing picks a usual one for its kind otherwise). */
+  surface?: Paving;
   /** Stretches (distances along it, start, end, start, end, ...) with lane markings: not across junctions. */
   marks?: number[];
 }
@@ -88,6 +111,12 @@ export interface Building {
   solid: boolean;
   /** Whether it's drawn (an outline whose parts are drawn instead isn't). */
   drawn: boolean;
+  /** Which of src/map/landmarks.ts it is, if any. */
+  landmark?: string;
+  /** A pitched roof's ridge runs across the building rather than along it. */
+  roofAcross?: boolean;
+  /** Where its height came from, if not its number of floors or a guess: tagged in OSM, or measured by LIDAR. */
+  heightFrom?: 'tag' | 'lidar';
 }
 
 export type PropKind =
@@ -130,7 +159,7 @@ export interface GameMap {
   roads: Road[];
   lines: Line[];
   buildings: Building[];
-  /** Trees: x, y, canopy radius (px), ... */
+  /** Trees: x, y, crown radius, height (all px), ... */
   trees: number[];
   props: Prop[];
   crossings: Crossing[];
@@ -260,6 +289,14 @@ export class Projection {
   y(lat: number): number {
     return (this.lat0 - lat) * this.ky;
   }
+
+  lon(x: number): number {
+    return this.lon0 + x / this.kx;
+  }
+
+  lat(y: number): number {
+    return this.lat0 - y / this.ky;
+  }
 }
 
 /** Signed area of a closed ring (positive when clockwise on screen, y down). */
@@ -293,6 +330,44 @@ export function pointInRing(x: number, y: number, pts: Pts): boolean {
     if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
   }
   return inside;
+}
+
+/**
+ * Where a pitched roof's ridge runs: along the building's longest side (or
+ * across it), through the middle of the building measured across the ridge.
+ * Returns a point on the ridge, its direction, how far the building reaches
+ * along it each way from that point, and half the building's width across it.
+ */
+export function ridgeAxis(outer: Pts, across = false): { ox: number; oy: number; ux: number; uy: number; t0: number; t1: number; half: number } {
+  let best = 0;
+  let ux = 1;
+  let uy = 0;
+  for (let i = 0; i < outer.length; i += 2) {
+    const j = (i + 2) % outer.length;
+    const dx = outer[j] - outer[i];
+    const dy = outer[j + 1] - outer[i + 1];
+    const len = Math.hypot(dx, dy);
+    if (len > best) {
+      best = len;
+      ux = dx / len;
+      uy = dy / len;
+    }
+  }
+  if (across) [ux, uy] = [-uy, ux];
+  const c = centroid(outer);
+  let [t0, t1, s0, s1] = [Infinity, -Infinity, Infinity, -Infinity];
+  for (let i = 0; i < outer.length; i += 2) {
+    const px = outer[i] - c.x;
+    const py = outer[i + 1] - c.y;
+    const t = px * ux + py * uy;
+    const s = -px * uy + py * ux;
+    t0 = Math.min(t0, t);
+    t1 = Math.max(t1, t);
+    s0 = Math.min(s0, s);
+    s1 = Math.max(s1, s);
+  }
+  const mid = (s0 + s1) / 2;
+  return { ox: c.x - uy * mid, oy: c.y + ux * mid, ux, uy, t0, t1, half: (s1 - s0) / 2 };
 }
 
 /** Clips a closed ring to a rectangle (Sutherland-Hodgman). */
@@ -566,13 +641,9 @@ const BUILDING_HEIGHT: Record<string, number> = {
   toilets: 3,
 };
 
-/** Landmarks whose height OSM doesn't give, in metres. */
-const KNOWN_HEIGHTS: Record<number, number> = {
-  // Bristol Cathedral's nave and choir (its central tower rises above, at about 43 m).
-  48937931: 24,
-};
-
 const LEVEL = 3.2;
+/** A tree's height when nothing says, metres. */
+export const TREE_HEIGHT = 9;
 
 export function buildingHeights(tags: Tags, kind: string): { top: number; bottom: number } {
   let top = metres(tags.height);
@@ -648,17 +719,22 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
   const props: Prop[] = [];
   const crossings: Crossing[] = [];
 
-  const addArea = (kind: AreaKind, rings: Pts[]) => {
+  const addArea = (kind: AreaKind, rings: Pts[], tags: Tags) => {
     const clipped = rings.map((r) => clipRing(r, cx0, cy0, cx1, cy1)).filter((r) => r.length >= 6);
     if (clipped.length === 0 || Math.abs(ringArea(clipped[0])) < 4) return;
-    areas.push({ kind, rings: clipped.map(roundPts) });
+    const surface = kind === 'plaza' || kind === 'parking' ? paving(tags.surface) : undefined;
+    areas.push({ kind, rings: clipped.map(roundPts), ...(surface ? { surface } : {}) });
   };
 
-  const addBuilding = (id: number, tags: Tags, rings: Pts[], part: boolean) => {
+  const addBuilding = (type: 'way' | 'relation', id: number, tags: Tags, rings: Pts[], part: boolean) => {
     if (rings.length === 0 || !rings[0].some((v, i) => i % 2 === 0 && inside(v, rings[0][i + 1], 20 * PX_PER_METRE))) return;
     const kind = part ? (tags['building:part'] === 'yes' ? (tags.building ?? 'yes') : tags['building:part']) : tags.building;
     const h = buildingHeights(tags, kind);
-    if (!part && KNOWN_HEIGHTS[id]) h.top = KNOWN_HEIGHTS[id];
+    const landmark = LANDMARKS[`${type}/${id}`];
+    if (landmark?.height) h.top = landmark.height;
+    const tagged = metres(tags.height) !== undefined || landmark?.height !== undefined;
+    const street = STREETS[tags['addr:street']];
+    const pick = (list: string[]) => list[id % list.length];
     buildings.push({
       id,
       name: tags.name,
@@ -666,11 +742,14 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       top: round(h.top * PX_PER_METRE),
       bottom: round(h.bottom * PX_PER_METRE),
       kind,
-      wall: tags['building:colour'] ?? materialColour(tags['building:material']),
-      roof: tags['roof:colour'],
-      roofShape: tags['roof:shape'],
+      wall: landmark?.wall ?? tags['building:colour'] ?? materialColour(tags['building:material']) ?? (street && pick(street.walls)),
+      roof: landmark?.roof ?? tags['roof:colour'] ?? (street && pick(street.roofs)),
+      roofShape: landmark?.roofShape ?? tags['roof:shape'],
+      ...(landmark ? { landmark: `${type}/${id}` } : {}),
+      ...(tags['roof:orientation'] === 'across' ? { roofAcross: true } : {}),
       solid: !part && kind !== 'roof' && h.bottom < 2,
       drawn: true,
+      ...(tagged ? { heightFrom: 'tag' as const } : {}),
     });
   };
 
@@ -693,8 +772,8 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     for (const id of outerIds) multipolygonMembers.add(id);
     for (const outer of outers) {
       const holes = inners.filter((h) => pointInRing(h[0], h[1], outer));
-      if (isBuilding) addBuilding(rel.id, t, [outer, ...holes], false);
-      else addArea(kind!, [outer, ...holes]);
+      if (isBuilding) addBuilding('relation', rel.id, t, [outer, ...holes], false);
+      else addArea(kind!, [outer, ...holes], t);
     }
   }
 
@@ -708,7 +787,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
 
     if (closed && ((t.building && t.building !== 'no') || t['building:part'])) {
       const ring = ringOf(way.nodes);
-      if (ring) addBuilding(way.id, t, [ring], !t.building || t.building === 'no' || !!t['building:part']);
+      if (ring) addBuilding('way', way.id, t, [ring], !t.building || t.building === 'no' || !!t['building:part']);
       continue;
     }
 
@@ -722,13 +801,13 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     const area = ownTags ? areaKind(t) : null;
     if (area && closed) {
       const ring = ringOf(way.nodes);
-      if (ring) addArea(area, [ring]);
+      if (ring) addArea(area, [ring], t);
       continue;
     }
     if (area === 'pier' && !closed) {
       // A jetty mapped as a line: a deck along it.
       const pts = pointsOf(way.nodes);
-      if (pts) for (const piece of clipLine(pts, cx0, cy0, cx1, cy1)) roads.push({ kind: 'footway', width: round((metres(t.width) ?? 3) * PX_PER_METRE), pts: roundPts(piece), bridge: true, name: t.name });
+      if (pts) for (const piece of clipLine(pts, cx0, cy0, cx1, cy1)) roads.push({ kind: 'footway', width: round((metres(t.width) ?? 3) * PX_PER_METRE), pts: roundPts(piece), bridge: true, name: t.name, surface: paving(t.surface) ?? 'wood' });
       continue;
     }
 
@@ -741,7 +820,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
 
     if (t.natural === 'tree_row') {
       const pts = pointsOf(way.nodes);
-      if (pts) for (const [x, y] of along(pts, 7 * PX_PER_METRE)) if (inside(x, y)) trees.push(round(x), round(y), 3.5 * PX_PER_METRE);
+      if (pts) for (const [x, y] of along(pts, 7 * PX_PER_METRE)) if (inside(x, y)) trees.push(round(x), round(y), 3.5 * PX_PER_METRE, TREE_HEIGHT * PX_PER_METRE);
     }
   }
 
@@ -759,6 +838,9 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       b.drawn = false;
       b.solid = false;
       for (const p of covered) if (p.bottom < 2 * PX_PER_METRE) p.solid = true;
+      // A landmark's colours go on its parts.
+      const look = b.landmark ? LANDMARKS[b.landmark] : undefined;
+      if (look) for (const p of covered) Object.assign(p, { wall: look.wall ?? p.wall, roof: look.roof ?? p.roof });
     }
   }
 
@@ -771,6 +853,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     const vehicle = VEHICLE_ROADS.has(kind);
     const oneway = t.oneway === 'yes' || t.oneway === '1' || t.junction === 'roundabout';
     const bridge = t.bridge !== undefined && t.bridge !== 'no';
+    const surface = paving(t.surface);
     let marks: number[] | undefined;
     if (vehicle && kind !== 'service' && kind !== 'track' && width >= 6 * PX_PER_METRE) {
       // Junction points along the road: anywhere another road joins it.
@@ -803,6 +886,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       ...(bridge ? { bridge } : {}),
       ...(pavement ? { pavement } : {}),
       ...(marks ? { marks } : {}),
+      ...(surface ? { surface } : {}),
     });
   }
 
@@ -820,7 +904,8 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     if (t.natural === 'tree') {
       const crown = metres(t.diameter_crown);
       const r = Math.max(2.2, Math.min(crown ? crown / 2 : 3.2 + ((node.id % 7) / 7) * 1.6, 7));
-      trees.push(round(x), round(y), round(r * PX_PER_METRE));
+      const h = Math.max(4, Math.min(metres(t.height) ?? TREE_HEIGHT, 35));
+      trees.push(round(x), round(y), round(r * PX_PER_METRE), round(h * PX_PER_METRE));
       continue;
     }
     if (t.highway === 'crossing' || t.crossing) {

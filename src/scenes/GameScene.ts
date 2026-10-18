@@ -50,8 +50,6 @@ const DEPTH = {
 
 /** How high the camera is when stopped, px (the lower it is, the more the buildings lean). */
 const CAMERA_HEIGHT = 1250;
-/** How far up a tree's crown is, px. */
-const TREE_HEIGHT = 8 * 8;
 /** The view's shorter side, in map px, when the car's stopped (it pulls back as you speed up, as in the old games). */
 const VIEW_AT_REST = 430;
 const PULL_BACK = 0.38;
@@ -71,7 +69,7 @@ export class GameScene extends Phaser.Scene {
   private car!: CarState;
   private carSprite!: Phaser.GameObjects.Image;
   private carShadow!: Phaser.GameObjects.Image;
-  private trees: { x: number; y: number; image: Phaser.GameObjects.Image }[] = [];
+  private trees: { x: number; y: number; h: number; image: Phaser.GameObjects.Image }[] = [];
   private loose: { body: LooseProp; image: Phaser.GameObjects.Image }[] = [];
   private looseByChunk = new Map<string, number[]>();
   private effects!: CarEffects;
@@ -181,14 +179,14 @@ export class GameScene extends Phaser.Scene {
 
   private addTrees(): void {
     const t = this.world.map.trees;
-    for (let i = 0; i < t.length; i += 3) {
+    for (let i = 0; i < t.length; i += 4) {
       const image = this.add
-        .image(t[i], t[i + 1], TEX.tree((i / 3) % TREE_KINDS))
+        .image(t[i], t[i + 1], TEX.tree((i / 4) % TREE_KINDS))
         .setScale(t[i + 2] / TREE_RADIUS / ART_SCALE)
         .setRotation(((i * 1.7) % 6.28) - 3.14)
         .setDepth(DEPTH.trees)
         .setVisible(false);
-      this.trees.push({ x: t[i], y: t[i + 1], image });
+      this.trees.push({ x: t[i], y: t[i + 1], h: t[i + 3], image });
     }
   }
 
@@ -406,12 +404,15 @@ export class GameScene extends Phaser.Scene {
   private updateTrees(view: Phaser.Geom.Rectangle, height: number): void {
     const cx = view.centerX;
     const cy = view.centerY;
-    const lift = 1 + TREE_HEIGHT / (height - TREE_HEIGHT);
     const pad = 80;
     for (const t of this.trees) {
       const show = t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
       if (t.image.visible !== show) t.image.setVisible(show);
-      if (show) t.image.setPosition(cx + (t.x - cx) * lift, cy + (t.y - cy) * lift);
+      if (!show) continue;
+      // The crown's a little below the treetop.
+      const crown = Math.min(t.h * 0.85, height * 0.6);
+      const lift = 1 + crown / (height - crown);
+      t.image.setPosition(cx + (t.x - cx) * lift, cy + (t.y - cy) * lift);
     }
   }
 

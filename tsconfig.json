@@ -11,6 +11,8 @@
     "noFallthroughCasesInSwitch": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
+    // The map tool (tools/build-map.ts) runs src/map/ in Node, which needs the .ts on imports.
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "noEmit": true
   },
