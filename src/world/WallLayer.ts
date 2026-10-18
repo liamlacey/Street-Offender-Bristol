@@ -5,7 +5,7 @@ import type { Perspective } from './perspective';
 import type { Wall } from './world';
 
 /** How tall each kind of wall stands, px, and its colours: its side, and its top. */
-const LOOK: Record<WallKind, { height: number; side: number; top: number; width: number; open?: boolean }> = {
+const LOOK: Record<WallKind, { height: number; side: number; top: number; width: number; open?: boolean; square?: boolean }> = {
   wall: { height: 1.6 * 8, side: 0x857a6b, top: 0xb3a690, width: 4 },
   hedge: { height: 1.8 * 8, side: 0x2c5323, top: 0x417c31, width: 9 },
   fence: { height: 1.5 * 8, side: 0x5b4630, top: 0x86694a, width: 2 },
@@ -14,8 +14,8 @@ const LOOK: Record<WallKind, { height: number; side: number; top: number; width:
   // A car park's barrier: just its arm, red and white, across the way at waist height; and a chain, slung low.
   liftgate: { height: 1 * 8, side: 0xeeeeee, top: 0xd8312a, width: 1.6, open: true },
   chain: { height: 0.5 * 8, side: 0x444444, top: 0x6a6a6a, width: 0.8, open: true },
-  // A bus shelter: its glass back, and its roof.
-  shelter: { height: 2.5 * 8, side: 0x9cb6c2, top: 0x3d434a, width: 12 },
+  // A bus shelter: its glass back, and its roof, a flat rectangle with square corners.
+  shelter: { height: 2.5 * 8, side: 0x9cb6c2, top: 0x3d434a, width: 12, square: true },
 };
 
 /**
@@ -58,7 +58,25 @@ export class WallLayer {
           g.fillTriangle(a0x, a0y, b0x, b0y, b1x, b1y);
           g.fillTriangle(a0x, a0y, b1x, b1y, a1x, a1y);
         }
-        // Its top.
+        // Its top: a flat rectangle, edged, for a shelter's roof.
+        if (look.square) {
+          const len = Math.hypot(b1x - a1x, b1y - a1y) || 1;
+          const [nx, ny] = [(-(b1y - a1y) / len) * (look.width * s1) / 2, ((b1x - a1x) / len) * (look.width * s1) / 2];
+          const [p, q, r, t] = [a1x + nx, a1y + ny, b1x + nx, b1y + ny];
+          const [u, v, w, k] = [b1x - nx, b1y - ny, a1x - nx, a1y - ny];
+          g.fillStyle(look.top, 1);
+          g.fillTriangle(p, q, r, t, u, v);
+          g.fillTriangle(p, q, u, v, w, k);
+          g.lineStyle(1, 0x22272c, 1);
+          g.beginPath();
+          g.moveTo(p, q);
+          g.lineTo(r, t);
+          g.lineTo(u, v);
+          g.lineTo(w, k);
+          g.closePath();
+          g.strokePath();
+          continue;
+        }
         g.lineStyle(look.width * s1, look.top, 1);
         g.lineBetween(a1x, a1y, b1x, b1y);
         // Rounded at the ends, so the pieces of a thick one join up round its corners.
