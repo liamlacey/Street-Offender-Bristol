@@ -62,8 +62,12 @@ export function breaks(t: Toughness, speed: number, weight = 1): boolean {
 const CAR_RADIUS = CAR_WIDTH / 2;
 const HULL = [-(CAR_LENGTH / 2 - CAR_RADIUS), 0, CAR_LENGTH / 2 - CAR_RADIUS];
 
-/** How fast the car is going into (x, y) (0 if it's going away), if any of it is within `reach` px of it. */
-export function impactSpeed(car: CarState, x: number, y: number, reach: number): number {
+/**
+ * How fast the car is going into (x, y) (0 if it's going away), if any of it
+ * is within `reach` px of it; less, if what's there is moving the same way
+ * at (vx, vy).
+ */
+export function impactSpeed(car: CarState, x: number, y: number, reach: number, vx = 0, vy = 0): number {
   const cos = Math.cos(car.heading);
   const sin = Math.sin(car.heading);
   let touching = false;
@@ -74,7 +78,7 @@ export function impactSpeed(car: CarState, x: number, y: number, reach: number):
   const dx = x - car.x;
   const dy = y - car.y;
   const len = Math.hypot(dx, dy) || 1;
-  return Math.max(0, (car.vx * dx + car.vy * dy) / len);
+  return Math.max(0, ((car.vx - vx) * dx + (car.vy - vy) * dy) / len);
 }
 
 /** Slows a vehicle that's just broken through something. */
@@ -108,7 +112,7 @@ export function gapFor(kind: WallKind, speed: number, weight = 1): number {
   return w.gap * Math.min(2, Math.max(1, (speed * weight) / w.strength));
 }
 
-export type DebrisKind = 'plank' | 'foliage' | 'twig' | 'glass' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head';
+export type DebrisKind = 'log' | 'billet' | 'splinter' | 'plank' | 'foliage' | 'twig' | 'glass' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head';
 
 /** A piece of what's broken, flying off: it ends up somewhere, in the way. */
 export interface Debris {
@@ -126,6 +130,9 @@ export interface Debris {
 }
 
 const PIECES: Record<DebrisKind, { r: number; length?: number; invMass: number }> = {
+  log: { r: 3, length: 22, invMass: 3 },
+  billet: { r: 2.6, length: 10, invMass: 7 },
+  splinter: { r: 0.8, length: 6, invMass: 30 },
   plank: { r: 1.6, length: 13, invMass: 14 },
   foliage: { r: 3, invMass: 30 },
   twig: { r: 1, length: 9, invMass: 30 },
@@ -198,6 +205,67 @@ export function fallen(kind: Exclude<ThingKind, 'tree' | 'fountain' | 'stump'>, 
       return [lying('phonebox', 6, 0.25)];
   }
 }
+
+/**
+ * What's already been broken breaks up further, hit again: and much more
+ * easily than it broke the first time, being loose (nothing holding it to the
+ * ground) and smaller, the smaller the easier, down to bits too small to break.
+ * What each piece is, how strong (as `Toughness`), and what it breaks into.
+ */
+export const BREAKUP: Partial<Record<DebrisKind | 'bench', Toughness & { into: [DebrisKind, number][] }>> = {
+  // A bench, standing loose: smashed to planks.
+  bench: { material: 'timber', strength: BENCH_SMASH, absorb: 0.12, into: [['plank', 5]] },
+  // A log off a fallen trunk splits in two, and the halves into splinters.
+  log: { material: 'wood', strength: 85, absorb: 0.2, into: [['billet', 2], ['splinter', 2]] },
+  billet: { material: 'wood', strength: 65, absorb: 0.08, into: [['splinter', 4]] },
+  plank: { material: 'timber', strength: 110, absorb: 0.04, into: [['splinter', 3]] },
+  // A fallen lamp post snaps in two where it's hit, and a short pole into bent bits.
+  pole: { material: 'metal', strength: 120, absorb: 0.15, into: [['shortpole', 2]] },
+  shortpole: { material: 'metal', strength: 100, absorb: 0.08, into: [['rail', 2]] },
+  // A traffic light's head and a fallen phone box are smashed up: glass, and their frames.
+  head: { material: 'glass', strength: 80, absorb: 0.05, into: [['glass', 5], ['rail', 1]] },
+  phonebox: { material: 'glass', strength: 120, absorb: 0.25, into: [['glass', 10], ['rail', 3]] },
+};
+
+/**
+ * A fallen tree's trunk, lying loose without its roots, gives way much more
+ * easily than the tree did standing (but no more easily than the logs it
+ * breaks into).
+ */
+export function lyingTrunk(standing: Toughness): Toughness {
+  return { material: 'wood', strength: Math.max(BREAKUP.log!.strength + 5, standing.strength * 0.4), absorb: 0.3 };
+}
+
+/**
+ * A fallen trunk hit hard enough: it's split into logs where it lay, end to
+ * end along it, nudged the way the vehicle was going (vx, vy).
+ */
+export function logs(trunk: Segment, vx: number, vy: number, rand: () => number): Debris[] {
+  const dx = trunk.bx - trunk.ax;
+  const dy = trunk.by - trunk.ay;
+  const len = Math.hypot(dx, dy);
+  const count = Math.max(2, Math.min(5, Math.round(len / PIECES.log.length!)));
+  const angle = Math.atan2(dy, dx);
+  const out: Debris[] = [];
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count;
+    const push = 0.15 + rand() * 0.2;
+    out.push({
+      kind: 'log',
+      x: trunk.ax + dx * t,
+      y: trunk.ay + dy * t,
+      vx: vx * push,
+      vy: vy * push,
+      angle: angle + (rand() - 0.5) * 0.4,
+      spin: (rand() - 0.5) * 3,
+      ...PIECES.log,
+    });
+  }
+  return out;
+}
+
+/** A fallen tree's crown, lying on the ground, is torn apart driven through faster than this, px/s. */
+export const CROWN_BREAK = 90;
 
 /** How long something takes to topple over from standing, seconds: the taller it is, the longer (as a falling pole does, with the root of its height). */
 export function toppleTime(heightMetres: number): number {

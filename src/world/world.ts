@@ -78,6 +78,8 @@ export interface LooseProp extends Body {
   level: number;
   /** Whether it's been knocked from where it stood. */
   moved: boolean;
+  /** When it broke off something, seconds (game time), if it did. */
+  born?: number;
 }
 
 /** What's in one chunk of the map: indices into the map's lists. */

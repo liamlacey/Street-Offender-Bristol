@@ -246,6 +246,21 @@ export function createArt(scene: Phaser.Scene): void {
     ctx.fillStyle = '#8f6038';
     ctx.fillRect(0.5, 0.6, 12, 1);
   });
+  // A log off a fallen trunk, half of one, and a splinter.
+  canvasTexture(scene, TEX.debris('log'), 22, 7, (ctx) => {
+    roundRect(ctx, 0, 0.5, 22, 6, 2.5, '#5a3d24');
+    ctx.fillStyle = '#76532f';
+    ctx.fillRect(2, 1.8, 18, 1.4);
+    circle(ctx, 1.4, 3.5, 2.2, '#c79a62');
+    circle(ctx, 20.6, 3.5, 2.2, '#c79a62');
+  });
+  canvasTexture(scene, TEX.debris('billet'), 10, 6, (ctx) => {
+    roundRect(ctx, 0, 0.5, 10, 5, 2, '#5a3d24');
+    circle(ctx, 1.4, 3, 1.9, '#c79a62');
+    ctx.fillStyle = '#d8b07a';
+    ctx.fillRect(8, 1, 2, 4);
+  });
+  canvasTexture(scene, TEX.debris('splinter'), 6, 1.6, (ctx) => roundRect(ctx, 0, 0, 6, 1.6, 0.6, '#b98a55'));
   // A clump torn out of a hedge, and a broken twig.
   canvasTexture(scene, TEX.debris('foliage'), 7, 7, (ctx) => {
     circle(ctx, 3.5, 3.5, 3.2, '#2c5323');

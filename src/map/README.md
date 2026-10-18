@@ -181,6 +181,29 @@ bounces off.
 | Fence | timber | 70 | Broken through (2.5 m, up to 5 m) into planks |
 | Railings | metal | 130 | Broken through (2.5 m, up to 5 m), bent bars |
 
+**Broken again.** What's been broken breaks up further, hit again, and much
+more easily, being loose (nothing holds it to the ground any more) and smaller:
+each piece is weaker than what it broke off, down to bits too small to break.
+How fast counts as how fast the car's going *into* it, less however fast it's
+already going the same way; and a piece can't be broken for half a second after
+it's broken off (or one hit would break it right down at once).
+
+| Lying there | Strength | Breaks into |
+| --- | --- | --- |
+| A fallen tree's trunk (solid) | 0.4 × the tree's, standing (at least 90) | Logs, end to end where it lay (2 to 5) |
+| A fallen tree's crown (not solid) | driven through at 90 | Clumps of leaves and branches, strewn the way the car went |
+| Log | 85 | Two short logs and splinters |
+| Short log | 65 | Splinters |
+| Bench (loose) | 150 | Planks |
+| Plank | 110 | Splinters |
+| Fallen lamp post | 120 | Two short poles |
+| Short pole | 100 | Bent bits |
+| Traffic light's head | 80 | Glass and a bent bracket |
+| Fallen phone box | 120 | Glass and bent frame |
+
+Rubble, bricks, glass, bollards, post boxes, clumps of leaves, twigs and
+splinters just get kicked about.
+
 The pieces are loose things like the rest (with their own weights), pushed by
 the car and stopping on their own; walls and trunks left standing or lying
 are solid. They're all part of the world's walls, posts and loose things, so

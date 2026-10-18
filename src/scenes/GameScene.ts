@@ -97,7 +97,7 @@ export class GameScene extends Phaser.Scene {
   private car!: CarState;
   private carSprite!: Phaser.GameObjects.Image;
   private carShadow!: Phaser.GameObjects.Image;
-  private trees: { x: number; y: number; z: number; h: number; image: Phaser.GameObjects.Image }[] = [];
+  private trees: { x: number; y: number; z: number; h: number; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
   /** Each traffic light's head, up its pole, with what it's showing. */
   private signalHeads: { x: number; y: number; z: number; controller: number; group: number; light: Light; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
   /** The Belisha beacons' globes, flashing. */
@@ -162,6 +162,11 @@ export class GameScene extends Phaser.Scene {
         if (angle !== undefined) t.image.setRotation(angle);
       },
       treeHeight: (index) => this.trees[index].h,
+      treeRadius: (index) => this.trees[index].image.displayWidth / 2,
+      crownGone: (index) => {
+        this.trees[index].gone = true;
+        this.trees[index].image.setVisible(false);
+      },
       audio: () => this.audio,
       weight: () => 1,
     }, DEPTH.props - 0.1, DEPTH.trees);
@@ -389,8 +394,8 @@ export class GameScene extends Phaser.Scene {
     for (const i of this.nearbyLoose(car.x, car.y)) {
       const { body, image } = this.loose[i];
       if (body.level !== this.level || body.gone) continue;
-      // Hit hard enough, a bench smashes to pieces.
-      if (this.wreckage.smash(body, car, impactSpeed(car, body.x, body.y, body.r + (body.length ?? 0) / 2))) {
+      // Hit hard enough, a bench smashes to pieces, and what's already broken breaks up further.
+      if (this.wreckage.smash(body, car, impactSpeed(car, body.x, body.y, body.r + (body.length ?? 0) / 2, body.vx, body.vy))) {
         image.destroy();
         continue;
       }
@@ -550,8 +555,8 @@ export class GameScene extends Phaser.Scene {
   /** A piece of something broken, flying off loose: it ends up in the way. */
   private addDebris(d: Debris, level: number): void {
     // Enough is enough: past this, the smallest bits are left out.
-    if (this.loose.length > MAX_LOOSE && (d.kind === 'rubble' || d.kind === 'brick' || d.kind === 'foliage' || d.kind === 'twig' || d.kind === 'glass')) return;
-    const body: LooseProp = { ...d, level, moved: true };
+    if (this.loose.length > MAX_LOOSE && (d.kind === 'rubble' || d.kind === 'brick' || d.kind === 'foliage' || d.kind === 'twig' || d.kind === 'glass' || d.kind === 'splinter')) return;
+    const body: LooseProp = { ...d, level, moved: true, born: this.time.now / 1000 };
     const image = this.add
       .image(d.x, d.y, TEX.debris(d.kind))
       .setScale(1 / ART_SCALE)
@@ -605,7 +610,7 @@ export class GameScene extends Phaser.Scene {
     const p = this.perspective;
     const pad = 120;
     for (const t of this.trees) {
-      const show = t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
+      const show = !t.gone && t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
       if (t.image.visible !== show) t.image.setVisible(show);
       if (!show) continue;
       // The crown's a little below the treetop.

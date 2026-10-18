@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createCar } from '../car/CarPhysics';
-import { THINGS, WALLS, breaks, crumble, debris, fallen, fallenTree, shards, toppleTime, gapFor, giveWay, impactSpeed, treeToughness } from './damage';
+import { THINGS, WALLS, breaks, crumble, debris, fallen, fallenTree, shards, toppleTime, BREAKUP, THINGS as STANDING, lyingTrunk, logs, gapFor, giveWay, impactSpeed, treeToughness } from './damage';
 
 /** A car at (0, 0) heading east at `speed` px/s. */
 const moving = (speed: number) => {
@@ -89,6 +89,34 @@ describe('what\'s left', () => {
     expect(glass.length).toBeGreaterThan(4);
     for (const g of glass) expect(g.x).toBeGreaterThan(30);
     expect(shards('bollard', 0, 0, 300, 0, () => 0.5)).toHaveLength(0);
+  });
+
+  it("doesn't count what's moving away from the car as hard", () => {
+    expect(impactSpeed(moving(200), 20, 0, 3, 150, 0)).toBeCloseTo(50);
+  });
+
+  it('breaks a fallen trunk into logs along it, far more easily than the tree standing', () => {
+    const pieces = logs({ ax: 0, ay: 0, bx: 66, by: 0, r: 3 }, 300, 0, () => 0.5);
+    expect(pieces).toHaveLength(3);
+    expect(pieces.map((p) => Math.round(p.x))).toEqual([11, 33, 55]);
+    for (const metres of [4, 9, 20]) {
+      const lying = lyingTrunk(treeToughness(metres)).strength;
+      expect(lying).toBeLessThan(treeToughness(metres).strength * 0.6);
+      expect(BREAKUP.log!.strength).toBeLessThan(lying);
+    }
+  });
+
+  it('breaks smaller pieces into smaller ones still, and the smallest not at all', () => {
+    expect(BREAKUP.log!.into.map(([kind]) => kind)).toContain('billet');
+    expect(BREAKUP.billet!.into.map(([kind]) => kind)).toEqual(['splinter']);
+    expect(BREAKUP.splinter).toBeUndefined();
+    // Each piece is weaker than what it broke off.
+    for (const piece of Object.values(BREAKUP)) {
+      for (const [kind] of piece!.into) if (BREAKUP[kind]) expect(BREAKUP[kind]!.strength).toBeLessThan(piece!.strength);
+    }
+    expect(BREAKUP.pole!.strength).toBeLessThan(STANDING.lamp.strength);
+    expect(BREAKUP.phonebox!.strength).toBeLessThan(STANDING.phone.strength);
+    expect(BREAKUP.glass).toBeUndefined();
   });
 
   it('topples tall things more slowly than short ones', () => {
