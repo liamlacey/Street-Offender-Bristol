@@ -1,0 +1,445 @@
+import * as Phaser from 'phaser';
+import { CarAudio } from '../audio/CarAudio';
+import {
+  CAR_LENGTH,
+  type CarInput,
+  type CarState,
+  SURFACE_GRIP,
+  createCar,
+  forwardSpeed,
+  lateralSpeed,
+  stepCar,
+} from '../car/CarPhysics';
+import mapData from '../map/bristol.json';
+import { type GameMap, VEHICLE_ROADS } from '../map/osm';
+import {
+  CircleGrid,
+  type ContactPoint,
+  SegmentGrid,
+  collideBodyWithStatic,
+  collideCarWithBody,
+  collideCarWithStatic,
+  collideCarWithWalls,
+  nearestOnSegment,
+  stepBody,
+} from '../physics/collisions';
+import { Buildings } from '../world/Buildings';
+import { GroundLayer, paintSurfaces } from '../world/GroundLayer';
+import { SURFACE_KIND, Surface, type SurfaceGrid } from '../world/surface';
+import { CHUNK, type LooseProp, type World, buildWorld, chunkKey } from '../world/world';
+import { ART_SCALE, TEX, TREE_KINDS, TREE_RADIUS, createArt } from './art';
+import { CarEffects } from './CarEffects';
+import { ChunkLayers } from './ChunkLayers';
+import { HudScene, RESET_EVENT, STREET_EVENT } from './HudScene';
+import { SkidMarks } from './SkidMarks';
+
+/** Physics runs at a fixed rate so handling feels the same at any frame rate. */
+const PHYSICS_DT = 1 / 120;
+const MAX_STEPS_PER_FRAME = 8;
+
+const DEPTH = {
+  ground: 0,
+  skids: 1,
+  props: 2,
+  carShadow: 3,
+  car: 4,
+  effects: 5,
+  trees: 6,
+  buildings: 7,
+};
+
+/** How high the camera is when stopped, px (the lower it is, the more the buildings lean). */
+const CAMERA_HEIGHT = 1250;
+/** How far up a tree's crown is, px. */
+const TREE_HEIGHT = 8 * 8;
+/** The view's shorter side, in map px, when the car's stopped (it pulls back as you speed up, as in the old games). */
+const VIEW_AT_REST = 430;
+const PULL_BACK = 0.38;
+
+/**
+ * Driving round Bristol: the map from OpenStreetMap, the car, the camera
+ * that pulls back the faster you go, and everything you can hit.
+ */
+export class GameScene extends Phaser.Scene {
+  private world!: World;
+  private surfaces!: SurfaceGrid;
+  private ground!: GroundLayer;
+  private buildings!: Buildings;
+  private chunks!: ChunkLayers;
+  private walls!: SegmentGrid;
+  private posts!: CircleGrid;
+  private car!: CarState;
+  private carSprite!: Phaser.GameObjects.Image;
+  private carShadow!: Phaser.GameObjects.Image;
+  private trees: { x: number; y: number; image: Phaser.GameObjects.Image }[] = [];
+  private loose: { body: LooseProp; image: Phaser.GameObjects.Image }[] = [];
+  private looseByChunk = new Map<string, number[]>();
+  private effects!: CarEffects;
+  private skids!: SkidMarks;
+  private audio: CarAudio | null = null;
+  private hud!: HudScene;
+  private keys!: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'space' | 'r', Phaser.Input.Keyboard.Key>;
+  private input_: CarInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+  private accumulator = 0;
+  private zoom = 1;
+  private lookX = 0;
+  private lookY = 0;
+  private surface: Surface = Surface.Road;
+  /** Seconds since the car went into the harbour, or -1. */
+  private sinking = -1;
+  private safe = { x: 0, y: 0, heading: 0 };
+  private safeTimer = 0;
+  private streetTimer = 0;
+  private street = '';
+  private bigHit = 0;
+  private readonly contact: ContactPoint = { x: 0, y: 0 };
+
+  constructor() {
+    super('game');
+  }
+
+  create(): void {
+    const map = mapData as unknown as GameMap;
+    this.world = buildWorld(map);
+    this.surfaces = paintSurfaces(this.world);
+    createArt(this);
+    this.walls = new SegmentGrid(this.world.walls);
+    this.posts = new CircleGrid(this.world.posts);
+    this.chunks = new ChunkLayers(this);
+    this.ground = new GroundLayer(this, this.world, DEPTH.ground);
+    this.skids = new SkidMarks(this, DEPTH.skids);
+    this.effects = new CarEffects(this, this.skids, DEPTH.effects);
+    this.buildings = new Buildings(this, this.world, DEPTH.buildings);
+    this.addProps();
+    this.addTrees();
+
+    const { spawn } = map;
+    this.car = createCar(spawn.x, spawn.y, spawn.heading);
+    this.safe = { ...spawn };
+    this.carShadow = this.add.image(0, 0, TEX.carShadow).setScale(1 / ART_SCALE).setTint(0x000000).setAlpha(0.35).setDepth(DEPTH.carShadow);
+    this.carSprite = this.add.image(0, 0, TEX.car).setScale(1 / ART_SCALE).setDepth(DEPTH.car);
+
+    const cam = this.cameras.main;
+    cam.setBounds(0, 0, map.width, map.height);
+    cam.setBackgroundColor('#2b5c78');
+    this.zoom = this.restZoom();
+    cam.setZoom(this.zoom);
+    cam.centerOn(this.car.x, this.car.y);
+    this.ground.update(cam.worldView, true);
+
+    const kb = this.input.keyboard!;
+    const K = Phaser.Input.Keyboard.KeyCodes;
+    this.keys = {
+      up: kb.addKey(K.UP),
+      down: kb.addKey(K.DOWN),
+      left: kb.addKey(K.LEFT),
+      right: kb.addKey(K.RIGHT),
+      w: kb.addKey(K.W),
+      a: kb.addKey(K.A),
+      s: kb.addKey(K.S),
+      d: kb.addKey(K.D),
+      space: kb.addKey(K.SPACE),
+      r: kb.addKey(K.R),
+    };
+    this.keys.r.on('down', () => this.resetCar());
+    this.events.on(RESET_EVENT, this.resetCar, this);
+
+    this.scene.launch('hud');
+    this.hud = this.scene.get('hud') as HudScene;
+
+    // Web Audio only (the old HTML5 audio fallback can't synthesise).
+    const sound = this.sound as Phaser.Sound.WebAudioSoundManager;
+    if ('context' in sound && sound.context) this.audio = new CarAudio(sound.context, sound.destination);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.audio?.destroy();
+      this.audio = null;
+      this.events.off(RESET_EVENT, this.resetCar, this);
+    });
+  }
+
+  /** The camera's zoom with the car stopped: the view's shorter side shows VIEW_AT_REST px of the map. */
+  private restZoom(): number {
+    const { width, height } = this.scale;
+    return Math.min(width, height) / VIEW_AT_REST;
+  }
+
+  /** Lamp posts, bollards, benches, bins and the rest. */
+  private addProps(): void {
+    for (const p of this.world.fixed) {
+      const image = this.add.image(p.x, p.y, TEX.prop(p.kind)).setScale(1 / ART_SCALE);
+      this.chunks.add(image, DEPTH.props);
+    }
+    this.world.loose.forEach((body, i) => {
+      const image = this.add.image(body.x, body.y, TEX.prop(body.kind)).setScale(1 / ART_SCALE).setRotation(body.angle).setDepth(DEPTH.props);
+      this.loose.push({ body, image });
+      const key = chunkKey(Math.floor(body.x / CHUNK), Math.floor(body.y / CHUNK));
+      const list = this.looseByChunk.get(key);
+      if (list) list.push(i);
+      else this.looseByChunk.set(key, [i]);
+    });
+  }
+
+  private addTrees(): void {
+    const t = this.world.map.trees;
+    for (let i = 0; i < t.length; i += 3) {
+      const image = this.add
+        .image(t[i], t[i + 1], TEX.tree((i / 3) % TREE_KINDS))
+        .setScale(t[i + 2] / TREE_RADIUS / ART_SCALE)
+        .setRotation(((i * 1.7) % 6.28) - 3.14)
+        .setDepth(DEPTH.trees)
+        .setVisible(false);
+      this.trees.push({ x: t[i], y: t[i + 1], image });
+    }
+  }
+
+  update(_time: number, deltaMs: number): void {
+    const dt = Math.min(deltaMs / 1000, 0.1);
+    this.readInput();
+    this.accumulator = Math.min(this.accumulator + dt, PHYSICS_DT * MAX_STEPS_PER_FRAME);
+    while (this.accumulator >= PHYSICS_DT) {
+      this.accumulator -= PHYSICS_DT;
+      this.step(PHYSICS_DT);
+    }
+    this.updateSinking(dt);
+    this.updateLoose();
+    this.drawCar();
+    if (this.sinking < 0) this.effects.update(this.car, this.input_, SURFACE_KIND[this.surface], dt);
+    this.skids.flush();
+    this.updateCamera(dt);
+    const view = this.cameras.main.worldView;
+    this.ground.update(view);
+    this.chunks.update(this.cameras.main);
+    const height = CAMERA_HEIGHT * (this.restZoom() / this.zoom);
+    this.buildings.update(view, height);
+    this.updateTrees(view, height);
+    this.updateStreet(dt);
+    const speed = Math.hypot(this.car.vx, this.car.vy);
+    this.audio?.update({
+      speed: this.sinking >= 0 ? 0 : Math.abs(forwardSpeed(this.car)),
+      throttle: this.sinking >= 0 ? 0 : this.input_.throttle,
+      slide: Math.max(Math.abs(lateralSpeed(this.car)), this.input_.handbrake ? speed * 0.6 : 0),
+      surface: SURFACE_KIND[this.surface],
+    });
+    if (this.bigHit > 0) {
+      this.audio?.crash(this.bigHit);
+      if (this.bigHit > 220) this.cameras.main.shake(120, Math.min(0.012, this.bigHit / 40000));
+      this.bigHit = 0;
+    }
+  }
+
+  private readInput(): void {
+    const k = this.keys;
+    const touch = this.hud?.drive;
+    const left = k.left.isDown || k.a.isDown;
+    const right = k.right.isDown || k.d.isDown;
+    const keySteer = (right ? 1 : 0) - (left ? 1 : 0);
+    const steer = keySteer !== 0 ? keySteer : (touch?.steer ?? 0);
+    const throttle = k.up.isDown || k.w.isDown || touch?.gas ? 1 : 0;
+    const brake = k.down.isDown || k.s.isDown || touch?.brake ? 1 : 0;
+    const handbrake = k.space.isDown || !!touch?.handbrake;
+    if (this.sinking >= 0) Object.assign(this.input_, { throttle: 0, brake: 0, steer: 0, handbrake: false });
+    else Object.assign(this.input_, { throttle, brake, steer, handbrake });
+  }
+
+  /** One fixed physics step: drive, then hit things. */
+  private step(dt: number): void {
+    const car = this.car;
+    if (this.sinking >= 0) {
+      // Going down: the water drags the car to a stop.
+      car.vx *= Math.exp(-4 * dt);
+      car.vy *= Math.exp(-4 * dt);
+      car.x += car.vx * dt;
+      car.y += car.vy * dt;
+      return;
+    }
+    const before = this.surface;
+    this.surface = this.surfaces.at(car.x, car.y);
+    stepCar(car, this.input_, dt, SURFACE_GRIP[SURFACE_KIND[this.surface]]);
+
+    const wall = collideCarWithWalls(car, this.walls, undefined, this.contact);
+    if (wall > 0) this.hit(wall);
+    const post = collideCarWithStatic(car, this.posts, undefined, this.contact);
+    if (post > 0) this.hit(post);
+    for (const i of this.nearbyLoose(car.x, car.y)) {
+      const { body } = this.loose[i];
+      const knock = collideCarWithBody(car, body);
+      if (knock > 0) {
+        body.moved = true;
+        if (knock > 60) this.audio?.knock();
+      }
+    }
+
+    if (this.surface === Surface.Deep) {
+      this.sinking = 0;
+      this.audio?.splash(Math.hypot(car.vx, car.vy) + 150);
+      this.audio?.sink();
+      this.effects.splashAt(car.x, car.y, 30);
+    } else if (this.surface === Surface.Pool && before !== Surface.Pool) {
+      this.audio?.splash(Math.hypot(car.vx, car.vy));
+      this.effects.splashAt(car.x, car.y, 12);
+    }
+  }
+
+  private hit(impulse: number): void {
+    this.bigHit = Math.max(this.bigHit, impulse);
+    if (impulse > 90) this.effects.sparksAt(this.contact.x, this.contact.y, impulse);
+  }
+
+  /** Loose things in the chunks round (x, y). */
+  private nearbyLoose(x: number, y: number): number[] {
+    const out: number[] = [];
+    const cx = Math.floor(x / CHUNK);
+    const cy = Math.floor(y / CHUNK);
+    for (let i = cx - 1; i <= cx + 1; i++) {
+      for (let j = cy - 1; j <= cy + 1; j++) {
+        for (const k of this.looseByChunk.get(chunkKey(i, j)) ?? []) {
+          const b = this.loose[k].body;
+          if (Math.abs(b.x - x) < 60 && Math.abs(b.y - y) < 60) out.push(k);
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Moves whatever's been knocked, until it settles. */
+  private updateLoose(): void {
+    const dt = 1 / 60;
+    for (const { body, image } of this.loose) {
+      if (!body.moved) continue;
+      stepBody(body, dt, 3);
+      collideBodyWithStatic(body, this.posts);
+      for (const s of this.walls.near(body.x, body.y, body.r + 8)) {
+        const [px, py] = nearestOnSegment(body.x, body.y, s);
+        const dx = body.x - px;
+        const dy = body.y - py;
+        const d = Math.hypot(dx, dy);
+        const min = body.r + s.r;
+        if (d >= min || d < 1e-6) continue;
+        const nx = dx / d;
+        const ny = dy / d;
+        body.x += nx * (min - d);
+        body.y += ny * (min - d);
+        const vn = body.vx * nx + body.vy * ny;
+        if (vn < 0) {
+          body.vx -= 1.4 * vn * nx;
+          body.vy -= 1.4 * vn * ny;
+        }
+      }
+      image.setPosition(body.x, body.y).setRotation(body.angle);
+      if (Math.hypot(body.vx, body.vy) < 2 && Math.abs(body.spin) < 0.05) {
+        body.vx = body.vy = body.spin = 0;
+        // Settled, wherever it ended up: it's still loose for the next time it's hit.
+        body.moved = false;
+        this.reindexLoose();
+      }
+    }
+  }
+
+  private reindexLoose(): void {
+    this.looseByChunk.clear();
+    this.loose.forEach(({ body }, i) => {
+      const key = chunkKey(Math.floor(body.x / CHUNK), Math.floor(body.y / CHUNK));
+      const list = this.looseByChunk.get(key);
+      if (list) list.push(i);
+      else this.looseByChunk.set(key, [i]);
+    });
+  }
+
+  private updateSinking(dt: number): void {
+    if (this.sinking < 0) {
+      // Remember the last place on a road clear of the water, to put the car back.
+      this.safeTimer -= dt;
+      if (this.safeTimer <= 0) {
+        this.safeTimer = 0.4;
+        const { x, y, heading } = this.car;
+        const clear = [0, 1, 2, 3, 4, 5, 6, 7].every((k) => this.surfaces.at(x + Math.cos(k * 0.785) * 48, y + Math.sin(k * 0.785) * 48) !== Surface.Deep);
+        if (this.surface === Surface.Road && clear) this.safe = { x, y, heading };
+      }
+      return;
+    }
+    this.sinking += dt;
+    if (Math.random() < dt * 12) this.effects.splashAt(this.car.x + (Math.random() - 0.5) * 20, this.car.y + (Math.random() - 0.5) * 20, 2);
+    if (this.sinking > 2.2) this.resetCar();
+  }
+
+  /** Back on the road, where it last was safely. */
+  private resetCar(): void {
+    Object.assign(this.car, { x: this.safe.x, y: this.safe.y, heading: this.safe.heading, vx: 0, vy: 0, spin: 0 });
+    this.sinking = -1;
+    this.surface = this.surfaces.at(this.car.x, this.car.y);
+    this.effects.reset();
+    this.carSprite.setAlpha(1).setTint(0xffffff);
+  }
+
+  private drawCar(): void {
+    const { x, y, heading } = this.car;
+    const s = 1 / ART_SCALE;
+    if (this.sinking >= 0) {
+      // Sinking: smaller, darker and fading under the water.
+      const k = Math.min(this.sinking / 1.6, 1);
+      this.carSprite.setScale(s * (1 - k * 0.25)).setAlpha(1 - k * 0.85).setTint(Phaser.Display.Color.GetColor(255 - k * 160, 255 - k * 120, 255 - k * 80));
+      this.carShadow.setVisible(false);
+    } else {
+      this.carSprite.setScale(s);
+      this.carShadow.setVisible(true);
+    }
+    this.carSprite.setPosition(x, y).setRotation(heading);
+    this.carShadow.setPosition(x + 2.5, y + 3.5).setRotation(heading);
+  }
+
+  /** Follows the car, looking ahead the way it's going, and pulls back the faster it goes. */
+  private updateCamera(dt: number): void {
+    const cam = this.cameras.main;
+    const car = this.car;
+    const speed = Math.hypot(car.vx, car.vy);
+    const rest = this.restZoom();
+    const target = rest * (1 - PULL_BACK * Math.min(speed / 400, 1));
+    this.zoom += (target - this.zoom) * Math.min(1, dt * 1.5);
+    cam.setZoom(this.zoom);
+    const ahead = 0.45;
+    this.lookX += (car.vx * ahead - this.lookX) * Math.min(1, dt * 3);
+    this.lookY += (car.vy * ahead - this.lookY) * Math.min(1, dt * 3);
+    cam.centerOn(car.x + this.lookX, car.y + this.lookY);
+  }
+
+  /** The trees near the view, their crowns lifted towards the camera like the roofs. */
+  private updateTrees(view: Phaser.Geom.Rectangle, height: number): void {
+    const cx = view.centerX;
+    const cy = view.centerY;
+    const lift = 1 + TREE_HEIGHT / (height - TREE_HEIGHT);
+    const pad = 80;
+    for (const t of this.trees) {
+      const show = t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
+      if (t.image.visible !== show) t.image.setVisible(show);
+      if (show) t.image.setPosition(cx + (t.x - cx) * lift, cy + (t.y - cy) * lift);
+    }
+  }
+
+  /** Puts up the street's name when the car turns into a new one. */
+  private updateStreet(dt: number): void {
+    this.streetTimer -= dt;
+    if (this.streetTimer > 0) return;
+    this.streetTimer = 0.3;
+    const { x, y } = this.car;
+    const index = this.world.chunks.get(chunkKey(Math.floor(x / CHUNK), Math.floor(y / CHUNK)));
+    if (!index) return;
+    let best = '';
+    let bestD = Infinity;
+    for (const i of index.roads) {
+      const r = this.world.map.roads[i];
+      if (!r.name || !(VEHICLE_ROADS.has(r.kind) || r.kind === 'pedestrian')) continue;
+      for (let k = 0; k + 3 < r.pts.length; k += 2) {
+        const [px, py] = nearestOnSegment(x, y, { ax: r.pts[k], ay: r.pts[k + 1], bx: r.pts[k + 2], by: r.pts[k + 3], r: 0 });
+        const d = Math.hypot(px - x, py - y) - r.width / 2;
+        if (d < bestD) {
+          bestD = d;
+          best = r.name;
+        }
+      }
+    }
+    if (best && bestD < CAR_LENGTH / 2 && best !== this.street) {
+      this.street = best;
+      this.events.emit(STREET_EVENT, best);
+    }
+  }
+}

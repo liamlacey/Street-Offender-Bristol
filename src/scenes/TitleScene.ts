@@ -2,9 +2,9 @@ import * as Phaser from 'phaser';
 import { bridge, terrace } from './skyline';
 
 /**
- * The title screen, for now: Bristol at dusk (the gorge and the Clifton
- * Suspension Bridge, the painted terraces up the hill) and the name. The
- * game itself is to come; see example-code/ for what can be reused.
+ * The title screen: Bristol at dusk (the gorge and the Clifton Suspension
+ * Bridge, the painted terraces up the hill) and the name. Tap (or press a
+ * key) to drive.
  */
 export class TitleScene extends Phaser.Scene {
   constructor() {
@@ -14,10 +14,14 @@ export class TitleScene extends Phaser.Scene {
   create(): void {
     this.draw();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.draw, this);
+    const start = () => this.scene.start('game');
+    this.input.once('pointerdown', start);
+    this.input.keyboard?.once('keydown', start);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, this.draw, this));
   }
 
   private draw(): void {
+    this.tweens.killAll();
     this.children.removeAll(true);
     const { width, height } = this.scale;
     const g = this.add.graphics();
@@ -44,6 +48,7 @@ export class TitleScene extends Phaser.Scene {
     const title = { fontFamily: 'monospace', color: '#ffffff', fontStyle: 'bold' };
     this.add.text(width / 2, height * 0.16, 'STREET OFFENDER', { ...title, fontSize: `${Math.min(56, width / 11)}px` }).setOrigin(0.5).setShadow(3, 3, '#000', 6);
     this.add.text(width / 2, height * 0.16 + Math.min(52, width / 12), 'BRISTOL', { ...title, fontSize: `${Math.min(34, width / 16)}px`, color: '#f2c94c' }).setOrigin(0.5).setShadow(2, 2, '#000', 4);
-    this.add.text(width / 2, height * 0.62, 'Coming soon', { ...title, fontSize: '16px', fontStyle: 'normal' }).setOrigin(0.5).setShadow(1, 1, '#000', 3);
+    const go = this.add.text(width / 2, height * 0.62, 'TAP TO DRIVE', { ...title, fontSize: '18px' }).setOrigin(0.5).setShadow(1, 1, '#000', 3);
+    this.tweens.add({ targets: go, alpha: 0.35, duration: 700, yoyo: true, repeat: -1 });
   }
 }

@@ -7,7 +7,8 @@
     "preview": "vite preview",
     "typecheck": "tsc",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "map": "node --experimental-strip-types --no-warnings tools/build-map.ts"
   },
   "repository": {
     "type": "git",
