@@ -103,7 +103,7 @@ the left side's traffic goes the way's way, the right side's against it).
   before them; **stop** (`highway=stop`): a solid line and STOP; a **mini-roundabout**
   (`highway=mini_roundabout`): a white circle 4 m across.
 - **Cycle boxes** (`cycleway=asl`): terracotta red (as Bristol's are), 4.5 m deep,
-  behind a line across the lanes coming in, a big white bike filling them.
+  behind a line across the lanes coming in, a big white bike filling them (side on, as the driver sees it: wheels across the lane).
 - **Bus stops** (`public_transport=stop_position`): a bay 22 m long and 3 m wide along
   the kerb, on the side of the stop's sign or platform within 30 m (or the left,
   one-way), surfaced red with a dashed yellow edge, BUS STOP in big yellow letters.

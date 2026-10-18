@@ -233,30 +233,38 @@ const TURNS: Record<string, [number, number]> = {
 };
 
 /**
- * A bike, side on, laid along the way (the way it goes is up): two wheels and
- * its frame, about 1.8 m long, as painted in cycle lanes.
+ * A bike, side on, as the driver coming up sees it: its wheels side by side
+ * across the lane, its saddle and handlebars towards the far end, stretched
+ * along the way (as the words are), about 1.8 m across, as painted in cycle lanes.
  */
 function bike(ctx: Ctx, x: number, y: number, angle: number, colour: string, scale = 1): void {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle + Math.PI / 2);
-  ctx.scale(scale, scale);
+  ctx.scale(scale, scale * 1.6);
   ctx.strokeStyle = colour;
-  ctx.lineWidth = scale > 1 ? 1.1 : 0.8;
+  ctx.lineWidth = scale > 1 ? 0.9 : 0.7;
   ctx.beginPath();
-  ctx.arc(0, 4.5, 2.6, 0, Math.PI * 2);
-  ctx.moveTo(2.6, -4.5);
-  ctx.arc(0, -4.5, 2.6, 0, Math.PI * 2);
-  // Frame, saddle and handlebars, to one side (the bike's up).
-  ctx.moveTo(0, 4.5);
-  ctx.lineTo(-2.8, 1);
-  ctx.lineTo(0, -1);
-  ctx.lineTo(0, 4.5);
-  ctx.moveTo(-2.8, 1);
-  ctx.lineTo(-3.4, -3);
-  ctx.lineTo(0, -4.5);
-  ctx.moveTo(-3.8, 1.6);
-  ctx.lineTo(-3.4, 0.2);
+  // The wheels: back on the left, front on the right.
+  ctx.arc(-4.5, 0, 2.6, 0, Math.PI * 2);
+  ctx.moveTo(7.1, 0);
+  ctx.arc(4.5, 0, 2.6, 0, Math.PI * 2);
+  // Frame (up, −y, is the far end): back wheel to saddle to pedals, and up to the handlebars and down to the front wheel.
+  ctx.moveTo(-4.5, 0);
+  ctx.lineTo(-1.2, -3.4);
+  ctx.lineTo(0, 0);
+  ctx.lineTo(-4.5, 0);
+  ctx.moveTo(-1.2, -3.4);
+  ctx.lineTo(3.2, -3.4);
+  ctx.lineTo(4.5, 0);
+  ctx.moveTo(0, 0);
+  ctx.lineTo(3.2, -3.4);
+  // Saddle and handlebars.
+  ctx.moveTo(-2.4, -3.9);
+  ctx.lineTo(-0.4, -3.9);
+  ctx.moveTo(3.2, -3.4);
+  ctx.lineTo(2.6, -4.6);
+  ctx.lineTo(3.8, -4.8);
   ctx.stroke();
   ctx.restore();
 }
