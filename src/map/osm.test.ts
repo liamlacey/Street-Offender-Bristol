@@ -211,3 +211,57 @@ describe('the harbour', () => {
     expect(areaKind({ amenity: 'fuel' })).toBe('forecourt');
   });
 });
+
+describe('petrol stations, however they are mapped', () => {
+  // A road along the bottom, and a canopy 24 m by 8 m (about) near the middle of a small map.
+  const base = (extra: string) => `<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6">
+ <node id="1" lat="51.4500" lon="-2.6010"/>
+ <node id="2" lat="51.4500" lon="-2.5990"/>
+ <way id="1"><nd ref="1"/><nd ref="2"/><tag k="highway" v="residential"/></way>
+ <node id="11" lat="51.45050" lon="-2.60018"/>
+ <node id="12" lat="51.45050" lon="-2.59982"/>
+ <node id="13" lat="51.45057" lon="-2.59982"/>
+ <node id="14" lat="51.45057" lon="-2.60018"/>
+ ${extra}
+</osm>`;
+  const canopy = (tags: string) => `<way id="10"><nd ref="11"/><nd ref="12"/><nd ref="13"/><nd ref="14"/><nd ref="11"/><tag k="building" v="roof"/>${tags}</way>`;
+  const build = (xml: string) =>
+    buildMap(parseOsm(xml), { bounds: { minlat: 51.4498, minlon: -2.6012, maxlat: 51.4508, maxlon: -2.5988 }, start: { lat: 51.45, lon: -2.6 } });
+  const station = (m: ReturnType<typeof build>) => ({
+    canopies: m.buildings.filter((b) => b.fuel).length,
+    pumps: m.props.filter((p) => p.kind === 'pump').length,
+    forecourts: m.areas.filter((a) => a.kind === 'forecourt').length,
+  });
+
+  it('makes a canopy on a mapped forecourt the station, with pumps under it', () => {
+    const court = `<node id="21" lat="51.45040" lon="-2.60030"/><node id="22" lat="51.45040" lon="-2.59970"/><node id="23" lat="51.45067" lon="-2.59970"/><node id="24" lat="51.45067" lon="-2.60030"/>
+ <way id="20"><nd ref="21"/><nd ref="22"/><nd ref="23"/><nd ref="24"/><nd ref="21"/><tag k="amenity" v="fuel"/></way>`;
+    const m = station(build(base(canopy('') + court)));
+    expect(m).toMatchObject({ canopies: 1, forecourts: 1 });
+    // A canopy about 25 m long: four islands, two pumps each.
+    expect(m.pumps).toBe(8);
+  });
+
+  it('finds the canopy near a station mapped as a point, and makes it a forecourt', () => {
+    const m = station(build(base(canopy('') + '<node id="30" lat="51.45045" lon="-2.60000"><tag k="amenity" v="fuel"/></node>')));
+    expect(m).toMatchObject({ canopies: 1, forecourts: 1 });
+    expect(m.pumps).toBeGreaterThan(0);
+  });
+
+  it('takes a canopy tagged as the station as the station', () => {
+    expect(station(build(base(canopy('<tag k="amenity" v="fuel"/>'))))).toMatchObject({ canopies: 1, forecourts: 1 });
+  });
+
+  it('puts pumps in the middle of a forecourt with no canopy mapped', () => {
+    const court = `<node id="21" lat="51.45020" lon="-2.60040"/><node id="22" lat="51.45020" lon="-2.59960"/><node id="23" lat="51.45045" lon="-2.59960"/><node id="24" lat="51.45045" lon="-2.60040"/>
+ <way id="20"><nd ref="21"/><nd ref="22"/><nd ref="23"/><nd ref="24"/><nd ref="21"/><tag k="amenity" v="fuel"/></way>`;
+    const m = station(build(base(court)));
+    expect(m).toMatchObject({ canopies: 0, forecourts: 1 });
+    expect(m.pumps).toBeGreaterThan(0);
+  });
+
+  it("leaves a canopy that's nothing to do with a petrol station alone", () => {
+    expect(station(build(base(canopy(''))))).toEqual({ canopies: 0, pumps: 0, forecourts: 0 });
+  });
+});

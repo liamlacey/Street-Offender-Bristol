@@ -987,6 +987,8 @@ const HUMPS: Record<string, 'table' | 'hump' | 'cushion'> = {
 const ISLAND_EVERY = 6 * PX_PER_METRE;
 const ISLAND_LONG = 4 * PX_PER_METRE;
 const ISLAND_WIDE = 1.2 * PX_PER_METRE;
+/** How far out round its canopy a forecourt's made, where none's mapped, px. */
+const FORECOURT_ROUND = 5 * PX_PER_METRE;
 
 /** A crane's height, if it's not tagged, m: the harbour's are about this. */
 const CRANE_HEIGHT = 15;
@@ -1188,6 +1190,8 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     areas.push({ kind, rings: clipped.map(roundPts), ...(surface ? { surface } : {}) });
   };
 
+  /** Buildings tagged as a petrol station (its canopy, or its shop). */
+  const fuelBuildings = new Set<Building>();
   const addBuilding = (type: 'way' | 'relation', id: number, tags: Tags, rings: Pts[], part: boolean) => {
     if (rings.length === 0 || !rings[0].some((v, i) => i % 2 === 0 && inside(v, rings[0][i + 1], 20 * PX_PER_METRE))) return;
     const kind = part ? (tags['building:part'] === 'yes' ? (tags.building ?? 'yes') : tags['building:part']) : tags.building;
@@ -1214,6 +1218,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       drawn: true,
       ...(tagged ? { heightFrom: 'tag' as const } : {}),
     });
+    if (tags.amenity === 'fuel') fuelBuildings.add(buildings[buildings.length - 1]);
   };
 
   /** Ways that are members of multipolygons: their own tags (if any) are ignored when the relation's tags say what they are. */
@@ -1467,6 +1472,8 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     return arms;
   };
   const dropped: number[] = [];
+  /** Petrol stations mapped as points. */
+  const fuelPoints: [number, number][] = [];
   const treeKinds: number[] = [];
   const solar: number[] = [];
   /** Which way's the nearest water (the harbour, a river) from a point, within 40 m, radians; or the biggest water within 60 m. */
@@ -1740,6 +1747,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     const y = proj.y(node.lat);
     if (!inside(x, y)) continue;
     if (DROPPED_KERB.has(t.kerb)) dropped.push(round(x), round(y));
+    if (t.amenity === 'fuel') fuelPoints.push([x, y]);
     if (t.highway === 'give_way' || t.highway === 'stop' || t.cycleway === 'asl') {
       const at = acrossLanes(node.id, x, y, t.direction);
       if (at) paint.push({ kind: t.highway === 'give_way' ? 'giveway' : t.highway === 'stop' ? 'stop' : 'asl', ...at });
@@ -1877,41 +1885,82 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     }
   }
 
-  // Petrol stations: under the canopy on the forecourt (OSM doesn't map the pumps), a raised island every
-  // 6 m along its long side, square to it, 4 m long, with a pump at each end; dashed lanes between them.
-  for (const f of areas.filter((a) => a.kind === 'forecourt')) {
-    const court = f.rings[0];
-    for (const b of buildings) {
-      if (b.kind !== 'roof') continue;
-      const c = centroid(b.rings[0]);
-      if (!pointInRing(c.x, c.y, court)) continue;
-      b.fuel = true;
-      const axis = ridgeAxis(b.rings[0]);
-      const { ux, uy, t0, t1 } = axis;
-      const [nx, ny] = [-uy, ux];
-      // Along the canopy's long side, through its middle.
-      const mid = (t0 + t1) / 2;
-      const [ox, oy] = [axis.ox + ux * mid, axis.oy + uy * mid];
-      const span = t1 - t0;
-      const count = Math.max(1, Math.floor(span / ISLAND_EVERY));
-      const lines: number[] = [];
-      for (let k = 0; k < count; k++) {
-        const along = (k - (count - 1) / 2) * ISLAND_EVERY;
-        const [ix, iy] = [ox + ux * along, oy + uy * along];
-        const [hl, hw] = [ISLAND_LONG / 2, ISLAND_WIDE / 2];
-        areas.push({
-          kind: 'island',
-          rings: [roundPts([ix - nx * hl - ux * hw, iy - ny * hl - uy * hw, ix + nx * hl - ux * hw, iy + ny * hl - uy * hw, ix + nx * hl + ux * hw, iy + ny * hl + uy * hw, ix - nx * hl + ux * hw, iy - ny * hl + uy * hw])],
-        });
-        for (const end of [-1, 1]) props.push({ kind: 'pump', x: round(ix + nx * end * (hl - 0.7 * PX_PER_METRE)), y: round(iy + ny * end * (hl - 0.7 * PX_PER_METRE)), angle: +Math.atan2(ny, nx).toFixed(3) });
-        // A lane either side of each island: a dashed line halfway to the next.
-        for (const side of [-0.5, 0.5]) {
-          const [lx, ly] = [ix + ux * side * ISLAND_EVERY, iy + uy * side * ISLAND_EVERY];
-          lines.push(round(lx - nx * (hl + 2 * PX_PER_METRE)), round(ly - ny * (hl + 2 * PX_PER_METRE)), round(lx + nx * (hl + 2 * PX_PER_METRE)), round(ly + ny * (hl + 2 * PX_PER_METRE)));
-        }
+  // Petrol stations, however they're mapped: a forecourt (`amenity=fuel` outline) with a canopy
+  // (`building=roof`) on it; a canopy tagged as the station; or the station as a point, or its shop
+  // tagged as it, with a canopy within 40 m. The canopy's the station's (white, a red fascia), and
+  // since OSM doesn't map the pumps, they're made under it: a raised island every 6 m along its long
+  // side, square to it, 4 m long, a pump at each end, dashed lanes between. A canopy with no forecourt
+  // mapped gets one: tarmac 5 m out round it. A forecourt with no canopy gets its islands in its middle.
+  const stationCanopies = new Set<Building>();
+  /** Islands, pumps and lanes along a line through (ox, oy) the way (ux, uy), `span` px long, onto a forecourt. */
+  const pumpIslands = (court: Area, ox: number, oy: number, ux: number, uy: number, span: number) => {
+    const [nx, ny] = [-uy, ux];
+    const count = Math.max(1, Math.floor(span / ISLAND_EVERY));
+    const lines: number[] = [];
+    const [hl, hw] = [ISLAND_LONG / 2, ISLAND_WIDE / 2];
+    for (let k = 0; k < count; k++) {
+      const along = (k - (count - 1) / 2) * ISLAND_EVERY;
+      const [ix, iy] = [ox + ux * along, oy + uy * along];
+      areas.push({
+        kind: 'island',
+        rings: [roundPts([ix - nx * hl - ux * hw, iy - ny * hl - uy * hw, ix + nx * hl - ux * hw, iy + ny * hl - uy * hw, ix + nx * hl + ux * hw, iy + ny * hl + uy * hw, ix - nx * hl + ux * hw, iy - ny * hl + uy * hw])],
+      });
+      for (const end of [-1, 1]) props.push({ kind: 'pump', x: round(ix + nx * end * (hl - 0.7 * PX_PER_METRE)), y: round(iy + ny * end * (hl - 0.7 * PX_PER_METRE)), angle: +Math.atan2(ny, nx).toFixed(3) });
+      // A lane either side of each island: a dashed line halfway to the next.
+      for (const side of [-0.5, 0.5]) {
+        const [lx, ly] = [ix + ux * side * ISLAND_EVERY, iy + uy * side * ISLAND_EVERY];
+        lines.push(round(lx - nx * (hl + 2 * PX_PER_METRE)), round(ly - ny * (hl + 2 * PX_PER_METRE)), round(lx + nx * (hl + 2 * PX_PER_METRE)), round(ly + ny * (hl + 2 * PX_PER_METRE)));
       }
-      f.lines = [...(f.lines ?? []), ...lines];
     }
+    court.lines = [...(court.lines ?? []), ...lines];
+  };
+  /** A canopy made the station's, on its forecourt (or one made round it). */
+  const station = (canopy: Building, court: Area | null) => {
+    if (stationCanopies.has(canopy)) return;
+    stationCanopies.add(canopy);
+    canopy.fuel = true;
+    const axis = ridgeAxis(canopy.rings[0]);
+    const { ux, uy, t0, t1, half } = axis;
+    const mid = (t0 + t1) / 2;
+    const [ox, oy] = [axis.ox + ux * mid, axis.oy + uy * mid];
+    if (!court) {
+      const [nx, ny] = [-uy, ux];
+      const [hl, hw] = [(t1 - t0) / 2 + FORECOURT_ROUND, half + FORECOURT_ROUND];
+      court = { kind: 'forecourt', rings: [roundPts([ox - ux * hl - nx * hw, oy - uy * hl - ny * hw, ox + ux * hl - nx * hw, oy + uy * hl - ny * hw, ox + ux * hl + nx * hw, oy + uy * hl + ny * hw, ox - ux * hl + nx * hw, oy - uy * hl + ny * hw])] };
+      areas.push(court);
+    }
+    pumpIslands(court, ox, oy, ux, uy, t1 - t0);
+  };
+  const roofs = buildings.filter((b) => b.kind === 'roof');
+  const forecourts = areas.filter((a) => a.kind === 'forecourt');
+  for (const f of forecourts) {
+    const on = roofs.filter((b) => {
+      const c = centroid(b.rings[0]);
+      return pointInRing(c.x, c.y, f.rings[0]);
+    });
+    for (const b of on) station(b, f);
+    // No canopy on it: the islands in its middle, along its longest side (if it's big enough for any).
+    if (!on.length && Math.abs(ringArea(f.rings[0])) > 300 * PX_PER_METRE * PX_PER_METRE) {
+      const axis = ridgeAxis(f.rings[0]);
+      const mid = (axis.t0 + axis.t1) / 2;
+      pumpIslands(f, axis.ox + axis.ux * mid, axis.oy + axis.uy * mid, axis.ux, axis.uy, (axis.t1 - axis.t0) * 0.5);
+    }
+  }
+  const inForecourt = (x: number, y: number) => forecourts.some((f) => pointInRing(x, y, f.rings[0]));
+  // A canopy tagged as the station itself.
+  for (const b of fuelBuildings) if (b.kind === 'roof') station(b, null);
+  // The station as a point (or its shop tagged as it): the nearest canopy within 40 m.
+  const points = [...fuelPoints, ...[...fuelBuildings].filter((b) => b.kind !== 'roof').map((b) => centroid(b.rings[0])).map((c) => [c.x, c.y] as [number, number])];
+  for (const [x, y] of points) {
+    if (inForecourt(x, y)) continue;
+    let best: Building | null = null;
+    let bestD = 40 * PX_PER_METRE;
+    for (const b of roofs) {
+      const c = centroid(b.rings[0]);
+      const d = Math.hypot(c.x - x, c.y - y);
+      if (d < bestD && !stationCanopies.has(b)) [best, bestD] = [b, d];
+    }
+    if (best) station(best, null);
   }
 
   // Draw small areas over big ones of the same kind.

@@ -246,12 +246,20 @@ the road onto a measured deck is brought up or down to meet it over the last
 12 m (and the 4 m under its end), and in the game the deck meets the ground at an
 open end, any difference left taken up over the 8 m you get on in.
 
-**Petrol stations** (`amenity=fuel`, an outline): the forecourt's tarmac (driven on
-like a road). A canopy (`building=roof`) standing on it is the station's: white, with
-a red fascia round its edge (no brand's colours or logo). OSM doesn't map the pumps,
-so they're made: under the canopy, a raised island every 6 m along its long side,
-square to it, 4 m long and 1.2 m wide, with a pump at each end; dashed lanes painted
-between the islands.
+**Petrol stations** (`amenity=fuel`), however they're mapped:
+- a forecourt (an outline): its tarmac (driven on like a road); any canopy
+  (`building=roof`) standing on it is the station's;
+- a canopy tagged as the station itself: that's its canopy;
+- the station as a point, or its shop building tagged as it: the nearest canopy
+  within 40 m is its canopy.
+
+The station's canopy is white with a red fascia round its edge (no brand's colours or
+logo). A canopy with no forecourt mapped gets one: tarmac 5 m out all round it. OSM
+doesn't map the pumps, so they're made: under the canopy, a raised island every 6 m
+along its long side, square to it, 4 m long and 1.2 m wide, with a pump at each end;
+dashed lanes painted between the islands. A forecourt with no canopy mapped (over
+300 m²) gets its islands in its middle, along its longest side, over half its
+length. A station mapped only as a point with no canopy near is left as it is.
 
 **Arcades and colonnades** (`covered=arcade` or `colonnade` on a path): the walk
 under a building's front, open along its side. The building's walls are taken out
