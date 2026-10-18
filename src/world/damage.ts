@@ -14,9 +14,9 @@ import type { Segment } from '../physics/collisions';
 export type Material = 'wood' | 'electric' | 'metal' | 'iron' | 'glass' | 'stone' | 'plant' | 'timber' | 'plastic';
 
 /** Things that stand in one place until they're knocked down. */
-export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'postbox' | 'phone' | 'meter' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'stump';
+export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'postbox' | 'phone' | 'meter' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'crane' | 'stump';
 /** What stands and can't be knocked over: big stone fountains, statues on their plinths, and what's left of a tree. */
-export type Structure = 'tree' | 'fountain' | 'statue' | 'stump';
+export type Structure = 'tree' | 'fountain' | 'statue' | 'crane' | 'stump';
 /** Walls, by what OSM calls them. */
 export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing' | 'gate' | 'liftgate' | 'chain';
 
@@ -46,6 +46,8 @@ export const THINGS: Record<Exclude<ThingKind, 'tree'>, Toughness> = {
   // A big stone fountain, and a statue on its plinth: structures, not things to knock over.
   fountain: { material: 'stone', strength: Infinity, absorb: 0 },
   statue: { material: 'stone', strength: Infinity, absorb: 0 },
+  // The harbour's cranes: iron, set in the quay.
+  crane: { material: 'iron', strength: Infinity, absorb: 0 },
   // What's left of a tree: it's not going anywhere.
   stump: { material: 'wood', strength: Infinity, absorb: 0 },
 };

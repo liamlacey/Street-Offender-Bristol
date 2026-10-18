@@ -12,6 +12,7 @@ import {
   stepCar,
 } from '../car/CarPhysics';
 import mapData from '../map/bristol.json';
+import { TREE_SPECIES } from '../map/osm';
 import { type GameMap, type Road, VEHICLE_ROADS } from '../map/osm';
 import {
   CircleGrid,
@@ -37,6 +38,7 @@ import { ART_SCALE, TEX, TREE_KINDS, TREE_RADIUS, createArt } from './art';
 import { CarEffects } from './CarEffects';
 import { Wreckage } from './Wreckage';
 import { Kerbs } from '../world/kerbs';
+import { Humps } from '../world/humps';
 import { WallLayer } from '../world/WallLayer';
 import { type Debris, impactSpeed } from '../world/damage';
 import { HudScene, RESET_EVENT, STREET_EVENT } from './HudScene';
@@ -72,6 +74,8 @@ const BEACON_HEIGHT = 2.6 * 8;
 /** The view's shorter side, in map px, when the car's stopped (it pulls back as you speed up, as in the old games). */
 const VIEW_AT_REST = 430;
 const PULL_BACK = 0.38;
+/** How long a hop off a speed hump lasts, seconds. */
+const HOP_TIME = 0.35;
 /** How many loose things (benches, bins, and the bits of what's been broken) before the smallest bits stop being kept. */
 const MAX_LOOSE = 1500;
 
@@ -88,6 +92,8 @@ export class GameScene extends Phaser.Scene {
   private readonly perspective = new Perspective();
   /** The street furniture that never moves, and the height of the ground under each, px. */
   private props: { x: number; y: number; z: number; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
+  /** What's up high on the fixed things: the cranes' jibs. */
+  private raised: { x: number; y: number; z: number; image: Phaser.GameObjects.Image }[] = [];
   /** What you hit on each level: the ground's, and the bridges' decks'. */
   private walls!: [SegmentGrid, SegmentGrid];
   private posts!: [CircleGrid, CircleGrid];
@@ -105,6 +111,10 @@ export class GameScene extends Phaser.Scene {
   private beacons: { x: number; y: number; z: number; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
   private wreckage!: Wreckage;
   private kerbs!: Kerbs;
+  private humps!: Humps;
+  /** A little hop off a speed hump: how high at most (0 to 1), and how long it has left, seconds. */
+  private hopPeak = 0;
+  private hopLeft = 0;
   private wallLayer!: WallLayer;
   private loose: { body: LooseProp; image: Phaser.GameObjects.Image }[] = [];
   private looseByChunk = new Map<string, number[]>();
@@ -146,6 +156,7 @@ export class GameScene extends Phaser.Scene {
     this.effects = new CarEffects(this, this.skids, DEPTH.effects);
     this.buildings = new Buildings(this, this.world, this.terrain, DEPTH.buildings);
     this.kerbs = new Kerbs(map);
+    this.humps = new Humps(map);
     this.decks = new Decks(map.roads, (x, y) => this.groundAt(x, y));
     this.deckLayer = new DeckLayer(this, this.decks);
     this.wallLayer = new WallLayer(this, this.walls, (x, y, level) => this.surfaceHeight(x, y, level), DEPTH.walls);
@@ -234,8 +245,26 @@ export class GameScene extends Phaser.Scene {
       // Those on a bridge stand on its deck, and are drawn over it.
       const deck = p.level === 1 ? this.decks.over(p.x, p.y) : null;
       const z = deck ? this.decks.height(deck.deck, deck.along) : this.groundAt(p.x, p.y);
-      const image = this.add.image(p.x, p.y, TEX.prop(p.kind)).setScale(1 / ART_SCALE).setDepth(deck ? DEPTH.onDeck : DEPTH.props).setVisible(false);
+      const image = this.add
+        .image(p.x, p.y, TEX.prop(p.kind))
+        .setScale(1 / ART_SCALE)
+        .setRotation(p.angle ?? 0)
+        .setDepth(deck ? DEPTH.onDeck : DEPTH.props)
+        .setVisible(false);
+      // A ladder runs from the quay's edge down into the water.
+      if (p.kind === 'ladder') image.setOrigin(0, 0.5);
       this.props.push({ x: p.x, y: p.y, z, image });
+      if (p.kind === 'crane' && p.height) {
+        // Its jib, up high, reaching out over the water from where it's pinned.
+        const jib = this.add
+          .image(p.x, p.y, TEX.jib)
+          .setOrigin(0.04, 0.5)
+          .setRotation(p.angle ?? 0)
+          .setDepth(DEPTH.buildings + 0.5)
+          .setVisible(false);
+        jib.setDisplaySize(p.height * 1.25, 1.4 * 8);
+        this.raised.push({ x: p.x, y: p.y, z: z + p.height, image: jib });
+      }
     }
     this.world.loose.forEach((body, i) => {
       const image = this.add
@@ -295,9 +324,13 @@ export class GameScene extends Phaser.Scene {
 
   private addTrees(): void {
     const t = this.world.map.trees;
+    // Those whose species is known, drawn as that.
+    const species = new Map<number, string>();
+    const known = this.world.map.treeSpecies ?? [];
+    for (let k = 0; k + 1 < known.length; k += 2) species.set(known[k], TREE_SPECIES[known[k + 1]]);
     for (let i = 0; i < t.length; i += 4) {
       const image = this.add
-        .image(t[i], t[i + 1], TEX.tree((i / 4) % TREE_KINDS))
+        .image(t[i], t[i + 1], species.has(i / 4) ? TEX.species(species.get(i / 4)!) : TEX.tree((i / 4) % TREE_KINDS))
         .setScale(t[i + 2] / TREE_RADIUS / ART_SCALE)
         .setRotation(((i * 1.7) % 6.28) - 3.14)
         .setDepth(DEPTH.trees)
@@ -316,6 +349,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.updateSinking(dt);
     this.updateLoose();
+    this.hopLeft = Math.max(0, this.hopLeft - dt);
     this.drawCar();
     // No tyre marks on the bridges (they'd be laid on the ground below).
     if (this.sinking < 0 && this.level === 0) this.effects.update(this.car, this.input_, SURFACE_KIND[this.surface], dt);
@@ -379,7 +413,18 @@ export class GameScene extends Phaser.Scene {
     const on = this.level === 1 ? this.decks.over(car.x, car.y) : null;
     this.surface = on ? deckSurface(on.deck.road) : this.surfaces.at(car.x, car.y);
     const [sx, sy] = on ? this.decks.slope(on.deck, on.along) : this.terrain.slope(car.x, car.y);
+    const [px, py] = [car.x, car.y];
     stepCar(car, this.input_, dt, SURFACE_GRIP[SURFACE_KIND[this.surface]], DEFAULT_TUNING, { x: sx, y: sy });
+    // Over a speed hump: a jolt, and a little hop.
+    if (this.level === 0) {
+      const hump = this.humps.over(car, px, py);
+      if (hump > 0) {
+        this.audio?.crash(hump * 1.5);
+        if (hump > 25) this.cameras.main.shake(90, Math.min(0.004, hump / 12000));
+        this.hopPeak = Math.min(1, hump / 60);
+        this.hopLeft = HOP_TIME;
+      }
+    }
     // Up or down a kerb: a jolt.
     if (this.level === 0 && before !== this.surface) {
       const up = before === Surface.Road && this.surface === Surface.Pavement;
@@ -523,7 +568,10 @@ export class GameScene extends Phaser.Scene {
 
   private drawCar(): void {
     const { x, y, heading } = this.car;
-    const s = 1 / ART_SCALE;
+    // Off a speed hump: up and down again, nearer the camera at the top (a little bigger), its shadow further off.
+    const phase = this.hopLeft > 0 ? 1 - this.hopLeft / HOP_TIME : 1;
+    const hop = this.hopPeak * 4 * phase * (1 - phase);
+    const s = (1 / ART_SCALE) * (1 + hop * 0.07);
     if (this.sinking >= 0) {
       // Sinking: smaller, darker and fading under the water.
       const k = Math.min(this.sinking / 1.6, 1);
@@ -534,7 +582,7 @@ export class GameScene extends Phaser.Scene {
       this.carShadow.setVisible(true);
     }
     this.carSprite.setPosition(x, y).setRotation(heading);
-    this.carShadow.setPosition(x + 2.5, y + 3.5).setRotation(heading);
+    this.carShadow.setPosition(x + 2.5 + hop * 3, y + 3.5 + hop * 4).setRotation(heading);
   }
 
   /** Follows the car, looking ahead the way it's going, and pulls back the faster it goes. */
@@ -636,12 +684,14 @@ export class GameScene extends Phaser.Scene {
   private updateProps(view: Phaser.Geom.Rectangle): void {
     const p = this.perspective;
     const pad = 120;
-    for (const t of this.props) {
-      const show = !t.gone && t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
-      if (t.image.visible !== show) t.image.setVisible(show);
-      if (!show) continue;
-      const s = p.lift(t.z);
-      t.image.setPosition(p.x(t.x, s), p.y(t.y, s));
+    for (const list of [this.props, this.raised] as { x: number; y: number; z: number; image: Phaser.GameObjects.Image; gone?: boolean }[][]) {
+      for (const t of list) {
+        const show = !t.gone && t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
+        if (t.image.visible !== show) t.image.setVisible(show);
+        if (!show) continue;
+        const s = p.lift(t.z);
+        t.image.setPosition(p.x(t.x, s), p.y(t.y, s));
+      }
     }
     for (const { body, image } of this.loose) {
       if (body.gone) continue;

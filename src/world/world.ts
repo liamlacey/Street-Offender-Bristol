@@ -37,6 +37,7 @@ const POST_RADIUS: Partial<Record<PropKind, number>> = {
   lifering: 2,
   bikes: 4,
   statue: 10,
+  crane: 16,
 };
 
 /** Street furniture that can be knocked about: how big, and how heavy (1 / mass, the car's being 1). */
@@ -135,6 +136,20 @@ const ARCHWAY = 3.4 * 8;
  * roads through archways cut through: each as wide as its road, measured
  * along the wall, where the road crosses it.
  */
+/** How far beyond its path an arcade's open, px: the depth of the walk under the building, about. */
+const ARCADE_OPEN = 2 * 8;
+
+function distanceToLine(x: number, y: number, pts: Pts): number {
+  let best = Infinity;
+  for (let i = 0; i + 3 < pts.length; i += 2) {
+    const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
+    const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
+    const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2)) : 0;
+    best = Math.min(best, Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y));
+  }
+  return best;
+}
+
 export function openings(ax: number, ay: number, bx: number, by: number, passages: Road[]): [number, number][] {
   const out: [number, number][] = [];
   const wx = bx - ax;
@@ -142,6 +157,22 @@ export function openings(ax: number, ay: number, bx: number, by: number, passage
   const len = Math.hypot(wx, wy);
   if (!len) return out;
   for (const road of passages) {
+    if (road.arcade) {
+      // An arcade or colonnade runs under a building's front, open along it: no wall wherever the wall's beside it.
+      const reach = road.width / 2 + ARCADE_OPEN;
+      const steps = Math.max(1, Math.ceil(len / 2));
+      let start = -1;
+      for (let k = 0; k <= steps; k++) {
+        const t = k / steps;
+        const near = distanceToLine(ax + wx * t, ay + wy * t, road.pts) < reach;
+        if (near && start < 0) start = t;
+        if ((!near || k === steps) && start >= 0) {
+          out.push([start - 1 / steps, near ? 1 : t]);
+          start = -1;
+        }
+      }
+      continue;
+    }
     const half = Math.max(road.width, ARCHWAY) / 2;
     const p = road.pts;
     for (let i = 0; i + 3 < p.length; i += 2) {

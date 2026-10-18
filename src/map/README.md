@@ -106,6 +106,13 @@ the left side's traffic goes the way's way, the right side's against it).
   (between the lane lines), left to right as the driver sees them, a stem with a
   branch curving off for each turn, 15 m before the way's end (and 35 m, if it's over 60 m
   long; its middle, if it's under 30 m).
+- **Speed humps** (`traffic_calming=table`, `bump`/`hump`, `cushion`, on roads):
+  a raised table 6 m long across the road in red block paving, a round-topped hump
+  3.7 m long, or a cushion 1.9 m wide and 3 m long in the middle of each lane; white
+  triangles up each ramp. Going over one fast jolts the car, takes speed off (above
+  90 px/s for a table, 60 a hump, 70 a cushion: a 1,200th of the speed over that, up
+  to 18%, 32% and 25%) and gives it a little hop; between cushions there's nothing
+  (`src/world/humps.ts`).
 - **Lane lines**: the centre line of a two-way road, and a dashed line between each
   lane each way where `lanes`, `lanes:forward` or `lanes:backward` say there's more
   than one (a one-way road wide enough for two and untagged gets one line); none
@@ -155,7 +162,29 @@ landmark's from `landmarks.ts` first, then OSM's `building:colour`,
 `roof:colour` and `building:material`, then the street's look from
 `landmarks.ts`, then one picked for the kind of building (the same every time).
 Roof shape: `roof:shape`, else what the LIDAR shows, else pitched for houses and
-churches and flat for the rest.
+churches and flat for the rest. What a roof's made of (`roof:material`) gives its
+colour where `roof:colour` doesn't (metal, zinc, copper, lead, tiles, slate, felt,
+glass, concrete, gravel, grass, thatch, stone: `ROOF_MATERIALS` in `osm.ts`), and
+its texture: seams down the slopes of a metal roof, courses of tiles or slates
+along them, glazing bars both ways on glass (`src/world/buildingLook.ts`). A
+chimney (`man_made=chimney`) is brick with a sooty top, a ship's funnel
+(`man_made=funnel`) buff with a black top, where their colours aren't tagged.
+Solar panels on roofs (`generator:source=solar`, `location=roof`): a dark blue
+array on the roof of the building they're on, as big as their panels
+(`generator:solar:modules`, 1.7 m² each; 12 if not said), along its long side.
+
+**Trees' species** (`genus`, `taxon`, `species`, their English names, or
+`leaf_type=needleleaved`): London planes, sweet gums, limes, maples, oaks,
+hawthorns, birches, cherries and conifers each have their own crown (colours, how
+lumpy, any touch of other colour: a plane's pale patches, a sweet gum's dark red,
+haws); the rest are one of four greens.
+
+**The harbour.** Cranes (`man_made=crane`): a cab on the quay, solid and never
+knocked down, and a lattice jib up at the crane's height (`height`, or 15 m)
+reaching out 1.25 times that over the biggest water within 60 m. Ladders
+(`man_made=ladder`): drawn from the quay's edge down into the nearest water. Moving
+bridges (`bridge=movable`: Prince Street Bridge, Pero's Bridge) are bridges like the
+rest: they don't open.
 
 **Crossings** (`highway=crossing` nodes on roads): a **zebra** (`crossing=zebra`,
 `crossing_ref=zebra`, or zebra `crossing:markings`) gets stripes, zig-zags along
@@ -202,6 +231,11 @@ measured, and runs straight from the ground at one end to the ground at the othe
 the road onto a measured deck is brought up or down to meet it over the last
 12 m (and the 4 m under its end), and in the game the deck meets the ground at an
 open end, any difference left taken up over the 8 m you get on in.
+
+**Arcades and colonnades** (`covered=arcade` or `colonnade` on a path): the walk
+under a building's front, open along its side. The building's walls are taken out
+wherever they're within 2 m of the path's edge (along it, not just where it crosses
+them), and the building's drawn see-through while the car's under it.
 
 **Archways** (`tunnel=building_passage`: roads, lanes and footpaths through
 buildings). The building's walls are cut open where the road passes through,

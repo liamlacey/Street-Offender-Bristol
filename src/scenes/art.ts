@@ -16,6 +16,7 @@ export const TEX = {
   puff: 'puff',
   spark: 'spark',
   tree: (k: number) => `tree-${k}`,
+  species: (name: string) => `tree-${name}`,
   prop: (kind: string) => `prop-${kind}`,
   light: (state: string) => `light-${state}`,
   beacon: (on: boolean) => `beacon-${on ? 'on' : 'off'}`,
@@ -23,9 +24,32 @@ export const TEX = {
   stump: 'stump',
   trunk: 'trunk',
   pole: 'pole',
+  jib: 'crane-jib',
 } as const;
 
 export const TREE_KINDS = 4;
+
+/** Each species' crown from above: its greens (dark to the highlights), how lumpy, and any touch of other colour. */
+const SPECIES_LOOK: Record<string, { greens: [string, string, string, string]; clumps: number; clumpSize: number; needles?: boolean; accent?: { colour: string; count: number; size: number } }> = {
+  // London plane: big, a yellowish green, with pale patches.
+  plane: { greens: ['#56742f', '#6f9038', '#8eae4c', '#b6cc6e'], clumps: 11, clumpSize: 0.32, accent: { colour: '#c8d58a', count: 9, size: 0.06 } },
+  // Sweet gum: a deep green, touched with burgundy.
+  sweetgum: { greens: ['#2b4a28', '#3a6431', '#548440', '#7aa45c'], clumps: 10, clumpSize: 0.28, accent: { colour: '#7a2b32', count: 12, size: 0.07 } },
+  // Lime: a bright, fresh green, dense and round.
+  lime: { greens: ['#3a7428', '#4f9832', '#70b844', '#a4d86a'], clumps: 12, clumpSize: 0.3 },
+  // Maple: a mid green, in big lobes.
+  maple: { greens: ['#2e6230', '#3d863b', '#58a24b', '#8ac46e'], clumps: 7, clumpSize: 0.4 },
+  // Oak: dark, in irregular clumps.
+  oak: { greens: ['#283f1f', '#36562a', '#4b7034', '#678d45'], clumps: 13, clumpSize: 0.24 },
+  // Hawthorn: small and dark, with red haws.
+  hawthorn: { greens: ['#2b4828', '#3a5f34', '#507a42', '#6f9858'], clumps: 9, clumpSize: 0.26, accent: { colour: '#b5322c', count: 16, size: 0.04 } },
+  // Birch: light and airy.
+  birch: { greens: ['#527f37', '#6b9c4c', '#8ebb68', '#b7d68f'], clumps: 8, clumpSize: 0.22 },
+  // Cherry: a soft green.
+  cherry: { greens: ['#3b6a34', '#4f8443', '#6d9f57', '#93bc78'], clumps: 9, clumpSize: 0.3 },
+  // Conifers: a dark star of needles.
+  conifer: { greens: ['#1d3a2c', '#28503d', '#386a50', '#5a8a6c'], clumps: 0, clumpSize: 0, needles: true },
+};
 /** The tree pictures' radius, px (they're scaled to each tree's size). */
 export const TREE_RADIUS = 32;
 
@@ -143,6 +167,51 @@ export function createArt(scene: Phaser.Scene): void {
         circle(ctx, R + Math.cos(a) * d, R + Math.sin(a) * d, R * (0.18 + rand() * 0.14), light);
       }
       for (let i = 0; i < 5; i++) circle(ctx, R - R * 0.3 + rand() * R * 0.35, R - R * 0.35 + rand() * R * 0.3, R * 0.08 + rand() * R * 0.06, highlight);
+    });
+  }
+
+  // Trees whose species is known: each its own crown.
+  for (const [name, look] of Object.entries(SPECIES_LOOK)) {
+    const R = TREE_RADIUS;
+    canvasTexture(scene, TEX.species(name), R * 2, R * 2, (ctx) => {
+      const rand = seeded(97 + name.length * 31 + name.charCodeAt(0));
+      const [dark, mid, light, highlight] = look.greens;
+      if (look.needles) {
+        // A conifer: a dark star of needled branches, lighter towards the top.
+        ctx.fillStyle = dark;
+        ctx.beginPath();
+        for (let i = 0; i < 26; i++) {
+          const a = (i / 26) * Math.PI * 2;
+          const r = i % 2 ? R * 0.62 : R * (0.86 + rand() * 0.1);
+          ctx.lineTo(R + Math.cos(a) * r, R + Math.sin(a) * r);
+        }
+        ctx.closePath();
+        ctx.fill();
+        circle(ctx, R, R, R * 0.5, mid);
+        circle(ctx, R - R * 0.12, R - R * 0.12, R * 0.26, light);
+        circle(ctx, R - R * 0.18, R - R * 0.2, R * 0.08, highlight);
+        return;
+      }
+      circle(ctx, R, R, R * 0.92, dark);
+      for (let i = 0; i < look.clumps; i++) {
+        const a = rand() * Math.PI * 2;
+        const d = R * (0.3 + rand() * 0.38);
+        circle(ctx, R + Math.cos(a) * d, R + Math.sin(a) * d, R * (look.clumpSize + rand() * 0.16), mid);
+      }
+      for (let i = 0; i < 7; i++) {
+        const a = Math.PI * 1.25 + (rand() - 0.5) * 1.8;
+        const d = R * (0.15 + rand() * 0.4);
+        circle(ctx, R + Math.cos(a) * d, R + Math.sin(a) * d, R * (0.18 + rand() * 0.14), light);
+      }
+      for (let i = 0; i < 5; i++) circle(ctx, R - R * 0.3 + rand() * R * 0.35, R - R * 0.35 + rand() * R * 0.3, R * 0.08 + rand() * R * 0.06, highlight);
+      // Its touches of colour: a plane's pale bark showing through, berries, a sweet gum's dark red leaves.
+      if (look.accent) {
+        for (let i = 0; i < look.accent.count; i++) {
+          const a = rand() * Math.PI * 2;
+          const d = R * rand() * 0.8;
+          circle(ctx, R + Math.cos(a) * d, R + Math.sin(a) * d, R * look.accent.size * (0.6 + rand() * 0.8), look.accent.colour);
+        }
+      }
     });
   }
 
@@ -463,6 +532,42 @@ export function createArt(scene: Phaser.Scene): void {
     roundRect(ctx, 0, 3.4, 14, 5.2, 0.8, '#6b4527');
     ctx.fillStyle = '#8f6038';
     for (const y of [3.9, 5.5, 7.1]) ctx.fillRect(0.5, y, 13, 1);
+  });
+  // A harbour crane from above: its cab on its bogies, the machinery house's roof, and where the jib's pinned.
+  canvasTexture(scene, TEX.prop('crane'), 32, 32, (ctx) => {
+    roundRect(ctx, 1, 3, 30, 26, 2, '#2c2f33');
+    ctx.fillStyle = '#4a4e53';
+    for (const y of [4, 25]) ctx.fillRect(2, y, 28, 3);
+    roundRect(ctx, 6, 7, 20, 18, 1.5, '#7d2f26');
+    roundRect(ctx, 7.5, 8.5, 17, 7, 1, '#9b3d31');
+    circle(ctx, 16, 16, 3, '#1d1f22');
+  });
+  // A crane's jib: a lattice girder, drawn along x from where it's pinned (one 64 px long, stretched to each).
+  canvasTexture(scene, TEX.jib, 64, 8, (ctx) => {
+    ctx.strokeStyle = '#3a3e43';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(0, 1);
+    ctx.lineTo(64, 3);
+    ctx.moveTo(0, 7);
+    ctx.lineTo(64, 5);
+    ctx.stroke();
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    for (let x = 0; x < 62; x += 4) {
+      ctx.moveTo(x, 1 + x / 32);
+      ctx.lineTo(x + 4, 7 - (x + 4) / 32);
+    }
+    ctx.stroke();
+    // The hook block hanging at its head.
+    roundRect(ctx, 60, 2.5, 4, 3, 0.6, '#c9a227');
+  });
+  // A ladder down the quay wall into the water: its two rails and rungs, drawn along x from the top.
+  canvasTexture(scene, TEX.prop('ladder'), 12, 4, (ctx) => {
+    ctx.fillStyle = '#3b3f44';
+    ctx.fillRect(0, 0.4, 12, 0.8);
+    ctx.fillRect(0, 2.8, 12, 0.8);
+    for (let x = 1; x < 12; x += 2) ctx.fillRect(x, 0.4, 0.6, 3.2);
   });
   canvasTexture(scene, TEX.prop('bikes'), 16, 8, (ctx) => {
     ctx.strokeStyle = '#7a7f86';

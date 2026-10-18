@@ -87,6 +87,8 @@ export interface Road {
   deck?: number[];
   /** Through an archway under a building (OSM's `tunnel=building_passage`): the building's walls open to let it through. */
   passage?: boolean;
+  /** Along an arcade or colonnade (`covered=arcade/colonnade`): under the front of a building, open along its side. */
+  arcade?: boolean;
   /** Which sides it has pavements along (as it runs: left and right of its line), drawn with it. */
   pavement?: 'both' | 'left' | 'right';
   /** What it's surfaced with, if tagged (the drawing picks a usual one for its kind otherwise). */
@@ -160,7 +162,7 @@ export function cutSpans(spans: number[], cuts: [number, number][]): number[] {
  * a bus stop's box, or tactile paving at a crossing.
  */
 export interface PaintMark {
-  kind: 'giveway' | 'triangle' | 'stop' | 'mini' | 'arrow' | 'asl' | 'busstop' | 'tactile';
+  kind: 'giveway' | 'triangle' | 'stop' | 'mini' | 'arrow' | 'asl' | 'busstop' | 'tactile' | 'table' | 'hump' | 'cushion';
   /** Its middle. */
   x: number;
   y: number;
@@ -353,6 +355,8 @@ export interface Building {
   roofAcross?: boolean;
   /** Where its height came from, if not its number of floors or a guess: tagged in OSM, or measured by LIDAR. */
   heightFrom?: 'tag' | 'lidar';
+  /** What its roof's made of (OSM's `roof:material`): how it's textured. */
+  roofMaterial?: string;
 }
 
 export type PropKind =
@@ -373,12 +377,18 @@ export type PropKind =
   | 'block'
   | 'planter'
   | 'gritbin'
-  | 'picnic';
+  | 'picnic'
+  | 'crane'
+  | 'ladder';
 
 export interface Prop {
   kind: PropKind;
   x: number;
   y: number;
+  /** Which way it faces, radians: a crane's jib and a ladder, out over the water. */
+  angle?: number;
+  /** How tall, px: a crane. */
+  height?: number;
 }
 
 export interface Crossing {
@@ -432,6 +442,10 @@ export interface GameMap {
   dropped?: number[];
   /** What's painted at points on the roads and pavements (see PaintMark). */
   paint?: PaintMark[];
+  /** Trees whose species is known: index in `trees` (by four), species (TREE_SPECIES' index), ... */
+  treeSpecies?: number[];
+  /** Solar panels on roofs: x, y, how many panels, ... */
+  solar?: number[];
 }
 
 /**
@@ -891,6 +905,49 @@ const LINE_KINDS: Record<string, LineKind> = {
   kerb: 'kerb',
 };
 
+/** Roofs' colours by what they're made of (OSM's `roof:material`), where their colour isn't tagged. */
+export const ROOF_MATERIALS: Record<string, string> = {
+  metal: '#7b858e',
+  zinc: '#a2a9ad',
+  copper: '#5f9a84',
+  lead: '#7d8388',
+  roof_tiles: '#9a5a44',
+  tile: '#9a5a44',
+  slate: '#4c5159',
+  tar_paper: '#323234',
+  asphalt: '#3a3a3c',
+  glass: '#9cc2d3',
+  concrete: '#a6a39b',
+  gravel: '#9b968b',
+  grass: '#5f8a45',
+  thatch: '#a08a55',
+  stone: '#8f877a',
+};
+
+/** How a chimney and a ship's funnel look: a brick stack, sooty at the top; a funnel, buff with a black top. */
+const STRUCTURE_LOOK: Record<string, { wall: string; roof: string }> = {
+  chimney: { wall: '#8a4b38', roof: '#2a2522' },
+  funnel: { wall: '#d4ac54', roof: '#1e1e20' },
+};
+
+/** Trees' species, from OSM's `genus`, `taxon`, `species` or `leaf_type`: which crown each is drawn with. */
+export const TREE_SPECIES = ['plane', 'sweetgum', 'lime', 'maple', 'oak', 'hawthorn', 'conifer', 'birch', 'cherry'] as const;
+export type TreeSpecies = (typeof TREE_SPECIES)[number];
+
+export function treeSpecies(t: Tags): TreeSpecies | undefined {
+  const name = `${t.genus ?? ''} ${t.taxon ?? ''} ${t.species ?? ''} ${t['taxon:en'] ?? ''} ${t['species:en'] ?? ''}`.toLowerCase();
+  if (/platanus|plane/.test(name)) return 'plane';
+  if (/liquidambar|sweet ?gum/.test(name)) return 'sweetgum';
+  if (/tilia|\blime\b|linden/.test(name)) return 'lime';
+  if (/\bacer\b|maple|sycamore/.test(name)) return 'maple';
+  if (/quercus|\boak\b/.test(name)) return 'oak';
+  if (/crataegus|hawthorn/.test(name)) return 'hawthorn';
+  if (/betula|birch/.test(name)) return 'birch';
+  if (/prunus|cherry/.test(name)) return 'cherry';
+  if (/pinus|picea|abies|taxus|cedrus|larix|pine|spruce|fir|yew|cedar/.test(name) || t.leaf_type === 'needleleaved') return 'conifer';
+  return undefined;
+}
+
 /** Gates and barriers across roads and paths, as lines across them. */
 const GATES: Record<string, LineKind> = {
   gate: 'gate',
@@ -898,6 +955,17 @@ const GATES: Record<string, LineKind> = {
   lift_gate: 'liftgate',
   chain: 'chain',
 };
+
+/** Speed humps and the like (OSM's `traffic_calming`), by how they're painted. */
+const HUMPS: Record<string, 'table' | 'hump' | 'cushion'> = {
+  table: 'table',
+  bump: 'hump',
+  hump: 'hump',
+  cushion: 'cushion',
+};
+
+/** A crane's height, if it's not tagged, m: the harbour's are about this. */
+const CRANE_HEIGHT = 15;
 
 /** A kerb that's been dropped to the road's level (`kerb=lowered`, `flush` or `no`): nothing to mount. */
 const DROPPED_KERB = new Set(['lowered', 'flush', 'no']);
@@ -1028,6 +1096,8 @@ export function propKind(tags: Tags): PropKind | null {
   if (tags.barrier === 'planter' || tags.man_made === 'planter') return 'planter';
   if (tags.amenity === 'grit_bin') return 'gritbin';
   if (tags.leisure === 'picnic_table') return 'picnic';
+  if (tags.man_made === 'crane') return 'crane';
+  if (tags.man_made === 'ladder') return 'ladder';
   if (tags.highway === 'street_lamp') return 'lamp';
   if (tags.barrier === 'bollard') return 'bollard';
   if (tags.amenity === 'bench') return 'bench';
@@ -1110,8 +1180,9 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       top: round(h.top * PX_PER_METRE),
       bottom: round(h.bottom * PX_PER_METRE),
       kind,
-      wall: landmark?.wall ?? tags['building:colour'] ?? materialColour(tags['building:material']) ?? (street && pick(street.walls)),
-      roof: landmark?.roof ?? tags['roof:colour'] ?? (street && pick(street.roofs)),
+      wall: landmark?.wall ?? tags['building:colour'] ?? materialColour(tags['building:material']) ?? STRUCTURE_LOOK[tags.man_made]?.wall ?? (street && pick(street.walls)),
+      roof: landmark?.roof ?? tags['roof:colour'] ?? ROOF_MATERIALS[tags['roof:material']] ?? STRUCTURE_LOOK[tags.man_made]?.roof ?? (street && pick(street.roofs)),
+      ...(tags['roof:material'] ? { roofMaterial: tags['roof:material'] } : {}),
       roofShape: landmark?.roofShape ?? tags['roof:shape'],
       ...(landmark ? { landmark: `${type}/${id}` } : {}),
       ...(tags['roof:orientation'] === 'across' ? { roofAcross: true } : {}),
@@ -1238,7 +1309,8 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     const vehicle = VEHICLE_ROADS.has(kind);
     const oneway = t.oneway === 'yes' || t.oneway === '1' || t.junction === 'roundabout';
     const bridge = t.bridge !== undefined && t.bridge !== 'no';
-    const passage = t.tunnel === 'building_passage';
+    const arcade = t.covered === 'arcade' || t.covered === 'colonnade';
+    const passage = t.tunnel === 'building_passage' || arcade;
     const surface = paving(t.surface);
     let marks: number[] | undefined;
     if (vehicle && kind !== 'service' && kind !== 'track' && width >= 6 * PX_PER_METRE) {
@@ -1299,6 +1371,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       ...(oneway ? { oneway } : {}),
       ...(bridge ? { bridge } : {}),
       ...(passage ? { passage } : {}),
+      ...(arcade ? { arcade } : {}),
       ...(pavement ? { pavement } : {}),
       ...(marks ? { marks } : {}),
       ...(surface ? { surface } : {}),
@@ -1356,6 +1429,37 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     return arms;
   };
   const dropped: number[] = [];
+  const treeKinds: number[] = [];
+  const solar: number[] = [];
+  /** Which way's the nearest water (the harbour, a river) from a point, within 40 m, radians; or the biggest water within 60 m. */
+  const towardWater = (x: number, y: number, biggest = false): number | null => {
+    let best = (biggest ? 60 : 40) * PX_PER_METRE;
+    let angle: number | null = null;
+    const waters = areas.filter((a) => a.kind === 'water');
+    if (biggest) waters.sort((p, q) => Math.abs(ringArea(q.rings[0])) - Math.abs(ringArea(p.rings[0])));
+    for (const a of waters) {
+      if (biggest && angle !== null) break;
+      for (const ring of a.rings) {
+        for (let i = 0; i < ring.length; i += 2) {
+          const j = (i + 2) % ring.length;
+          const [ax, ay, bx, by] = [ring[i], ring[i + 1], ring[j], ring[j + 1]];
+          const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
+          const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2)) : 0;
+          const [px, py] = [ax + (bx - ax) * t, ay + (by - ay) * t];
+          const d = Math.hypot(px - x, py - y);
+          if (d < best) {
+            best = d;
+            // Out across the water's edge: square to it, the side the water's on.
+            const len = Math.sqrt(len2) || 1;
+            let [nx, ny] = [-(by - ay) / len, (bx - ax) / len];
+            if (!pointInRing(px + nx * 2 * PX_PER_METRE, py + ny * 2 * PX_PER_METRE, ring)) [nx, ny] = [-nx, -ny];
+            angle = Math.atan2(ny, nx);
+          }
+        }
+      }
+    }
+    return angle;
+  };
   // Where the bus stops' signs and platforms are, beside the road.
   const stopsBeside: [number, number][] = [];
   // And where there's tactile paving (at crossings, and the dropped kerbs either side of them).
@@ -1572,8 +1676,18 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       const crown = metres(t.diameter_crown);
       const r = Math.max(2.2, Math.min(crown ? crown / 2 : 3.2 + ((node.id % 7) / 7) * 1.6, 7));
       const h = Math.max(4, Math.min(metres(t.height) ?? TREE_HEIGHT, 35));
+      const species = treeSpecies(t);
+      if (species) treeKinds.push(trees.length / 4, TREE_SPECIES.indexOf(species));
       trees.push(round(x), round(y), round(r * PX_PER_METRE), round(h * PX_PER_METRE));
       continue;
+    }
+    if (t['generator:source'] === 'solar' && t.location === 'roof') {
+      solar.push(round(x), round(y), Math.max(4, Math.min(120, parseInt(t['generator:solar:modules'] ?? '', 10) || 12)));
+    }
+    const calming = HUMPS[t.traffic_calming];
+    if (calming) {
+      const a = approach(node.id, 'forward');
+      if (a && VEHICLE_ROADS.has(a.on.kind)) paint.push({ kind: calming, x: round(x), y: round(y), angle: +Math.atan2(a.uy, a.ux).toFixed(3), width: round(a.width) });
     }
     if (t.highway === 'crossing' || t.crossing) {
       const on = roadOfNode.get(node.id);
@@ -1615,6 +1729,13 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     const prop = propKind(t);
     // A clock or a statue on a building's wall is part of the building.
     if (prop && (prop === 'clock' || prop === 'statue') && onBuilding.has(node.id)) continue;
+    if (prop === 'crane' || prop === 'ladder') {
+      // Facing out over the nearest water.
+      // A crane on a quay faces the harbour, not the nearest dock behind it.
+      const water = towardWater(x, y, prop === 'crane');
+      props.push({ kind: prop, x: round(x), y: round(y), angle: +(water ?? 0).toFixed(3), ...(prop === 'crane' ? { height: round(Math.max(6, Math.min(40, metres(t.height) ?? CRANE_HEIGHT)) * PX_PER_METRE) } : {}) });
+      continue;
+    }
     if (prop) props.push({ kind: prop, x: round(x), y: round(y) });
   }
 
@@ -1697,6 +1818,8 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     controllers,
     ...(dropped.length ? { dropped } : {}),
     ...(paint.length ? { paint } : {}),
+    ...(treeKinds.length ? { treeSpecies: treeKinds } : {}),
+    ...(solar.length ? { solar } : {}),
   };
 }
 

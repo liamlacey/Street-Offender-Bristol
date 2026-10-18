@@ -48,6 +48,59 @@ export interface BuildingLook {
   windows: number | null;
   /** Just a roof on posts (a canopy): no walls drawn. */
   canopy: boolean;
+  /** What the roof's made of, drawn on it: its seams, courses of tiles, or glazing bars (x0, y0, x1, y1, ...). */
+  texture: { lines: number[]; colour: number; width: number } | null;
+  /** Solar panels on the roof: each four corners, x, y, ... (added once the buildings are known). */
+  panels: number[][];
+}
+
+/** How each roof material's drawn: lines along the ridge (courses of tiles), down the slope (a metal roof's seams), or both (glazing bars); how far apart, px; how dark. */
+const ROOF_TEXTURE: Record<string, { along: boolean; down: boolean; spacing: number; dark: number; width: number }> = {
+  metal: { along: false, down: true, spacing: 5, dark: 0.8, width: 0.6 },
+  zinc: { along: false, down: true, spacing: 4, dark: 0.82, width: 0.5 },
+  copper: { along: false, down: true, spacing: 5, dark: 0.8, width: 0.6 },
+  lead: { along: false, down: true, spacing: 6, dark: 0.82, width: 0.6 },
+  roof_tiles: { along: true, down: false, spacing: 2.6, dark: 0.78, width: 0.6 },
+  tile: { along: true, down: false, spacing: 2.6, dark: 0.78, width: 0.6 },
+  slate: { along: true, down: false, spacing: 2.2, dark: 0.75, width: 0.5 },
+  stone: { along: true, down: false, spacing: 3.2, dark: 0.8, width: 0.6 },
+  glass: { along: true, down: true, spacing: 9, dark: 0.62, width: 0.9 },
+};
+
+/**
+ * Lines `spacing` apart running the way (ux, uy), across the inside of a
+ * building's outline (and not its courtyards): x0, y0, x1, y1, ...
+ */
+export function hatch(rings: Pts[], ux: number, uy: number, spacing: number): number[] {
+  const [nx, ny] = [-uy, ux];
+  let [lo, hi] = [Infinity, -Infinity];
+  for (let i = 0; i < rings[0].length; i += 2) {
+    const o = rings[0][i] * nx + rings[0][i + 1] * ny;
+    lo = Math.min(lo, o);
+    hi = Math.max(hi, o);
+  }
+  const out: number[] = [];
+  for (let o = lo + spacing / 2; o < hi; o += spacing) {
+    // Where this line crosses the outline's edges, along it; in and out in pairs.
+    const hits: number[] = [];
+    for (const ring of rings) {
+      for (let i = 0; i < ring.length; i += 2) {
+        const j = (i + 2) % ring.length;
+        const a = ring[i] * nx + ring[i + 1] * ny - o;
+        const b = ring[j] * nx + ring[j + 1] * ny - o;
+        if (a > 0 === b > 0) continue;
+        const t = a / (a - b);
+        const [x, y] = [ring[i] + (ring[j] - ring[i]) * t, ring[i + 1] + (ring[j + 1] - ring[i + 1]) * t];
+        hits.push(x * ux + y * uy);
+      }
+    }
+    hits.sort((p, q) => p - q);
+    for (let k = 0; k + 1 < hits.length; k += 2) {
+      if (hits[k + 1] - hits[k] < 1) continue;
+      out.push(nx * o + ux * hits[k], ny * o + uy * hits[k], nx * o + ux * hits[k + 1], ny * o + uy * hits[k + 1]);
+    }
+  }
+  return out;
 }
 
 /** Earcut, from Phaser (passed in, so this file needn't load Phaser to be tested). */
@@ -229,6 +282,14 @@ export function buildingLook(b: Building, triangulate: Triangulate): BuildingLoo
   }
 
   const glass = wallColour === 0x6b8299 || wallColour === 0x55697c || wallColour === 0x7d8a96;
+  // What the roof's made of, drawn on it: seams down its slopes, courses of tiles along them, glazing bars both ways.
+  let texture: BuildingLook['texture'] = null;
+  const kind = b.roofMaterial ? ROOF_TEXTURE[b.roofMaterial] : undefined;
+  if (kind && b.rings[0].length >= 6) {
+    const { ux, uy } = ridgeAxis(outer, b.roofAcross);
+    const lines = [...(kind.along ? hatch(b.rings, ux, uy, kind.spacing) : []), ...(kind.down ? hatch(b.rings, -uy, ux, kind.spacing) : [])];
+    texture = { lines, colour: shade(roofColour, kind.dark), width: kind.width };
+  }
   return {
     b,
     x0,
@@ -244,6 +305,8 @@ export function buildingLook(b: Building, triangulate: Triangulate): BuildingLoo
     boxes,
     windows: NO_WINDOWS.has(b.kind) ? null : glass ? 0x9fc3db : shade(wallColour, 0.5),
     canopy: b.kind === 'roof',
+    texture,
+    panels: [],
   };
 }
 

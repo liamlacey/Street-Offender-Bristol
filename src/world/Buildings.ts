@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser';
 import { type BuildingLook, FLOOR, buildingLook } from './buildingLook';
-import { pointInRing } from '../map/osm';
+import { pointInRing, ridgeAxis } from '../map/osm';
 import type { Perspective } from './perspective';
 import type { Terrain } from './terrain';
 import type { World } from './world';
@@ -35,6 +35,24 @@ export class Buildings {
       })
       // Those whose roofs are highest drawn last, over the rest.
       .sort((a, b) => a.ground + a.b.top - (b.ground + b.b.top));
+    // Solar panels on the roofs: an array as big as its panels (1.7 m² each), along the building's long side.
+    const solar = world.map.solar ?? [];
+    for (let i = 0; i + 2 < solar.length; i += 3) {
+      const [x, y, count] = [solar[i], solar[i + 1], solar[i + 2]];
+      const on = this.looks.find((l) => x > l.x0 && x < l.x1 && y > l.y0 && y < l.y1 && pointInRing(x, y, l.b.rings[0]));
+      if (!on) continue;
+      const { ux, uy } = ridgeAxis(on.b.rings[0], on.b.roofAcross);
+      const area = count * 1.7 * 64;
+      const w = Math.sqrt(area * 2);
+      const h = area / w;
+      const [nx, ny] = [-uy, ux];
+      on.panels.push([
+        x - (ux * w) / 2 - (nx * h) / 2, y - (uy * w) / 2 - (ny * h) / 2,
+        x + (ux * w) / 2 - (nx * h) / 2, y + (uy * w) / 2 - (ny * h) / 2,
+        x + (ux * w) / 2 + (nx * h) / 2, y + (uy * w) / 2 + (ny * h) / 2,
+        x - (ux * w) / 2 + (nx * h) / 2, y - (uy * w) / 2 + (ny * h) / 2,
+      ]);
+    }
     this.g = scene.add.graphics().setDepth(depth);
   }
 
@@ -104,6 +122,22 @@ export class Buildings {
         for (let i = 0; i + 5 < t.length; i += 6) {
           g.fillTriangle(tx + t[i] * sTop, ty + t[i + 1] * sTop, tx + t[i + 2] * sTop, ty + t[i + 3] * sTop, tx + t[i + 4] * sTop, ty + t[i + 5] * sTop);
         }
+      }
+      if (look.texture) {
+        const { lines, colour, width } = look.texture;
+        g.lineStyle(width * sTop, colour, 0.8 * alpha);
+        for (let i = 0; i + 3 < lines.length; i += 4) g.lineBetween(tx + lines[i] * sTop, ty + lines[i + 1] * sTop, tx + lines[i + 2] * sTop, ty + lines[i + 3] * sTop);
+      }
+      for (const p of look.panels) {
+        // Dark blue cells in a silver frame.
+        const q = p.map((v, i) => (i % 2 ? ty : tx) + v * sTop);
+        g.fillStyle(0x1e3550, alpha);
+        g.fillTriangle(q[0], q[1], q[2], q[3], q[4], q[5]);
+        g.fillTriangle(q[0], q[1], q[4], q[5], q[6], q[7]);
+        g.lineStyle(0.5 * sTop, 0x8fa9c4, 0.7 * alpha);
+        for (let k = 0; k < 4; k++) g.lineBetween(q[k * 2], q[k * 2 + 1], q[((k + 1) % 4) * 2], q[((k + 1) % 4) * 2 + 1]);
+        // The cells: a line every so often across the array.
+        for (let t = 0.2; t < 0.99; t += 0.2) g.lineBetween(q[0] + (q[2] - q[0]) * t, q[1] + (q[3] - q[1]) * t, q[6] + (q[4] - q[6]) * t, q[7] + (q[5] - q[7]) * t);
       }
       if (look.rim) {
         // A parapet round a flat roof.

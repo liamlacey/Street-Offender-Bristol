@@ -7,6 +7,7 @@
  */
 
 import { BUS_STOP_DEPTH, type GameMap, type Lane, type PaintMark, type Pts, type Road } from '../map/osm';
+import { CUSHION_WIDTH, HUMP_LENGTH, cushionsAcross } from './humps';
 import { type ChunkIndex, lineLength, offsetLine, pointAlong, subPolyline } from './world';
 
 type Ctx = CanvasRenderingContext2D;
@@ -33,6 +34,52 @@ export function drawLaneFills(ctx: Ctx, roads: Road[]): void {
     }
   }
   ctx.lineCap = 'round';
+}
+
+/**
+ * Speed humps, raised tables and cushions: their raised surface (a table's
+ * in red block paving), and white triangles up each ramp, pointing up it.
+ * Drawn under the crossings and lines (a table's often under a zebra).
+ */
+export function drawHumps(ctx: Ctx, map: GameMap, index: ChunkIndex): void {
+  const paint = map.paint;
+  if (!paint) return;
+  for (const i of index.paint) {
+    const m = paint[i];
+    if (m.kind !== 'table' && m.kind !== 'hump' && m.kind !== 'cushion') continue;
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.rotate(m.angle + Math.PI / 2);
+    const long = HUMP_LENGTH[m.kind];
+    const raised = (x0: number, w: number, fill: string) => {
+      ctx.fillStyle = fill;
+      ctx.fillRect(x0, -long / 2, w, long);
+      // Each ramp's foot, a little darker.
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.fillRect(x0, -long / 2, w, 1.2);
+      ctx.fillRect(x0, long / 2 - 1.2, w, 1.2);
+      // Triangles up each ramp, from its foot towards the top.
+      const ramp = Math.min(1.2 * 8, long / 3);
+      const count = Math.max(1, Math.round(w / (1.1 * 8)));
+      const step = w / count;
+      ctx.fillStyle = WHITE;
+      for (const end of [-1, 1]) {
+        for (let k = 0; k < count; k++) {
+          const cx = x0 + step * (k + 0.5);
+          const foot = (end * long) / 2;
+          ctx.beginPath();
+          ctx.moveTo(cx - step * 0.32, foot);
+          ctx.lineTo(cx + step * 0.32, foot);
+          ctx.lineTo(cx, foot - end * ramp);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+    };
+    if (m.kind === 'cushion') for (const c of cushionsAcross(m)) raised(c - CUSHION_WIDTH / 2, CUSHION_WIDTH, 'rgba(255,255,255,0.08)');
+    else raised(-m.width / 2, m.width, m.kind === 'table' ? 'rgba(128,72,58,0.9)' : 'rgba(255,255,255,0.07)');
+    ctx.restore();
+  }
 }
 
 /** The stretches of a road its lanes are painted along (clear of junctions, crossings and sharp bends): where they start and end along it, and their line. */

@@ -11,7 +11,7 @@
 
 import type { AreaKind, GameMap, Pts, Road } from '../map/osm';
 import { type Paving, VEHICLE_ROADS, ringArea } from '../map/osm';
-import { drawLaneFills, drawLanes, drawPaint } from './paint';
+import { drawHumps, drawLaneFills, drawLanes, drawPaint } from './paint';
 import { Surface, surfacePaint } from './surface';
 import { type ChunkIndex, lineLength, offsetLine, pointAlong, shadowOffset, subPolyline } from './world';
 
@@ -145,6 +145,7 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
     const paint = paintLayer(ctx);
     // Bus lanes' red first, then the lines and words over everything.
     drawLaneFills(paint, vehicle);
+    drawHumps(paint, map, index);
     drawMarkings(paint, vehicle, palette.marking);
     for (const i of index.crossings) drawCrossing(paint, map, map.crossings[i], palette.marking);
     for (const i of index.signals) drawStopLine(paint, map.signals[i], palette.marking);

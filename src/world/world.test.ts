@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GameMap, Road } from '../map/osm';
 import bristol from '../map/bristol.json';
-import { buildingLook, clipHalfPlane, parseColour } from './buildingLook';
+import { buildingLook, clipHalfPlane, hatch, parseColour } from './buildingLook';
 import { Surface, SurfaceGrid, surfacePaint } from './surface';
 import { CHUNK, buildWorld, chunkKey, cutWall, lineLength, pointAlong, shadowOffset, subPolyline } from './world';
 import { DECK_END, Decks } from './decks';
@@ -267,5 +267,21 @@ describe('Decks', () => {
   it('finds Park Street\'s bridge over Frogmore Street in Bristol', () => {
     const bristol = new Decks(map.roads, () => 0);
     expect(bristol.decks.some((d) => d.road.name === 'Park Street')).toBe(true);
+  });
+});
+
+describe('arcades and roofs', () => {
+  it("opens a building's wall along an arcade running under its front, but not the wall behind", () => {
+    // A wall 200 px long running east; an arcade path 1 m inside it, along it; a back wall 10 m further in.
+    const arcade: Road = { kind: 'footway', width: 19, pts: [20, 8, 180, 8], passage: true, arcade: true };
+    const front = cutWall({ ax: 0, ay: 0, bx: 200, by: 0, r: 0 }, [arcade]);
+    expect(front.every((piece) => piece.bx <= 30 || piece.ax >= 170)).toBe(true);
+    expect(cutWall({ ax: 0, ay: 80, bx: 200, by: 80, r: 0 }, [arcade])).toHaveLength(1);
+  });
+
+  it("hatches a roof's seams or courses across the inside of its outline", () => {
+    const lines = hatch([[0, 0, 40, 0, 40, 20, 0, 20]], 1, 0, 5);
+    expect(lines.length / 4).toBe(4);
+    for (let i = 0; i < lines.length; i += 4) expect([lines[i], lines[i + 2]]).toEqual([0, 40]);
   });
 });

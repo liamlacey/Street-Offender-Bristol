@@ -228,7 +228,7 @@ export class Wreckage {
         move: (x, y, h) => this.hooks.treeFell(post.index, x, y, h),
         land: () => this.treeLanded(post.index, fall, z, height, radius, tough, vx, vy),
       });
-    } else if (post.thing !== 'fountain' && post.thing !== 'stump' && post.thing !== 'statue') {
+    } else if (post.thing !== 'fountain' && post.thing !== 'stump' && post.thing !== 'statue' && post.thing !== 'crane') {
       // It snaps or bends at its foot and goes over the way it was hit; its pieces and glass land where it does.
       const thing = post.thing;
       const look = TOPPLE[thing];
