@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PX_PER_METRE, Projection, buildMap, clipLine, clipRing, joinRings, cutSpans, laneArrows, lanesAcross, metres, parseOsm, pavementSides, ringArea, roadLanes, roadWidth, sidewalkAlong } from './osm';
+import { PX_PER_METRE, Projection, buildMap, clipLine, clipRing, joinRings, areaKind, cutSpans, laneArrows, lanesAcross, metres, parseOsm, pavementSides, ringArea, roadLanes, roadWidth, sidewalkAlong } from './osm';
 
 /** A tiny map: a street with a junction, a building with a part on it, a pond, a park inside a multipolygon, a tree and a bench. */
 const XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -193,5 +193,13 @@ describe('road markings', () => {
     expect(near.map((a) => a.turns)).toEqual(['through', 'right']);
     expect(near[0].y).toBeLessThan(near[1].y);
     expect(near[0].angle).toBeCloseTo(0);
+  });
+});
+
+describe('the harbour', () => {
+  it('tells a floating pontoon from a pier on legs', () => {
+    expect(areaKind({ man_made: 'pier', floating: 'yes' })).toBe('pontoon');
+    expect(areaKind({ man_made: 'pier' })).toBe('pier');
+    expect(areaKind({ man_made: 'pier', floating: 'no' })).toBe('pier');
   });
 });

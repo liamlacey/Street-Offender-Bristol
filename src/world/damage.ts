@@ -14,7 +14,7 @@ import type { Segment } from '../physics/collisions';
 export type Material = 'wood' | 'electric' | 'metal' | 'iron' | 'glass' | 'stone' | 'plant' | 'timber' | 'plastic';
 
 /** Things that stand in one place until they're knocked down. */
-export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'postbox' | 'phone' | 'meter' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'crane' | 'stump';
+export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'mooring' | 'postbox' | 'phone' | 'meter' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'crane' | 'stump';
 /** What stands and can't be knocked over: big stone fountains, statues on their plinths, and what's left of a tree. */
 export type Structure = 'tree' | 'fountain' | 'statue' | 'crane' | 'stump';
 /** Walls, by what OSM calls them. */
@@ -33,6 +33,8 @@ export const THINGS: Record<Exclude<ThingKind, 'tree'>, Toughness> = {
   signal: { material: 'electric', strength: 170, absorb: 0.3 },
   beacon: { material: 'electric', strength: 110, absorb: 0.15 },
   bollard: { material: 'metal', strength: 210, absorb: 0.35 },
+  // A mooring bollard on a quay: cast iron, set deep in the stone. It takes a big hit.
+  mooring: { material: 'iron', strength: 380, absorb: 0.5 },
   postbox: { material: 'iron', strength: 300, absorb: 0.45 },
   phone: { material: 'glass', strength: 170, absorb: 0.35 },
   // A pay-and-display machine: a metal box of electrics on a post, with a little screen.
@@ -222,6 +224,8 @@ export function fallen(kind: Exclude<ThingKind, Structure>, x: number, y: number
       return [lying('shortpole', 10, 0.3)];
     case 'bollard':
       return [lying('bollard', 4, 0.5)];
+    case 'mooring':
+      return [lying('bollard', 4, 0.2)];
     case 'postbox':
       return [lying('postbox', 4, 0.3)];
     case 'phone':
@@ -315,6 +319,7 @@ export const TOPPLE: Record<Exclude<ThingKind, Structure>, { height: number; rea
   signal: { height: 3.5 * 8, reach: 24, pole: true },
   beacon: { height: 2.6 * 8, reach: 18, pole: true },
   bollard: { height: 1 * 8, reach: 4, pole: false },
+  mooring: { height: 0.7 * 8, reach: 4, pole: false },
   postbox: { height: 1.6 * 8, reach: 4, pole: false },
   phone: { height: 2.5 * 8, reach: 6, pole: false },
   meter: { height: 1.6 * 8, reach: 8, pole: false },

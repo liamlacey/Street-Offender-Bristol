@@ -184,7 +184,15 @@ knocked down, and a lattice jib up at the crane's height (`height`, or 15 m)
 reaching out 1.25 times that over the biggest water within 60 m. Ladders
 (`man_made=ladder`): drawn from the quay's edge down into the nearest water. Moving
 bridges (`bridge=movable`: Prince Street Bridge, Pero's Bridge) are bridges like the
-rest: they don't open.
+rest: they don't open. Pontoons (`man_made=pier` with `floating=yes`): floating jetties,
+in grey composite decking, a black rubber fender round the edge, a mooring cleat
+every 6 m along it, and their shadow on the water; driven on like the piers.
+Quays boats moor at (`man_made=quay` with `mooring`, not `no`): an iron mooring
+bollard every 10 m along the edge, 0.8 m in from the water (where the water's within
+5 m), solid, and only a big hit knocks one over. Slipways (`leisure=slipway`): a
+grooved concrete ramp 4 m wide down into the water (a point: from 5 m up the bank to
+7 m out; a line: along it, 4 m on into the water; an outline: that), its lower end
+under the water, driven on (and off its end, into the harbour).
 
 **Crossings** (`highway=crossing` nodes on roads): a **zebra** (`crossing=zebra`,
 `crossing_ref=zebra`, or zebra `crossing:markings`) gets stripes, zig-zags along
@@ -298,6 +306,7 @@ bounces off.
 | Tree | wood | 140 + 12 × height in m (180 to 420) | Splits at the foot and topples the way it was hit (and away from the side it was hit on): a stump, the trunk lying along the ground (solid), the crown at its end; as it lands, leaves flying and clumps of them and broken branches strewn round it (more the bigger the tree); no shadow any more |
 | Street lamp, Belisha beacon, traffic light | metal with electrics | 150, 110, 170 | Bends over at the foot and topples the way it was hit, its lamp (or head, or globe) swinging down, and lies there (a heavy pole: shoved, not thrown); goes out (a traffic light's head lies loose), its glass smashed and strewn where its lamp (or lenses) hit the ground, and sparks and fizzes for 5 s |
 | Bollard | metal | 210 | Knocked flat, shoved along |
+| Mooring bollard (on a quay) | iron | 380 | Knocked off its base, a heavy lump |
 | Post box | iron | 300 | Knocked off its foot, a heavy lump |
 | Phone box | glass | 170 | Goes over, its panes smashed and strewn round it |
 | Parking ticket machine (`vending=parking_tickets`) | metal with electrics | 160 | Topples, its screen smashed, sparks |

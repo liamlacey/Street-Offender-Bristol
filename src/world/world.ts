@@ -29,6 +29,7 @@ const LINE_THICKNESS: Partial<Record<LineKind, number>> = {
 const POST_RADIUS: Partial<Record<PropKind, number>> = {
   lamp: 3,
   bollard: 2.5,
+  mooring: 3,
   postbox: 4,
   phone: 6,
   fountain: 14,

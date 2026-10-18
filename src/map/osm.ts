@@ -34,6 +34,8 @@ export type AreaKind =
   | 'water'
   | 'pool'
   | 'pier'
+  | 'pontoon'
+  | 'slipway'
   | 'island';
 
 export interface Area {
@@ -42,6 +44,8 @@ export interface Area {
   rings: Pts[];
   /** What it's paved with, if it's tagged and not the usual for its kind. */
   surface?: Paving;
+  /** A slipway's way down, into the water, radians. */
+  angle?: number;
 }
 
 /** What a road, path or square is surfaced with (tarmac, the usual for roads, is left unsaid). */
@@ -379,7 +383,8 @@ export type PropKind =
   | 'gritbin'
   | 'picnic'
   | 'crane'
-  | 'ladder';
+  | 'ladder'
+  | 'mooring';
 
 export interface Prop {
   kind: PropKind;
@@ -861,7 +866,8 @@ export function areaKind(tags: Tags): AreaKind | null {
   }
   if (tags.amenity === 'fountain') return 'pool';
   if (tags.leisure === 'swimming_pool') return 'pool';
-  if (tags.man_made === 'pier') return 'pier';
+  // A floating jetty (a pontoon) rides on the water; a pier stands on legs.
+  if (tags.man_made === 'pier') return tags.floating === 'yes' ? 'pontoon' : 'pier';
   if (tags['area:highway'] === 'traffic_island' || tags.footway === 'traffic_island') return 'island';
   if (tags.landuse === 'flowerbed') return 'flowerbed';
   if (tags.natural === 'wood' || tags.landuse === 'forest' || tags.natural === 'scrub') return 'wood';
@@ -891,6 +897,8 @@ export const AREA_ORDER: Record<AreaKind, number> = {
   water: 9,
   pool: 10,
   pier: 11,
+  pontoon: 11,
+  slipway: 11,
   island: 12,
 };
 
@@ -1217,6 +1225,9 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
   }
 
   const roadNodes = new Map<number, number>();
+  /** Slipways mapped as ways (their outline, or a line down them), and quays where boats moor. */
+  const slipwayWays: { pts: Pts; closed: boolean }[] = [];
+  const mooringQuays: Pts[] = [];
   /** How many ways out of each node along the roads: three or more is a junction (two's just where a street's mapped in pieces). */
   const branches = new Map<number, number>();
   /** Each road's way's nodes, by its index in `roads`. */
@@ -1245,6 +1256,16 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       continue;
     }
 
+    if (t.leisure === 'slipway') {
+      const pts = pointsOf(way.nodes);
+      if (pts) slipwayWays.push({ pts, closed });
+      continue;
+    }
+    // Where boats moor along a quay: mooring bollards along its edge, by the water.
+    if (t.man_made === 'quay' && t.mooring && t.mooring !== 'no') {
+      const pts = pointsOf(way.nodes);
+      if (pts) mooringQuays.push(pts);
+    }
     const area = ownTags ? areaKind(t) : null;
     if (area && closed) {
       const ring = ringOf(way.nodes);
@@ -1432,8 +1453,10 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
   const treeKinds: number[] = [];
   const solar: number[] = [];
   /** Which way's the nearest water (the harbour, a river) from a point, within 40 m, radians; or the biggest water within 60 m. */
-  const towardWater = (x: number, y: number, biggest = false): number | null => {
-    let best = (biggest ? 60 : 40) * PX_PER_METRE;
+  const towardWater = (x: number, y: number, biggest = false): number | null => waterFrom(x, y, biggest)?.angle ?? null;
+  /** The nearest water's edge from a point (or the biggest water's): which way, and how far, px. */
+  const waterFrom = (x: number, y: number, biggest = false, reach = biggest ? 60 : 40): { angle: number; distance: number } | null => {
+    let best = reach * PX_PER_METRE;
     let angle: number | null = null;
     const waters = areas.filter((a) => a.kind === 'water');
     if (biggest) waters.sort((p, q) => Math.abs(ringArea(q.rings[0])) - Math.abs(ringArea(p.rings[0])));
@@ -1458,8 +1481,46 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
         }
       }
     }
-    return angle;
+    return angle === null ? null : { angle, distance: best };
   };
+  // Slipways: a ramp 4 m wide from 5 m up the bank to 7 m out into the water, the way down to it;
+  // mapped as an outline, that; as a line, 4 m wide along it.
+  const SLIP_WIDTH = 4 * PX_PER_METRE;
+  const addSlipway = (x: number, y: number, angle: number, back: number, out: number) => {
+    const [ux, uy] = [Math.cos(angle), Math.sin(angle)];
+    const [nx, ny] = [-uy * SLIP_WIDTH / 2, ux * SLIP_WIDTH / 2];
+    const [ax, ay, bx, by] = [x - ux * back, y - uy * back, x + ux * out, y + uy * out];
+    areas.push({ kind: 'slipway', rings: [roundPts([ax + nx, ay + ny, bx + nx, by + ny, bx - nx, by - ny, ax - nx, ay - ny])], angle: +angle.toFixed(3) });
+  };
+  for (const w of slipwayWays) {
+    const p = w.pts;
+    const [mx, my] = [p.reduce((a, v, i) => (i % 2 ? a : a + v), 0) / (p.length / 2), p.reduce((a, v, i) => (i % 2 ? a + v : a), 0) / (p.length / 2)];
+    const water = waterFrom(mx, my);
+    if (w.closed && water) {
+      areas.push({ kind: 'slipway', rings: [roundPts(p.slice(0, -2))], angle: +water.angle.toFixed(3) });
+    } else if (p.length >= 4) {
+      // Down the line, towards the water.
+      const n = p.length;
+      const first = waterFrom(p[0], p[1])?.distance ?? Infinity;
+      const last = waterFrom(p[n - 2], p[n - 1])?.distance ?? Infinity;
+      const [ax, ay, bx, by] = first > last ? [p[0], p[1], p[n - 2], p[n - 1]] : [p[n - 2], p[n - 1], p[0], p[1]];
+      const len = Math.hypot(bx - ax, by - ay);
+      addSlipway(ax, ay, Math.atan2(by - ay, bx - ax), 0, len + 4 * PX_PER_METRE);
+    }
+  }
+  // Mooring bollards along the quays boats moor at: every 10 m along the edge, 0.8 m in from the water.
+  const mooringAt: [number, number][] = [];
+  for (const q of mooringQuays) {
+    for (const [x, y] of along(q, 10 * PX_PER_METRE)) {
+      const water = waterFrom(x, y, false, 5);
+      if (!water || !inside(x, y)) continue;
+      const d = water.distance - 0.8 * PX_PER_METRE;
+      const [bx, by] = [x + Math.cos(water.angle) * d, y + Math.sin(water.angle) * d];
+      if (mooringAt.some(([px, py]) => Math.hypot(px - bx, py - by) < 6 * PX_PER_METRE)) continue;
+      mooringAt.push([bx, by]);
+      props.push({ kind: 'mooring', x: round(bx), y: round(by) });
+    }
+  }
   // Where the bus stops' signs and platforms are, beside the road.
   const stopsBeside: [number, number][] = [];
   // And where there's tactile paving (at crossings, and the dropped kerbs either side of them).
@@ -1680,6 +1741,10 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       if (species) treeKinds.push(trees.length / 4, TREE_SPECIES.indexOf(species));
       trees.push(round(x), round(y), round(r * PX_PER_METRE), round(h * PX_PER_METRE));
       continue;
+    }
+    if (t.leisure === 'slipway') {
+      const water = waterFrom(x, y, false, 25);
+      if (water) addSlipway(x, y, water.angle, 5 * PX_PER_METRE, water.distance + 7 * PX_PER_METRE);
     }
     if (t['generator:source'] === 'solar' && t.location === 'roof') {
       solar.push(round(x), round(y), Math.max(4, Math.min(120, parseInt(t['generator:solar:modules'] ?? '', 10) || 12)));

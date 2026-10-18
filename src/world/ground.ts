@@ -9,7 +9,7 @@
  * grid (see surface.ts), so what you drive on matches what you see.
  */
 
-import type { AreaKind, GameMap, Pts, Road } from '../map/osm';
+import type { Area, AreaKind, GameMap, Pts, Road } from '../map/osm';
 import { type Paving, VEHICLE_ROADS, ringArea } from '../map/osm';
 import { drawHumps, drawLaneFills, drawLanes, drawPaint } from './paint';
 import { Surface, surfacePaint } from './surface';
@@ -60,6 +60,8 @@ export function surfacePalette(): Palette {
     water: s(Surface.Deep),
     pool: s(Surface.Pool),
     pier: s(Surface.Pavement),
+    pontoon: s(Surface.Pavement),
+    slipway: s(Surface.Pavement),
     island: s(Surface.Pavement),
   };
   const pave = s(Surface.Pavement);
@@ -107,7 +109,11 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
   for (const i of index.areas) {
     const a = map.areas[i];
     if (a.kind === 'island') continue;
+    // A pontoon floats: its shadow on the water round it, first.
+    if (a.kind === 'pontoon' && !palette.surface) strokeRings(ctx, a.rings, 'rgba(10,25,35,0.35)', 7);
     fillRings(ctx, a.rings, a.surface ? palette.paving[a.surface] : palette.area[a.kind]);
+    if (!palette.surface && a.kind === 'pontoon') pontoonEdges(ctx, a.rings);
+    if (!palette.surface && a.kind === 'slipway') slipwayLook(ctx, a);
     if (!palette.surface && (a.kind === 'water' || a.kind === 'pool')) {
       // The quayside's coping stones, or a pool's rim.
       strokeRings(ctx, a.rings, a.kind === 'water' ? palette.quay : palette.pool, a.kind === 'water' ? 5 : 3);
@@ -436,6 +442,73 @@ function line(ctx: Ctx, ax: number, ay: number, bx: number, by: number): void {
   ctx.moveTo(ax, ay);
   ctx.lineTo(bx, by);
   ctx.stroke();
+}
+
+/** A pontoon's edges: a black rubber fender all round, and a mooring cleat every 6 m along it. */
+function pontoonEdges(ctx: Ctx, rings: Pts[]): void {
+  strokeRings(ctx, rings, '#1c1d1f', 2);
+  ctx.fillStyle = '#2b2c2f';
+  for (const ring of rings) {
+    for (let i = 0; i < ring.length; i += 2) {
+      const j = (i + 2) % ring.length;
+      const [ax, ay, bx, by] = [ring[i], ring[i + 1], ring[j], ring[j + 1]];
+      const len = Math.hypot(bx - ax, by - ay);
+      if (len < 3 * 8) continue;
+      const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
+      for (let d = 3 * 8; d < len - 1.5 * 8; d += 6 * 8) {
+        ctx.save();
+        ctx.translate(ax + ux * d, ay + uy * d);
+        ctx.rotate(Math.atan2(uy, ux));
+        ctx.fillRect(-1.6, -0.6, 3.2, 1.2);
+        ctx.restore();
+      }
+    }
+  }
+}
+
+/** A slipway: grooves across it (for grip), and its lower end wet, going under the water. */
+function slipwayLook(ctx: Ctx, a: Area): void {
+  const ring = a.rings[0];
+  const angle = a.angle ?? 0;
+  const [ux, uy] = [Math.cos(angle), Math.sin(angle)];
+  // How far it runs, the way down.
+  let [lo, hi] = [Infinity, -Infinity];
+  for (let i = 0; i < ring.length; i += 2) {
+    const t = ring[i] * ux + ring[i + 1] * uy;
+    lo = Math.min(lo, t);
+    hi = Math.max(hi, t);
+  }
+  ctx.save();
+  ctx.beginPath();
+  path(ctx, ring, true);
+  ctx.clip();
+  ctx.strokeStyle = 'rgba(60,58,52,0.35)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  // Across it, every half metre: lines square to the way down, long enough to cross it.
+  const [nx, ny] = [-uy, ux];
+  for (let t = lo + 2; t < hi; t += 4) {
+    const [cx, cy] = [ux * t, uy * t];
+    // A point on this line near the slipway: its middle's offset across.
+    let mid = 0;
+    for (let i = 0; i < ring.length; i += 2) mid += ring[i] * nx + ring[i + 1] * ny;
+    mid /= ring.length / 2;
+    ctx.moveTo(cx + nx * (mid - 40), cy + ny * (mid - 40));
+    ctx.lineTo(cx + nx * (mid + 40), cy + ny * (mid + 40));
+  }
+  ctx.stroke();
+  // The water over its lower part, deepening.
+  const g = ctx.createLinearGradient(ux * lo, uy * lo, ux * hi, uy * hi);
+  g.addColorStop(0, 'rgba(43,92,120,0)');
+  g.addColorStop(0.45, 'rgba(43,92,120,0)');
+  g.addColorStop(0.65, 'rgba(43,92,120,0.35)');
+  g.addColorStop(1, 'rgba(43,92,120,0.8)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  path(ctx, ring, true);
+  ctx.fill();
+  ctx.restore();
+  strokeRings(ctx, a.rings, 'rgba(90,86,78,0.8)', 1);
 }
 
 let paintCanvas: HTMLCanvasElement | null = null;

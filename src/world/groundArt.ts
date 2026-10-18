@@ -178,6 +178,20 @@ function planks(size: number): HTMLCanvasElement {
   }, 9);
 }
 
+/** A pontoon's composite decking: grey-brown boards with gaps between, a little weathered. */
+function composite(size: number): HTMLCanvasElement {
+  return tile(size, (ctx, rand) => {
+    ctx.fillStyle = '#4f4a44';
+    ctx.fillRect(0, 0, size, size);
+    for (let y = 0; y < size; y += 4) {
+      const v = (rand() - 0.5) * 14;
+      ctx.fillStyle = `rgb(${132 + v},${124 + v},${112 + v})`;
+      ctx.fillRect(0, y, size, 3.4);
+    }
+    speckle(ctx, rand, size, size, ['rgba(0,0,0,0.12)', 'rgba(255,255,255,0.08)'], 0.8);
+  }, 21);
+}
+
 function rubber(size: number): HTMLCanvasElement {
   return tile(size, (ctx, rand) => {
     ctx.fillStyle = '#9a4d3a';
@@ -213,6 +227,8 @@ export function artPalette(ctx: Ctx): Palette {
     water: pattern(water(128, '#2b5c78', 'rgba(150,200,225,0.35)', 12)),
     pool: pattern(water(64, '#4c9fc4', 'rgba(220,245,255,0.5)', 14)),
     pier: pattern(planks(64)),
+    pontoon: pattern(composite(64)),
+    slipway: pattern(slabs([164, 160, 152], 64, 64, 'rgba(70,68,62,0.18)', 23)),
     island: pavement,
   };
   return {

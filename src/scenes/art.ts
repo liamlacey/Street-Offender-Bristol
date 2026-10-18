@@ -569,6 +569,12 @@ export function createArt(scene: Phaser.Scene): void {
     ctx.fillRect(0, 2.8, 12, 0.8);
     for (let x = 1; x < 12; x += 2) ctx.fillRect(x, 0.4, 0.6, 3.2);
   });
+  // A mooring bollard: a squat cast-iron post, its rounded top catching the light.
+  canvasTexture(scene, TEX.prop('mooring'), 7, 7, (ctx) => {
+    circle(ctx, 3.5, 3.5, 3.2, '#16181a');
+    circle(ctx, 3.5, 3.5, 2.3, '#2d3134');
+    circle(ctx, 2.8, 2.8, 0.9, '#5a6066');
+  });
   canvasTexture(scene, TEX.prop('bikes'), 16, 8, (ctx) => {
     ctx.strokeStyle = '#7a7f86';
     ctx.lineWidth = 1;
