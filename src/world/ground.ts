@@ -141,13 +141,20 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
   for (const r of vehicle) stroke(ctx, r.pts, r.surface && r.surface !== 'asphalt' ? palette.paving[r.surface] : palette.asphalt, r.width);
 
   if (!palette.surface) {
+    // The road markings, painted on a layer of their own, worn, then laid on the road.
+    const paint = paintLayer(ctx);
     // Bus lanes' red first, then the lines and words over everything.
-    drawLaneFills(ctx, vehicle);
-    drawMarkings(ctx, vehicle, palette.marking);
-    for (const i of index.crossings) drawCrossing(ctx, map, map.crossings[i], palette.marking);
-    for (const i of index.signals) drawStopLine(ctx, map.signals[i], palette.marking);
-    drawLanes(ctx, vehicle, map.paint);
-    drawPaint(ctx, map, index);
+    drawLaneFills(paint, vehicle);
+    drawMarkings(paint, vehicle, palette.marking);
+    for (const i of index.crossings) drawCrossing(paint, map, map.crossings[i], palette.marking);
+    for (const i of index.signals) drawStopLine(paint, map.signals[i], palette.marking);
+    drawLanes(paint, vehicle, map.paint);
+    drawPaint(paint, map, index);
+    weather(paint, x0, y0, w, h);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(paint.canvas, 0, 0);
+    ctx.restore();
   }
 
   // Traffic islands, kerbed.
@@ -428,6 +435,96 @@ function line(ctx: Ctx, ax: number, ay: number, bx: number, by: number): void {
   ctx.moveTo(ax, ay);
   ctx.lineTo(bx, by);
   ctx.stroke();
+}
+
+let paintCanvas: HTMLCanvasElement | null = null;
+
+/** A clear layer the size of `ctx`'s canvas, drawn on as `ctx` is (the same transform), for the road markings. */
+function paintLayer(ctx: Ctx): Ctx {
+  const { width, height } = ctx.canvas;
+  if (!paintCanvas) paintCanvas = document.createElement('canvas');
+  if (paintCanvas.width !== width || paintCanvas.height !== height) {
+    paintCanvas.width = width;
+    paintCanvas.height = height;
+  }
+  const paint = paintCanvas.getContext('2d')!;
+  paint.setTransform(1, 0, 0, 1, 0, 0);
+  paint.clearRect(0, 0, width, height);
+  paint.setTransform(ctx.getTransform());
+  paint.lineJoin = 'round';
+  paint.lineCap = 'round';
+  paint.globalAlpha = 1;
+  paint.globalCompositeOperation = 'source-over';
+  return paint;
+}
+
+/** How big the weathering's tile is, map px (12 m): it repeats, pinned to the map, so it runs on from one piece of ground to the next. */
+const WEAR_TILE = 96;
+let wearTile: HTMLCanvasElement | null = null;
+
+/**
+ * Years of traffic and weather on the paint: a little faded all over, rubbed
+ * thin in patches and along the wheel tracks, and pitted with tiny bare
+ * spots. The tile's what's taken away (its alpha), the same every time.
+ */
+function wear(): HTMLCanvasElement {
+  if (wearTile) return wearTile;
+  const c = document.createElement('canvas');
+  c.width = c.height = WEAR_TILE;
+  const ctx = c.getContext('2d')!;
+  let seed = 1234567;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  // Faded all over.
+  ctx.fillStyle = 'rgba(0,0,0,0.16)';
+  ctx.fillRect(0, 0, WEAR_TILE, WEAR_TILE);
+  // Each mark drawn again wrapped round the tile's edges, so it tiles without a seam.
+  const wrapped = (draw: (x: number, y: number) => void, x: number, y: number) => {
+    for (const dx of [-WEAR_TILE, 0, WEAR_TILE]) for (const dy of [-WEAR_TILE, 0, WEAR_TILE]) draw(x + dx, y + dy);
+  };
+  // Worn patches.
+  for (let i = 0; i < 14; i++) {
+    const [x, y, r, a] = [rand() * WEAR_TILE, rand() * WEAR_TILE, 5 + rand() * 12, 0.15 + rand() * 0.25];
+    wrapped((px, py) => {
+      const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+      g.addColorStop(0, `rgba(0,0,0,${a.toFixed(2)})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(px - r, py - r, r * 2, r * 2);
+    }, x, y);
+  }
+  // Scuffs and scrapes, every which way.
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 10; i++) {
+    const [x, y, a, len, wd] = [rand() * WEAR_TILE, rand() * WEAR_TILE, rand() * Math.PI, 6 + rand() * 18, 0.6 + rand() * 1.6];
+    ctx.strokeStyle = `rgba(0,0,0,${(0.15 + rand() * 0.25).toFixed(2)})`;
+    ctx.lineWidth = wd;
+    wrapped((px, py) => {
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px + Math.cos(a) * len, py + Math.sin(a) * len);
+      ctx.stroke();
+    }, x, y);
+  }
+  // Pitted: tiny bare spots.
+  for (let i = 0; i < 700; i++) {
+    const [x, y] = [Math.floor(rand() * WEAR_TILE), Math.floor(rand() * WEAR_TILE)];
+    ctx.fillStyle = `rgba(0,0,0,${(0.35 + rand() * 0.6).toFixed(2)})`;
+    ctx.fillRect(x, y, rand() < 0.3 ? 2 : 1, 1);
+  }
+  wearTile = c;
+  return c;
+}
+
+/** Wears the markings on a layer (`paint`, drawn in map px) between (x0, y0) and w × h further. */
+function weather(paint: Ctx, x0: number, y0: number, w: number, h: number): void {
+  const pattern = paint.createPattern(wear(), 'repeat');
+  if (!pattern) return;
+  paint.save();
+  paint.globalCompositeOperation = 'destination-out';
+  paint.fillStyle = pattern;
+  // In map px, so the wear's pinned to the map.
+  paint.fillRect(x0, y0, w, h);
+  paint.restore();
 }
 
 function stroke(ctx: Ctx, pts: Pts, fill: Fill, width: number): void {

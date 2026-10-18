@@ -135,6 +135,12 @@ the left side's traffic goes the way's way, the right side's against it).
 Words are painted long (stretched 2.5 times along the way), read as you come up to
 them, the first word nearest.
 
+All the markings (lines, words, arrows, bikes, the red and the tactile paving) are
+worn: painted on a layer of their own, then a little of it taken away all over
+(16%), more in soft patches and scuffs, and pitted with tiny bare spots, from a 12 m
+tile of wear pinned to the map (so it runs on from one piece of ground to the next,
+the same every time), before it's laid on the road (`src/world/ground.ts`).
+
 **The ground** (`natural`, `landuse`, `leisure`, `amenity`, `area:highway`, …,
 closed ways and multipolygons): grass, parks, gardens, woods, pitches, play areas,
 flowerbeds, squares and plazas, car parks, building sites, water (the harbour:
