@@ -13,5 +13,9 @@ Street Offender: Bristol: a top-down GTA 1-style game set in Bristol.
   ideas from: copy what's useful into `src/` and adapt it there; don't import from it
   or change it. It isn't built or tested here. `example-code/README.md` says where
   things are.
-- The map is real Bristol, from OpenStreetMap: see `src/map/README.md`. Keep the
-  "© OpenStreetMap contributors" credit on screen.
+- The map is real Bristol, from OpenStreetMap and the Environment Agency's LIDAR, and
+  `src/map/README.md` is the record of exactly how it's built (sources, licences,
+  rules). Follow it to grow the map (a new area in `map-sources/areas.json`; the
+  downloads are kept there so the map rebuilds the same), and update it in the same
+  commit if the method changes. Never use Google Maps data. Keep the
+  "© OpenStreetMap contributors · LIDAR © Environment Agency (OGL)" credit on screen.

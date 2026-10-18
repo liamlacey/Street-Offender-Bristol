@@ -1,0 +1,24 @@
+{
+  "start": {
+    "lat": 51.45095,
+    "lon": -2.6005
+  },
+  "areas": [
+    {
+      "name": "cathedral",
+      "about": "About 970 m by 950 m round Bristol Cathedral: Brandon Hill and Park Street down to the Floating Harbour, Queen Square and Wapping Wharf.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.6075,
+        "maxlat": 51.456,
+        "maxlon": -2.5935
+      },
+      "fetched": "2026-10-18",
+      "osmNewestEdit": "2026-10-18T07:09:19Z",
+      "lidarShift": [
+        -0.5,
+        0
+      ]
+    }
+  ]
+}

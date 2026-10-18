@@ -11,8 +11,6 @@ import { type GameMap, Projection, type Pts, type TerrainData, VEHICLE_ROADS, po
 import { toNationalGrid } from './osgb.ts';
 
 export interface LidarReport {
-  /** How far the LIDAR was moved to line up with the buildings, metres east and south. */
-  shift: [number, number];
   buildingsMeasured: number;
   roofsPitched: number;
   roofsFlat: number;
@@ -37,33 +35,85 @@ export function nationalGridOf(map: GameMap): (x: number, y: number) => [number,
   return (x, y) => [e0 + dex * x + dey * y, n0 + dnx * x + dny * y];
 }
 
-export function addLidar(map: GameMap, dsm: Raster, dtm: Raster): LidarReport {
+/**
+ * How far to move the LIDAR (metres east and south) so it lines up with the
+ * buildings: they should stand high and the roads lie low. Only the
+ * buildings and roads within `within` (map px: x0, y0, x1, y1) are used, if given.
+ */
+export function alignLidar(map: GameMap, dsm: Raster, dtm: Raster, within?: [number, number, number, number]): [number, number] {
   const px = map.pxPerMetre;
   const grid = nationalGridOf(map);
-
-  // Line the heights up: buildings should stand high and roads lie low.
   const raw = (x: number, y: number) => {
     const [e, n] = grid(x, y);
     return sample(dsm, e, n) - sample(dtm, e, n);
   };
+  const keep = ([x, y]: [number, number]) => !within || (x >= within[0] && y >= within[1] && x <= within[2] && y <= within[3]);
   const inside: [number, number][] = [];
   for (const b of map.buildings) {
     if (!b.solid || Math.abs(ringArea(b.rings[0])) < 150 * px * px) continue;
-    for (const [x, y] of pointsInside(b.rings, 4 * px)) inside.push([x, y]);
+    for (const p of pointsInside(b.rings, 4 * px)) if (keep(p)) inside.push(p);
   }
   const open: [number, number][] = [];
   for (const r of map.roads) {
     if (!VEHICLE_ROADS.has(r.kind) || r.kind === 'service') continue;
     for (let i = 0; i + 3 < r.pts.length; i += 2) {
       const len = Math.hypot(r.pts[i + 2] - r.pts[i], r.pts[i + 3] - r.pts[i + 1]);
-      for (let d = 0; d < len; d += 10 * px) open.push([r.pts[i] + ((r.pts[i + 2] - r.pts[i]) * d) / len, r.pts[i + 1] + ((r.pts[i + 3] - r.pts[i + 1]) * d) / len]);
+      for (let d = 0; d < len; d += 10 * px) {
+        const p: [number, number] = [r.pts[i] + ((r.pts[i + 2] - r.pts[i]) * d) / len, r.pts[i + 1] + ((r.pts[i + 3] - r.pts[i + 1]) * d) / len];
+        if (keep(p)) open.push(p);
+      }
     }
   }
   const thin = <T>(list: T[], max: number) => list.filter((_, i) => i % Math.ceil(list.length / max) === 0);
   const [sx, sy] = bestShift(raw, thin(inside, 3000), thin(open, 1500), 8 * px, px / 2);
-  const g = heightGrid(dsm, dtm, map.width, map.height, px, (x, y) => grid(x + sx, y + sy));
+  return [sx / px, sy / px];
+}
 
-  const report: LidarReport = { shift: [sx / px, sy / px], buildingsMeasured: 0, roofsPitched: 0, roofsFlat: 0, treesMeasured: 0, treesAdded: 0 };
+/**
+ * Moves a raster by a shift from `alignLidar` (metres east and south), so
+ * reading it at a map point's position gives the reading that lines up there.
+ */
+export function shiftRaster(r: Raster, [east, south]: [number, number]): Raster {
+  return { ...r, e0: r.e0 - east, n0: r.n0 + south };
+}
+
+/**
+ * Lays rasters over each other into one covering them all: where they
+ * overlap, the first with a reading there wins.
+ */
+export function mergeRasters(rasters: Raster[]): Raster {
+  if (rasters.length === 1) return rasters[0];
+  const e0 = Math.min(...rasters.map((r) => r.e0));
+  const n0 = Math.max(...rasters.map((r) => r.n0));
+  const e1 = Math.max(...rasters.map((r) => r.e0 + r.cols - 1));
+  const n1 = Math.min(...rasters.map((r) => r.n0 - r.rows + 1));
+  const cols = Math.round(e1 - e0) + 1;
+  const rows = Math.round(n0 - n1) + 1;
+  const data = new Float32Array(cols * rows).fill(NaN);
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      for (const r of rasters) {
+        const v = sample(r, e0 + i, n0 - j);
+        if (v === v) {
+          data[j * cols + i] = v;
+          break;
+        }
+      }
+    }
+  }
+  return { e0, n0, cols, rows, data };
+}
+
+/**
+ * Measures the buildings and trees, and makes the terrain, from LIDAR that's
+ * already lined up with the map (see alignLidar and shiftRaster).
+ */
+export function addLidar(map: GameMap, dsm: Raster, dtm: Raster): LidarReport {
+  const px = map.pxPerMetre;
+  const grid = nationalGridOf(map);
+  const g = heightGrid(dsm, dtm, map.width, map.height, px, grid);
+
+  const report: LidarReport = { buildingsMeasured: 0, roofsPitched: 0, roofsFlat: 0, treesMeasured: 0, treesAdded: 0 };
 
   // Buildings: the height of most of the roof, and whether it's pitched.
   for (const b of map.buildings) {
@@ -120,7 +170,7 @@ export function addLidar(map: GameMap, dsm: Raster, dtm: Raster): LidarReport {
   }
   osm.push(...added);
   report.treesAdded = added.length / 4;
-  map.terrain = terrainOf(map, dtm, (x, y) => grid(x + sx, y + sy));
+  map.terrain = terrainOf(map, dtm, grid);
   return report;
 }
 

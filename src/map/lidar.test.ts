@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { roofShape } from './enrich';
-import { type HeightGrid, bestShift, findTrees, parseWcsText, quantile, sample } from './lidar';
+import { mergeRasters, roofShape, shiftRaster } from './enrich';
+import { type HeightGrid, type Raster, bestShift, findTrees, parseWcsText, quantile, sample } from './lidar';
 import { toNationalGrid } from './osgb';
 import { paving } from './osm';
 
@@ -112,5 +112,24 @@ describe('quantile and paving', () => {
     expect(paving('concrete:plates')).toBe('concrete');
     expect(paving('compacted')).toBe('gravel');
     expect(paving('paved')).toBeUndefined();
+  });
+});
+
+describe('shiftRaster and mergeRasters', () => {
+  const raster = (e0: number, n0: number, v: number): Raster => ({ e0, n0, cols: 2, rows: 2, data: new Float32Array([v, v, v, NaN]) });
+
+  it('moves a raster so a reading lines up a shift away', () => {
+    const r = raster(100, 200, 5);
+    // Shifted 1 m east: what was read at (101, 200) is now read at (100, 200).
+    expect(sample(shiftRaster({ ...r, data: new Float32Array([1, 2, 3, 4]) }, [1, 0]), 100, 200)).toBe(2);
+  });
+
+  it('lays rasters together, the first winning where they overlap', () => {
+    const merged = mergeRasters([raster(100, 200, 1), raster(101, 200, 2)]);
+    expect(sample(merged, 100, 200)).toBe(1);
+    expect(sample(merged, 101, 200)).toBe(1);
+    expect(sample(merged, 102, 200)).toBe(2);
+    // The first has no reading here, so the second's is used.
+    expect(sample(merged, 101, 199)).toBe(2);
   });
 });
