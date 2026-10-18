@@ -16,7 +16,7 @@ const PER_FRAME = 1;
 /** Each piece reaches this far into its neighbours, px. */
 const BLEED = 1;
 
-const EMPTY: ChunkIndex = { areas: [], roads: [], lines: [], buildings: [], crossings: [], signals: [], trees: [], paint: [] };
+const EMPTY: ChunkIndex = { areas: [], roads: [], lines: [], buildings: [], crossings: [], signals: [], trees: [], paint: [], banks: [] };
 
 /** Where the light comes from, for shading the hills: the top left of the map (north-west), as for the shadows. */
 const SUN = { x: -0.45, y: -0.6, z: 0.66 };
@@ -189,6 +189,7 @@ export function paintSurfaces(world: World): SurfaceGrid {
     signals: [],
     trees: [],
     paint: [],
+    banks: [],
   };
   drawGround(ctx, map, all, surfacePalette(), 0, 0, map.width, map.height, 1 / cell);
   const grid = SurfaceGrid.fromPixels(ctx.getImageData(0, 0, cols, rows).data, cols, rows, cell);

@@ -281,6 +281,8 @@ export class Wreckage {
             ? [['plank', Math.round(gap / 7)]]
             : kind === 'liftgate'
               ? [['arm', Math.max(1, Math.round(gap / 20))]]
+              : kind === 'shelter'
+                ? [['glass', 14], ['rail', 3]]
               : [['rail', Math.max(1, Math.round(gap / 16))]];
     for (const [piece, count] of pieces) for (const d of debris(piece, Math.min(count, 10), mx, my, car.vx, car.vy, rand, gap / 2)) this.hooks.addDebris(d, level);
     this.effects.burst(material, mx, my, kind === 'hedge' ? 30 : 18);

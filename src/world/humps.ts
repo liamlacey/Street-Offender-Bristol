@@ -1,34 +1,46 @@
 /**
  * Speed humps, raised tables and speed cushions across the roads: driving
  * over one fast is a jolt, and takes speed off (more the faster, more for a
- * round-topped hump than a long flat table). Pure, so it's tested.
+ * round-topped hump than a long flat table). Down (or up) a flight of steps
+ * it's a little jolt at every one. Pure, so it's tested.
  */
 
 import type { CarState } from '../car/CarPhysics';
 import type { GameMap, PaintMark } from '../map/osm';
+import { lineLength, pointAlong } from './world';
 
-type HumpKind = 'table' | 'hump' | 'cushion';
+type HumpKind = 'table' | 'hump' | 'cushion' | 'step';
 
-/** How long each is along the road, px; and for cushions, how wide each is (one in the middle of each lane). */
-export const HUMP_LENGTH: Record<HumpKind, number> = { table: 6 * 8, hump: 3.7 * 8, cushion: 3 * 8 };
+/** How long each is along the road, px; and for cushions, how wide each is (one in the middle of each lane). A step's how far either side of its edge it's felt. */
+export const HUMP_LENGTH: Record<HumpKind, number> = { table: 6 * 8, hump: 3.7 * 8, cushion: 3 * 8, step: 8 };
 export const CUSHION_WIDTH = 1.9 * 8;
 
 /** Below this, px/s, it's taken gently: no jolt. Above it, the speed lost grows with the speed, up to a most. */
-const GENTLE: Record<HumpKind, number> = { table: 90, hump: 60, cushion: 70 };
-const HARSHEST: Record<HumpKind, number> = { table: 0.18, hump: 0.32, cushion: 0.25 };
+const GENTLE: Record<HumpKind, number> = { table: 90, hump: 60, cushion: 70, step: 50 };
+const HARSHEST: Record<HumpKind, number> = { table: 0.18, hump: 0.32, cushion: 0.25, step: 0.05 };
 
 /** Where the middle of each cushion is, across the road from its middle, px: one in each lane (a two-way road's two; one-way, its middle). */
-export function cushionsAcross(m: PaintMark): number[] {
+export function cushionsAcross(m: { width: number }): number[] {
   return m.width >= 6 * 8 ? [-m.width / 4, m.width / 4] : [0];
 }
 
 export class Humps {
-  private readonly humps: (PaintMark & { kind: HumpKind; ux: number; uy: number })[];
+  private readonly humps: (Omit<PaintMark, 'kind'> & { kind: HumpKind; ux: number; uy: number })[];
 
   constructor(map: GameMap) {
     this.humps = (map.paint ?? [])
       .filter((m): m is PaintMark & { kind: HumpKind } => m.kind === 'table' || m.kind === 'hump' || m.kind === 'cushion')
       .map((m) => ({ ...m, ux: Math.cos(m.angle), uy: Math.sin(m.angle) }));
+    // Each step's edge, where it's drawn (see drawSteps).
+    for (const r of map.roads ?? []) {
+      if (r.kind !== 'steps' || !r.steps) continue;
+      const len = lineLength(r.pts);
+      const n = Math.max(1, Math.min(r.steps, Math.floor(len / (0.3 * 8))));
+      for (let k = 0; k < n; k++) {
+        const [x, y, ux, uy] = pointAlong(r.pts, (len * (k + 0.5)) / n, 4);
+        this.humps.push({ kind: 'step', x, y, angle: Math.atan2(uy, ux), width: r.width, ux, uy });
+      }
+    }
   }
 
   /**

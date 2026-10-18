@@ -18,7 +18,7 @@ export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'moo
 /** What stands and can't be knocked over: big stone fountains, statues on their plinths, and what's left of a tree. */
 export type Structure = 'tree' | 'fountain' | 'statue' | 'crane' | 'stump';
 /** Walls, by what OSM calls them. */
-export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing' | 'gate' | 'liftgate' | 'chain';
+export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing' | 'gate' | 'liftgate' | 'chain' | 'shelter';
 
 export interface Toughness {
   material: Material;
@@ -65,6 +65,8 @@ export const WALLS: Record<WallKind, Toughness & { /** How much of it a hit at i
   gate: { material: 'metal', strength: 150, absorb: 0.25, gap: 20 * 8 },
   liftgate: { material: 'plastic', strength: 60, absorb: 0.05, gap: 20 * 8 },
   chain: { material: 'metal', strength: 50, absorb: 0.05, gap: 20 * 8 },
+  // A bus shelter: glass panes in a steel frame, smashed all at once.
+  shelter: { material: 'glass', strength: 140, absorb: 0.25, gap: 20 * 8 },
 };
 
 /** A bench smashes if hit this hard; slower, it's just shoved. */

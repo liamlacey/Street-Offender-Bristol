@@ -14,6 +14,8 @@ const LOOK: Record<WallKind, { height: number; side: number; top: number; width:
   // A car park's barrier: just its arm, red and white, across the way at waist height; and a chain, slung low.
   liftgate: { height: 1 * 8, side: 0xeeeeee, top: 0xd8312a, width: 1.6, open: true },
   chain: { height: 0.5 * 8, side: 0x444444, top: 0x6a6a6a, width: 0.8, open: true },
+  // A bus shelter: its glass back, and its roof.
+  shelter: { height: 2.5 * 8, side: 0x9cb6c2, top: 0x3d434a, width: 12 },
 };
 
 /**
@@ -43,7 +45,7 @@ export class WallLayer {
         const look = LOOK[seg.kind];
         const z = (seg as Wall & { z?: number }).z ?? ((seg as Wall & { z?: number }).z = this.base((seg.ax + seg.bx) / 2, (seg.ay + seg.by) / 2, seg.level));
         const s0 = perspective.lift(z);
-        const s1 = perspective.lift(z + look.height);
+        const s1 = perspective.lift(z + (seg.height ?? look.height));
         const [a0x, a0y, b0x, b0y] = [perspective.x(seg.ax, s0), perspective.y(seg.ay, s0), perspective.x(seg.bx, s0), perspective.y(seg.by, s0)];
         const [a1x, a1y, b1x, b1y] = [perspective.x(seg.ax, s1), perspective.y(seg.ay, s1), perspective.x(seg.bx, s1), perspective.y(seg.by, s1)];
         // Its side, from its foot up to its top (just its posts at the ends, for an arm or a chain across the way).

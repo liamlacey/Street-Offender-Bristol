@@ -110,6 +110,8 @@ export interface Road {
   lanes?: Lane[];
   /** Where they're painted (distances along it, start, end, ...): clear of junctions, crossings and sharp bends. */
   laneSpans?: number[];
+  /** Steps: how many there are up the flight (OSM's `step_count`, or from how far it rises, measured by the LIDAR). */
+  steps?: number;
 }
 
 /**
@@ -335,11 +337,15 @@ function alongPolyline(pts: Pts, along: number): [number, number, number, number
 /** How far apart a bridge deck's measured heights are, px (2 m). */
 export const DECK_STEP = 2 * PX_PER_METRE;
 
-export type LineKind = 'wall' | 'fence' | 'hedge' | 'rail' | 'quay' | 'railing' | 'kerb' | 'gate' | 'liftgate' | 'chain';
+export type LineKind = 'wall' | 'fence' | 'hedge' | 'rail' | 'quay' | 'railing' | 'kerb' | 'gate' | 'liftgate' | 'chain' | 'shelter';
 
 export interface Line {
   kind: LineKind;
   pts: Pts;
+  /** How tall it is, px, as the LIDAR measured it (or as tagged); the usual for its kind otherwise. */
+  height?: number;
+  /** A retaining wall (`barrier=retaining_wall`): holding the ground back, as high as the ground drops across it. */
+  retaining?: boolean;
 }
 
 export interface Building {
@@ -459,6 +465,8 @@ export interface GameMap {
   treeSpecies?: number[];
   /** Solar panels on roofs: x, y, how many panels, ... */
   solar?: number[];
+  /** Steep banks (embankments, cuttings), measured by the LIDAR: x, y, which way's downhill (radians, as a hundredth), ... */
+  banks?: number[];
 }
 
 /**
@@ -990,6 +998,10 @@ const ISLAND_WIDE = 1.2 * PX_PER_METRE;
 /** How far out round its canopy a forecourt's made, where none's mapped, px. */
 const FORECOURT_ROUND = 5 * PX_PER_METRE;
 
+/** A bus shelter's length, px; a kiosk's height mapped as a point, m. */
+const SHELTER_LONG = 4 * PX_PER_METRE;
+const KIOSK_HEIGHT = 2.6;
+
 /** A crane's height, if it's not tagged, m: the harbour's are about this. */
 const CRANE_HEIGHT = 15;
 
@@ -1303,7 +1315,17 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     const lineKind = t.barrier === 'kerb' && DROPPED_KERB.has(t.kerb) ? undefined : t.barrier ? LINE_KINDS[t.barrier] : t.railway === 'rail' || t.railway === 'tram' ? 'rail' : t.man_made === 'quay' && !closed ? 'quay' : undefined;
     if (lineKind) {
       const pts = pointsOf(way.nodes);
-      if (pts) for (const piece of clipLine(pts, cx0, cy0, cx1, cy1)) lines.push({ kind: lineKind, pts: roundPts(piece) });
+      const tagged = metres(t.height);
+      if (pts) {
+        for (const piece of clipLine(pts, cx0, cy0, cx1, cy1)) {
+          lines.push({
+            kind: lineKind,
+            pts: roundPts(piece),
+            ...(tagged && tagged > 0.2 && tagged < 8 ? { height: round(tagged * PX_PER_METRE) } : {}),
+            ...(t.barrier === 'retaining_wall' ? { retaining: true } : {}),
+          });
+        }
+      }
       continue;
     }
 
@@ -1420,6 +1442,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       ...(surface ? { surface } : {}),
       ...(across ? { lanesAcross: across } : {}),
       ...(lanes && laneSpans?.length ? { lanes, laneSpans } : {}),
+      ...(kind === 'steps' && stepCount(t) ? { steps: stepCount(t) } : {}),
     });
   }
   // A lane that carries on from the same lane on the road before it: its name's painted only where it starts.
@@ -1476,6 +1499,32 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
   const fuelPoints: [number, number][] = [];
   const treeKinds: number[] = [];
   const solar: number[] = [];
+  /** The nearest road for cars within 20 m: which way it runs there (ux, uy), and which way's away from it (nx, ny). */
+  const nearestRoadDirection = (x: number, y: number): [number, number, number, number] | null => {
+    let best = 20 * PX_PER_METRE;
+    let out: [number, number, number, number] | null = null;
+    for (const r of roads) {
+      if (!VEHICLE_ROADS.has(r.kind)) continue;
+      const p = r.pts;
+      for (let i = 0; i + 3 < p.length; i += 2) {
+        const [ax, ay, bx, by] = [p[i], p[i + 1], p[i + 2], p[i + 3]];
+        const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
+        if (!len2) continue;
+        const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2));
+        const [px, py] = [ax + (bx - ax) * t, ay + (by - ay) * t];
+        const d = Math.hypot(px - x, py - y);
+        if (d < best) {
+          best = d;
+          const len = Math.sqrt(len2);
+          const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
+          // Away from the road: the side the point's on.
+          const side = (x - px) * -uy + (y - py) * ux >= 0 ? 1 : -1;
+          out = [ux, uy, -uy * side, ux * side];
+        }
+      }
+    }
+    return out;
+  };
   /** Which way's the nearest water (the harbour, a river) from a point, within 40 m, radians; or the biggest water within 60 m. */
   const towardWater = (x: number, y: number, biggest = false): number | null => waterFrom(x, y, biggest)?.angle ?? null;
   /** The nearest water's edge from a point (or the biggest water's): which way, and how far, px. */
@@ -1767,6 +1816,21 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       trees.push(round(x), round(y), round(r * PX_PER_METRE), round(h * PX_PER_METRE));
       continue;
     }
+    // A bus shelter at a stop (`shelter=yes`): 4 m along the nearest road, set back a metre from where the stop is (the LIDAR finds it, if it can: see enrich.ts).
+    if (t.shelter === 'yes' && (t.highway === 'bus_stop' || t.public_transport === 'platform')) {
+      const along = nearestRoadDirection(x, y);
+      if (along) {
+        const [ux, uy, nx, ny] = along;
+        const [cx, cy] = [x + nx * PX_PER_METRE, y + ny * PX_PER_METRE];
+        const half = SHELTER_LONG / 2;
+        lines.push({ kind: 'shelter', pts: roundPts([cx - ux * half, cy - uy * half, cx + ux * half, cy + uy * half]) });
+      }
+    }
+    // A kiosk mapped as a point: a small one, 2.5 m square.
+    if ((t.shop === 'kiosk' || t.amenity === 'kiosk') && !onBuilding.has(node.id)) {
+      const k = 1.25 * PX_PER_METRE;
+      buildings.push({ id: node.id, name: t.name, rings: [roundPts([x - k, y - k, x + k, y - k, x + k, y + k, x - k, y + k])], top: round(KIOSK_HEIGHT * PX_PER_METRE), bottom: 0, kind: 'kiosk', solid: true, drawn: true });
+    }
     if (t.leisure === 'slipway') {
       const water = waterFrom(x, y, false, 25);
       if (water) addSlipway(x, y, water.angle, 5 * PX_PER_METRE, water.distance + 7 * PX_PER_METRE);
@@ -2041,4 +2105,10 @@ function materialColour(material: string | undefined): string | undefined {
       render: '#e2dccd',
     } as Record<string, string>
   )[material];
+}
+
+/** How many steps up a flight, if it's tagged (and believable). */
+function stepCount(t: Tags): number | undefined {
+  const n = parseInt(t.step_count ?? '', 10);
+  return n >= 1 && n <= 300 ? n : undefined;
 }

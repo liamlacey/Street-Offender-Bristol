@@ -16,6 +16,10 @@ export interface LidarReport {
   roofsFlat: number;
   treesMeasured: number;
   treesAdded: number;
+  wallsMeasured?: number;
+  sheltersFound?: number;
+  stepsCounted?: number;
+  banks?: number;
 }
 
 /** Roofs that rise more than this from eaves to ridge are pitched, metres. */
@@ -170,6 +174,10 @@ export function addLidar(map: GameMap, dsm: Raster, dtm: Raster): LidarReport {
   }
   osm.push(...added);
   report.treesAdded = added.length / 4;
+  report.wallsMeasured = wallHeights(map, g, dtm, grid);
+  report.sheltersFound = findShelters(map, g, blocked);
+  report.stepsCounted = countSteps(map, dtm, grid);
+  report.banks = findBanks(map, dtm, grid, blocked, g);
   map.terrain = terrainOf(map, dtm, grid, dsm);
   return report;
 }
@@ -324,6 +332,132 @@ export function deckProfile(
 /** How far above, and below, the straight line between its ends a bridge's deck may be measured, metres. */
 const DECK_ABOVE = 2.5;
 const DECK_BELOW = 1.5;
+
+/** How tall each kind of wall can believably be, metres: a reading outside this is something else (a tree over it, a van by it). */
+const WALL_RANGE: Partial<Record<string, [number, number]>> = {
+  wall: [0.5, 4],
+  hedge: [0.6, 5],
+  fence: [0.8, 3],
+};
+
+/**
+ * Measures the garden walls, hedges and fences that aren't tagged with a
+ * height: the median, along each, of the highest reading across it (on it
+ * and 0.7 m either side: the readings are a metre apart, and a wall's
+ * thinner). A retaining wall's how far the bare ground drops across it (1.5 m
+ * either side). Kept only if it's believable for its kind; how many were.
+ */
+export function wallHeights(map: GameMap, g: HeightGrid, dtm: Raster, toGrid: (x: number, y: number) => [number, number]): number {
+  const px = map.pxPerMetre;
+  let measured = 0;
+  for (const line of map.lines) {
+    if (line.height !== undefined) continue;
+    const range = WALL_RANGE[line.kind];
+    if (!range) continue;
+    const readings: number[] = [];
+    const p = line.pts;
+    for (let i = 0; i + 3 < p.length; i += 2) {
+      const [ax, ay, bx, by] = [p[i], p[i + 1], p[i + 2], p[i + 3]];
+      const len = Math.hypot(bx - ax, by - ay);
+      if (!len) continue;
+      const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
+      const [nx, ny] = [-uy, ux];
+      for (let d = px / 2; d < len; d += px) {
+        const [x, y] = [ax + ux * d, ay + uy * d];
+        if (line.retaining) {
+          const a = sample(dtm, ...toGrid(x + nx * 1.5 * px, y + ny * 1.5 * px));
+          const b = sample(dtm, ...toGrid(x - nx * 1.5 * px, y - ny * 1.5 * px));
+          if (a === a && b === b) readings.push(Math.abs(a - b));
+          continue;
+        }
+        let top = -Infinity;
+        for (const o of [-0.7, 0, 0.7]) {
+          const h = heightAt(g, x + nx * o * px, y + ny * o * px);
+          if (h === h) top = Math.max(top, h);
+        }
+        if (top > -Infinity) readings.push(top);
+      }
+    }
+    if (readings.length < 3) continue;
+    const h = quantile(readings, 0.5);
+    if (h < range[0] || h > range[1]) continue;
+    line.height = Math.round(h * px);
+    measured++;
+  }
+  return measured;
+}
+
+/** How high a bus shelter stands, metres, as the LIDAR sees it; and how far from its stop it's looked for, px. */
+const SHELTER_HEIGHT: [number, number] = [2, 3.8];
+const SHELTER_SEARCH = 8 * 8;
+
+/**
+ * Finds each bus shelter (placed at its stop, along the road) in the LIDAR: a
+ * small cluster of readings 2 to 3.8 m up within 8 m of it, not in a
+ * building, the water or the road. If there is one, the shelter's moved to it,
+ * turned along it (if it's longer one way), and made as tall. How many were.
+ */
+export function findShelters(map: GameMap, g: HeightGrid, blocked: Uint8Array): number {
+  let found = 0;
+  for (const line of map.lines) {
+    if (line.kind !== 'shelter') continue;
+    const [ax, ay, bx, by] = line.pts;
+    const [cx, cy] = [(ax + bx) / 2, (ay + by) / 2];
+    const half = Math.hypot(bx - ax, by - ay) / 2;
+    const reach = Math.ceil(SHELTER_SEARCH / g.cell);
+    const [ci, cj] = [Math.floor(cx / g.cell), Math.floor(cy / g.cell)];
+    // The cells high enough, and where nothing else is.
+    const seen = new Set<number>();
+    const candidate = (i: number, j: number) => {
+      if (i < 0 || j < 0 || i >= g.cols || j >= g.rows || blocked[j * g.cols + i]) return false;
+      if (Math.hypot(i - ci, j - cj) > reach) return false;
+      const h = g.h[j * g.cols + i];
+      return h >= SHELTER_HEIGHT[0] && h <= SHELTER_HEIGHT[1];
+    };
+    let best: { cells: number[]; d: number } | null = null;
+    for (let j = cj - reach; j <= cj + reach; j++) {
+      for (let i = ci - reach; i <= ci + reach; i++) {
+        if (seen.has(j * g.cols + i) || !candidate(i, j)) continue;
+        // Its cluster: the high-enough cells touching it.
+        const cells: number[] = [];
+        const todo = [j * g.cols + i];
+        seen.add(todo[0]);
+        while (todo.length) {
+          const k = todo.pop()!;
+          cells.push(k);
+          const [ki, kj] = [k % g.cols, Math.floor(k / g.cols)];
+          for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const n = (kj + dj) * g.cols + ki + di;
+            if (!seen.has(n) && candidate(ki + di, kj + dj)) {
+              seen.add(n);
+              todo.push(n);
+            }
+          }
+        }
+        // About a shelter's size (a few square metres to a couple of dozen), nearest the stop.
+        if (cells.length < 3 || cells.length > 24) continue;
+        const [mx, my] = cells.reduce(([sx, sy], k) => [sx + (k % g.cols) + 0.5, sy + Math.floor(k / g.cols) + 0.5], [0, 0]).map((v) => (v / cells.length) * g.cell);
+        const d = Math.hypot(mx - cx, my - cy);
+        if (!best || d < best.d) best = { cells, d };
+      }
+    }
+    if (!best) continue;
+    const pts = best.cells.map((k) => [((k % g.cols) + 0.5) * g.cell, (Math.floor(k / g.cols) + 0.5) * g.cell]);
+    const [mx, my] = [pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length];
+    // Which way it's longest (its readings' spread), if it is; along the road, otherwise.
+    let [sxx, syy, sxy] = [0, 0, 0];
+    for (const [x, y] of pts) [sxx, syy, sxy] = [sxx + (x - mx) ** 2, syy + (y - my) ** 2, sxy + (x - mx) * (y - my)];
+    const spread = Math.sqrt((sxx - syy) ** 2 + 4 * sxy * sxy);
+    const elongated = spread > 0.4 * (sxx + syy);
+    const angle = elongated ? 0.5 * Math.atan2(2 * sxy, sxx - syy) : Math.atan2(by - ay, bx - ax);
+    const [ux, uy] = [Math.cos(angle), Math.sin(angle)];
+    line.pts = [mx - ux * half, my - uy * half, mx + ux * half, my + uy * half].map(Math.round);
+    const tops = best.cells.map((k) => g.h[k]);
+    line.height = Math.round(Math.max(2.2, Math.min(3.5, quantile(tops, 0.9))) * map.pxPerMetre);
+    found++;
+  }
+  return found;
+}
 
 /** The terrain grid's spacing, metres: the hills are smooth enough for this, and it keeps the map small. */
 const TERRAIN_CELL = 4;
@@ -500,6 +634,118 @@ function pointsInside(rings: Pts[], step: number): [number, number][] {
     }
   }
   return out;
+}
+
+/** A step's rise, metres: the usual for outdoor steps. */
+const STEP_RISE = 0.17;
+
+/**
+ * How many steps there are up each flight that isn't tagged with its count:
+ * how far the ground rises from one end to the other, a step every
+ * STEP_RISE. Flights that rise less than a couple of steps' worth (or that
+ * the survey can't see) are left as they are. Returns how many it counted.
+ */
+export function countSteps(map: GameMap, dtm: Raster, toGrid: (x: number, y: number) => [number, number]): number {
+  const px = map.pxPerMetre;
+  // The ground at a point: the middle of the readings round it, so a stray one (a wall, a bin) doesn't count.
+  const ground = (x: number, y: number) => {
+    const v: number[] = [];
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) v.push(sample(dtm, ...toGrid(x + dx * px, y + dy * px)));
+    const ok = v.filter((z) => z === z);
+    return ok.length >= 5 ? quantile(ok, 0.5) : NaN;
+  };
+  let counted = 0;
+  for (const r of map.roads) {
+    if (r.kind !== 'steps' || r.steps || r.pts.length < 4) continue;
+    const n = r.pts.length;
+    const rise = Math.abs(ground(r.pts[0], r.pts[1]) - ground(r.pts[n - 2], r.pts[n - 1]));
+    if (!(rise >= 0.3)) continue;
+    r.steps = Math.max(2, Math.round(rise / STEP_RISE));
+    counted++;
+  }
+  return counted;
+}
+
+/** Banks: where the ground's this steep (rise over run, across BANK_RUN metres) or more; looked for every BANK_EVERY metres. */
+const BANK_SLOPE = 0.45;
+const BANK_RUN = 3;
+const BANK_EVERY = 2;
+/** How many of a point's eight neighbours have to be steep the same way (within 45°) for it to be part of a bank. */
+const BANK_ALIKE = 3;
+
+/**
+ * The steep banks (embankments, cuttings, the sides of hills): points every
+ * BANK_EVERY metres where the bare ground falls away steeply, and which way
+ * it falls, for hachures. Not at buildings, water, roads or walls (whose
+ * edges are steep in the survey too, but are drawn as what they are).
+ * Returns how many points it found.
+ */
+export function findBanks(map: GameMap, dtm: Raster, toGrid: (x: number, y: number) => [number, number], blocked: Uint8Array, g: HeightGrid): number {
+  const px = map.pxPerMetre;
+  const near = new Uint8Array(blocked);
+  const mark = (x: number, y: number) => {
+    const i = Math.floor(x / g.cell);
+    const j = Math.floor(y / g.cell);
+    if (i >= 0 && j >= 0 && i < g.cols && j < g.rows) near[j * g.cols + i] = 1;
+  };
+  for (const l of map.lines) {
+    if (l.kind !== 'wall' && l.kind !== 'quay') continue;
+    for (let i = 0; i + 3 < l.pts.length; i += 2) {
+      const [ax, ay, bx, by] = [l.pts[i], l.pts[i + 1], l.pts[i + 2], l.pts[i + 3]];
+      const len = Math.hypot(bx - ax, by - ay) || 1;
+      for (let d = 0; d <= len; d += g.cell / 2) mark(ax + ((bx - ax) * d) / len, ay + ((by - ay) * d) / len);
+    }
+  }
+  // Clear of all that by a couple of metres.
+  const clear = (x: number, y: number) => {
+    const i0 = Math.floor(x / g.cell);
+    const j0 = Math.floor(y / g.cell);
+    for (let j = j0 - 2; j <= j0 + 2; j++) {
+      for (let i = i0 - 2; i <= i0 + 2; i++) if (i >= 0 && j >= 0 && i < g.cols && j < g.rows && near[j * g.cols + i]) return false;
+    }
+    return true;
+  };
+  const z = (x: number, y: number) => sample(dtm, ...toGrid(x, y));
+  const half = (BANK_RUN / 2) * px;
+  const step = BANK_EVERY * px;
+  const cols = Math.ceil(map.width / step);
+  const rows = Math.ceil(map.height / step);
+  // Which way's downhill at each point that's steep, NaN where it isn't.
+  const down = new Float32Array(cols * rows).fill(NaN);
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      const [x, y] = [(i + 0.5) * step, (j + 0.5) * step];
+      if (!clear(x, y)) continue;
+      const gx = (z(x + half, y) - z(x - half, y)) / BANK_RUN;
+      const gy = (z(x, y + half) - z(x, y - half)) / BANK_RUN;
+      if (!(Math.hypot(gx, gy) >= BANK_SLOPE)) continue;
+      // Downhill, and steep that way across the whole run (not one odd reading).
+      const a = Math.atan2(-gy, -gx);
+      const [ux, uy] = [Math.cos(a), Math.sin(a)];
+      if (!(z(x - ux * half, y - uy * half) - z(x + ux * half, y + uy * half) >= BANK_SLOPE * BANK_RUN)) continue;
+      down[j * cols + i] = a;
+    }
+  }
+  // A bank's a run of them, falling the same way: a point on its own is a bump in the survey.
+  const banks: number[] = [];
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      const a = down[j * cols + i];
+      if (a !== a) continue;
+      let alike = 0;
+      for (let dj = -1; dj <= 1; dj++) {
+        for (let di = -1; di <= 1; di++) {
+          if ((!di && !dj) || i + di < 0 || j + dj < 0 || i + di >= cols || j + dj >= rows) continue;
+          const b = down[(j + dj) * cols + i + di];
+          if (b === b && Math.cos(b - a) > 0.7) alike++;
+        }
+      }
+      if (alike >= BANK_ALIKE) banks.push(Math.round((i + 0.5) * step), Math.round((j + 0.5) * step), Math.round(a * 100));
+    }
+  }
+  if (banks.length) map.banks = banks;
+  else delete map.banks;
+  return banks.length / 3;
 }
 
 /** The cells no tree can stand in: buildings (and a metre round them), water, and the roads' carriageways. */

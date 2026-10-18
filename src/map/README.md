@@ -9,8 +9,8 @@ as the old. If the method changes, change this file in the same commit.
 | What | Source | Licence | Used for |
 | --- | --- | --- | --- |
 | Streets, paths, ground, water, buildings, trees, street furniture | [OpenStreetMap](https://www.openstreetmap.org), the API's `map` call (`api.openstreetmap.org/api/0.6/map?bbox=…`), plus `relation/<id>/full` for multipolygons only partly in the area | ODbL: credit "© OpenStreetMap contributors" | Everything that's on the map |
-| Heights of roofs and treetops | Environment Agency, **LIDAR Composite First Return DSM, 1 m** (WCS, coverage `…__Lidar_Composite_Elevation_FZ_DSM_1m`) | Open Government Licence v3.0 | Building heights, roof shapes, trees' heights, finding trees |
-| Height of the bare ground | Environment Agency, **LIDAR Composite DTM, 1 m** (WCS, coverage `…__Lidar_Composite_Elevation_DTM_1m`) | Open Government Licence v3.0 | Heights above ground (with the DSM), the hills |
+| Heights of roofs and treetops | Environment Agency, **LIDAR Composite First Return DSM, 1 m** (WCS, coverage `…__Lidar_Composite_Elevation_FZ_DSM_1m`) | Open Government Licence v3.0 | Building heights, roof shapes, trees' heights, finding trees, walls' and hedges' heights, finding bus shelters |
+| Height of the bare ground | Environment Agency, **LIDAR Composite DTM, 1 m** (WCS, coverage `…__Lidar_Composite_Elevation_DTM_1m`) | Open Government Licence v3.0 | Heights above ground (with the DSM), the hills, retaining walls' heights, counting steps, steep banks |
 | Landmarks' and streets' colours | Written by hand in `landmarks.ts` | Ours | What OSM doesn't say about how places look |
 
 The full URLs are in `tools/build-map.ts`. The game credits both at the bottom of
@@ -246,6 +246,19 @@ the road onto a measured deck is brought up or down to meet it over the last
 12 m (and the 4 m under its end), and in the game the deck meets the ground at an
 open end, any difference left taken up over the 8 m you get on in.
 
+**Bus shelters**: a bus stop (`highway=bus_stop` or `public_transport=platform`
+node) with `shelter=yes` gets a shelter, 4 m long along the nearest road (within
+20 m), set 1 m back from the stop away from the road; then moved onto what the
+LIDAR sees there (below). Glass, so it can be smashed. **Kiosks** (`shop=kiosk`
+or `amenity=kiosk` points not on a building) are made buildings 2.5 m square and
+2.6 m tall.
+
+**Steps** (`highway=steps`): each step's edge is drawn across the flight, spread
+evenly along it (never closer than 0.3 m), when it's known how many there are:
+`step_count`, or counted from the LIDAR (below). Unknown, a pattern as if a step
+every 0.6 m. Driven down (or up), each step's a small jolt: above 50 px/s, the
+speed lost grows with the speed, up to 5% a step.
+
 **Petrol stations** (`amenity=fuel`), however they're mapped:
 - a forecourt (an outline): its tarmac (driven on like a road); any canopy
   (`building=roof`) standing on it is the station's;
@@ -292,6 +305,24 @@ ground):
   (leaves are; roofs aren't), and isn't in a building (or a metre round one), the
   water or a carriageway. Within 5 m of an OSM tree, it's that tree, measured;
   otherwise it's a new tree. Trees closer than their crowns are merged.
+- Garden walls, hedges and fences, unless tagged with a `height` (0.2 to 8 m): the
+  median, along each (a reading every metre), of the highest reading on it and
+  0.7 m either side; needs 3 or more, and kept only if it's believable (walls 0.5
+  to 4 m, hedges 0.6 to 5 m, fences 0.8 to 3 m), the usual for its kind otherwise.
+  A retaining wall (`barrier=retaining_wall`) is as high as the bare ground drops
+  across it (1.5 m either side). Fences are often too thin for the survey to see.
+- Bus shelters: the cluster of readings 2 to 3.8 m up (3 to 24 square metres,
+  not in a building, the water or a carriageway) nearest the stop, within 8 m:
+  the shelter's moved to its middle, turned along it if it's longer one way, and
+  made as tall as its 90th percentile (2.2 to 3.5 m). None found, it stays put.
+- Steps with no `step_count`: how far the bare ground rises from one end to the
+  other (the median of the 9 readings round each end), a step every 0.17 m (at
+  least 2); flights rising less than 0.3 m are left uncounted.
+- Steep banks (embankments, cuttings): every 2 m, where the bare ground falls
+  0.45 m a metre or more across 3 m (both the slope and the drop downhill), with
+  3 of the 8 points round it falling the same way (within 45°); not within 2 m
+  of a building (3 m in all), the water, a carriageway, a wall or the quay. Drawn
+  as hachures, short strokes down the slope; you can drive over them.
 
 **The hills.** The bare ground's height every 4 m (the average of the 16 one-metre
 readings round each point), gaps filled from their neighbours, and smoothed twice.
@@ -341,6 +372,7 @@ bounces off.
 | Statue or sculpture (`artwork_type=statue/sculpture`, `historic=monument`, `memorial=statue`) | stone | never | On its plinth: a structure, like the fountains |
 | Bench | timber, in parts | 150 | Below: shoved. Above: smashed into planks, scattered the way the car was going |
 | Garden wall (`barrier=wall`, …) | stone | 200 | Crumbles: a gap 2 m wide (up to 4 m, the harder it's hit) in rubble and bricks; the rest stands |
+| Bus shelter | glass | 140 | Smashed through (a gap up to its whole length): glass strewn, bent bars |
 | Hedge | plant | 80 | Torn through (a 3 m gap, up to 6 m): leaves flying, and clumps of it and twigs strewn the way the car went |
 | Fence | timber | 70 | Broken through (2.5 m, up to 5 m) into planks |
 | Railings | metal | 130 | Broken through (2.5 m, up to 5 m), bent bars |

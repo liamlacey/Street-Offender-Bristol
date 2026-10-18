@@ -121,6 +121,9 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
     }
   }
 
+  // Steep banks: hachures, short strokes down the slope.
+  if (!palette.surface) drawBanks(ctx, map, index);
+
   // Bridges aren't on the ground: they're decks above it (see drawDeck).
   const roads = index.roads.map((i) => map.roads[i]).filter((r) => !r.bridge);
   const vehicle = roads.filter((r) => VEHICLE_ROADS.has(r.kind) && r.kind !== 'track');
@@ -134,8 +137,9 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
   for (const r of roads) {
     if (VEHICLE_ROADS.has(r.kind) && r.kind !== 'track') continue;
     stroke(ctx, r.pts, pathFill(r, palette), r.width);
-    if (r.kind === 'steps' && !palette.surface) {
-      // Each step's edge.
+    if (r.kind === 'steps' && !palette.surface && r.steps) drawSteps(ctx, r, r.steps);
+    else if (r.kind === 'steps' && !palette.surface) {
+      // Each step's edge (how many isn't known: as if every half metre or so).
       ctx.setLineDash([1.5, 3.5]);
       ctx.lineCap = 'butt';
       stroke(ctx, r.pts, 'rgba(0,0,0,0.28)', r.width);
@@ -623,5 +627,45 @@ function strokeRings(ctx: Ctx, rings: Pts[], fill: Fill, width: number): void {
   ctx.lineWidth = width;
   ctx.beginPath();
   for (const r of rings) path(ctx, r, true);
+  ctx.stroke();
+}
+
+/** A flight of steps: each step's edge across it, spread evenly along it (never closer than a tread). */
+function drawSteps(ctx: Ctx, r: Road, count: number): void {
+  const len = lineLength(r.pts);
+  const n = Math.max(1, Math.min(count, Math.floor(len / TREAD)));
+  const half = r.width / 2;
+  ctx.beginPath();
+  for (let k = 0; k < n; k++) {
+    const [x, y, ux, uy] = pointAlong(r.pts, (len * (k + 0.5)) / n, 4);
+    ctx.moveTo(x + uy * half, y - ux * half);
+    ctx.lineTo(x - uy * half, y + ux * half);
+  }
+  ctx.lineCap = 'butt';
+  ctx.strokeStyle = 'rgba(0,0,0,0.32)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.lineCap = 'round';
+}
+
+/** A step's tread, px: the least the edges are drawn apart. */
+const TREAD = 0.3 * 8;
+
+/** The steep banks: a hachure at each point, a short stroke down the slope, a little off the grid they were measured on so they don't line up. */
+function drawBanks(ctx: Ctx, map: GameMap, index: ChunkIndex): void {
+  const banks = map.banks;
+  if (!banks || !index.banks.length) return;
+  ctx.beginPath();
+  for (const i of index.banks) {
+    const [x, y, a] = [banks[i * 3], banks[i * 3 + 1], banks[i * 3 + 2] / 100];
+    const jx = ((x * 7 + y * 13) % 7) - 3;
+    const jy = ((x * 11 + y * 5) % 7) - 3;
+    const [ux, uy] = [Math.cos(a), Math.sin(a)];
+    ctx.moveTo(x + jx - ux * 5, y + jy - uy * 5);
+    ctx.lineTo(x + jx + ux * 5, y + jy + uy * 5);
+  }
+  ctx.strokeStyle = 'rgba(40,35,25,0.35)';
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = 'round';
   ctx.stroke();
 }

@@ -23,6 +23,7 @@ const LINE_THICKNESS: Partial<Record<LineKind, number>> = {
   gate: 1,
   liftgate: 0.8,
   chain: 0.5,
+  shelter: 6,
 };
 
 /** How big each fixed post is, px radius; anything not listed here can be knocked about or is just painted on. */
@@ -83,6 +84,8 @@ export interface Post extends Circle {
 export interface Wall extends Segment {
   kind?: WallKind;
   level: number;
+  /** How tall, px, if measured (the usual for its kind otherwise). */
+  height?: number;
 }
 
 export interface LooseProp extends Body {
@@ -108,6 +111,8 @@ export interface ChunkIndex {
   signals: number[];
   trees: number[];
   paint: number[];
+  /** The steep banks' points (index in `banks`, by three). */
+  banks: number[];
 }
 
 export interface FixedProp extends Prop {
@@ -223,11 +228,11 @@ export function buildWorld(map: GameMap): World {
 
   const ground: Wall[] = [];
   const deck: Wall[] = [];
-  const addRing = (to: Wall[], ring: Pts, r: number, closed: boolean, level: number, kind?: WallKind, cut = false) => {
+  const addRing = (to: Wall[], ring: Pts, r: number, closed: boolean, level: number, kind?: WallKind, cut = false, height?: number) => {
     const n = ring.length;
     for (let i = 0; i + (closed ? 1 : 3) < n; i += 2) {
       const j = (i + 2) % n;
-      const s: Wall = { ax: ring[i], ay: ring[i + 1], bx: ring[j], by: ring[j + 1], r, level, ...(kind ? { kind } : {}) };
+      const s: Wall = { ax: ring[i], ay: ring[i + 1], bx: ring[j], by: ring[j + 1], r, level, ...(kind ? { kind } : {}), ...(height ? { height } : {}) };
       to.push(...(cut ? cutWall(s, passages).map((piece) => ({ ...piece, level })) : [s]));
     }
   };
@@ -240,7 +245,7 @@ export function buildWorld(map: GameMap): World {
     if (r === undefined) continue;
     const mid = Math.floor(line.pts.length / 4) * 2;
     const level = onDeck(line.pts[mid], line.pts[mid + 1]) ? 1 : 0;
-    addRing(level ? deck : ground, line.pts, r, false, level, line.kind as WallKind);
+    addRing(level ? deck : ground, line.pts, r, false, level, line.kind as WallKind, false, line.height);
   }
   // The edge of the map.
   const edge: Wall[] = [];
@@ -285,7 +290,7 @@ function indexChunks(map: GameMap): Map<string, ChunkIndex> {
         const key = chunkKey(cx, cy);
         let c = chunks.get(key);
         if (!c) {
-          c = { areas: [], roads: [], lines: [], buildings: [], crossings: [], signals: [], trees: [], paint: [] };
+          c = { areas: [], roads: [], lines: [], buildings: [], crossings: [], signals: [], trees: [], paint: [], banks: [] };
           chunks.set(key, c);
         }
         c[list].push(i);
@@ -330,6 +335,8 @@ function indexChunks(map: GameMap): Map<string, ChunkIndex> {
     const [sx, sy] = shadowOffset(h * 0.7);
     add('trees', i / 4, x - r, y - r, x + sx + r, y + sy + r);
   }
+  const banks = map.banks ?? [];
+  for (let i = 0; i < banks.length; i += 3) add('banks', i / 3, banks[i] - 8, banks[i + 1] - 8, banks[i] + 8, banks[i + 1] + 8);
   return chunks;
 }
 

@@ -39,3 +39,23 @@ describe('Humps', () => {
     expect(over(0, 60, 400).jolt).toBe(0);
   });
 });
+
+describe('Steps', () => {
+  // A flight of 4 steps running east, 8 m long, 2 m wide.
+  const flight = { roads: [{ kind: 'steps', width: 16, pts: [0, 0, 64, 0], steps: 4 }] } as unknown as GameMap;
+
+  it('jolts a little at each step, and only on the steps', () => {
+    const at = (x: number, y: number, speed: number) => {
+      const car = createCar(x + 4, y, 0);
+      car.vx = speed;
+      return new Humps(flight).over(car, x - 4, y);
+    };
+    // The step edges are at 8, 24, 40 and 56.
+    expect(at(8, 0, 300)).toBeGreaterThan(0);
+    expect(at(24, 0, 300)).toBeGreaterThan(0);
+    expect(at(16, 0, 300)).toBe(0);
+    expect(at(8, 20, 300)).toBe(0);
+    expect(at(8, 0, 30)).toBe(0);
+    expect(at(8, 0, 300)).toBeLessThan(at(0, 0, 0) + 300 * 0.06);
+  });
+});

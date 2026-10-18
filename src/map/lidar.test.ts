@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { deckProfile, mergeRasters, roofShape, shiftRaster, underBridges } from './enrich';
+import { countSteps, deckProfile, findBanks, findShelters, mergeRasters, roofShape, shiftRaster, underBridges, wallHeights } from './enrich';
 import { type HeightGrid, type Raster, bestShift, findTrees, parseWcsText, quantile, sample } from './lidar';
 import { toNationalGrid } from './osgb';
-import { type Road, paving } from './osm';
+import { type GameMap, type Line, type Road, paving } from './osm';
 
 describe('toNationalGrid', () => {
   it('lands within a few metres of the Ordnance Survey\'s own worked example', () => {
@@ -162,5 +162,75 @@ describe('bridge decks', () => {
     expect(under(80, 40)).toBe(0);
     expect(under(-8, 0)).toBe(0);
     expect(under(16, 0)).toBe(0);
+  });
+});
+
+// A 40 m square of map, 8 px to the metre, with the survey's 1 m cells lined up with the map's.
+describe('walls, shelters, steps and banks from the LIDAR', () => {
+  const size = 40;
+  const toGrid = (x: number, y: number): [number, number] => [x / 8, -y / 8];
+  const raster = (z: (e: number, s: number) => number): Raster => {
+    const data = new Float32Array(size * size);
+    for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) data[j * size + i] = z(i, j);
+    return { e0: 0, n0: 0, cols: size, rows: size, data };
+  };
+  const grid = (h: (i: number, j: number) => number): HeightGrid => {
+    const g = { cell: 8, cols: size, rows: size, h: new Float32Array(size * size) };
+    for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) g.h[j * size + i] = h(i, j);
+    return g;
+  };
+  const mapOf = (parts: Partial<GameMap>) => ({ pxPerMetre: 8, width: size * 8, height: size * 8, lines: [], roads: [], ...parts }) as unknown as GameMap;
+  const flat = raster(() => 10);
+
+  it('measures a garden wall, and a retaining wall by how far the ground drops across it', () => {
+    const wall = { kind: 'wall', pts: [40, 164, 280, 164] } as Line;
+    const low = { kind: 'wall', pts: [40, 40, 280, 40] } as Line;
+    const retaining = { kind: 'wall', retaining: true, pts: [40, 160, 280, 160] } as Line;
+    const map = mapOf({ lines: [wall, low, retaining] });
+    const g = grid((_, j) => (j === 20 ? 1.8 : 0));
+    const step = raster((_, s) => (s < 20 ? 12 : 10));
+    expect(wallHeights(map, g, step, toGrid)).toBe(2);
+    expect(wall.height).toBe(Math.round(1.8 * 8));
+    expect(low.height).toBeUndefined();
+    expect(retaining.height).toBe(2 * 8);
+  });
+
+  it('moves a bus shelter onto what the LIDAR sees by its stop, turned along it, as tall', () => {
+    const shelter = { kind: 'shelter', pts: [100, 100, 132, 100] } as Line;
+    const map = mapOf({ lines: [shelter] });
+    const g = grid((i, j) => (i >= 16 && i <= 17 && j >= 10 && j <= 13 ? 2.7 : 0));
+    expect(findShelters(map, g, new Uint8Array(size * size))).toBe(1);
+    const [ax, ay, bx, by] = shelter.pts;
+    expect((ax + bx) / 2).toBeCloseTo(136, 0);
+    expect((ay + by) / 2).toBeCloseTo(96, 0);
+    expect(Math.abs(bx - ax)).toBeLessThan(2);
+    expect(shelter.height).toBe(Math.round(2.7 * 8));
+  });
+
+  it('counts the steps up a flight by how far it rises, and leaves a level one', () => {
+    const up = { kind: 'steps', width: 16, pts: [40, 80, 200, 80] } as Road;
+    const tagged = { kind: 'steps', width: 16, pts: [40, 120, 200, 120], steps: 5 } as Road;
+    const level = { kind: 'steps', width: 16, pts: [40, 240, 200, 240] } as Road;
+    const ramp = raster((e, s) => (s < 20 ? 10 + e * 0.1 : 10));
+    expect(countSteps(mapOf({ roads: [up, tagged, level] }), ramp, toGrid)).toBe(1);
+    expect(up.steps).toBe(12);
+    expect(tagged.steps).toBe(5);
+    expect(level.steps).toBeUndefined();
+  });
+
+  it('finds a steep bank, and which way it falls, but not on level ground', () => {
+    const map = mapOf({});
+    const bank = raster((e) => 10 + Math.max(0, Math.min(6, e - 17)));
+    const g = grid(() => 0);
+    expect(findBanks(map, bank, toGrid, new Uint8Array(size * size), g)).toBeGreaterThan(10);
+    for (let k = 0; k < map.banks!.length; k += 3) {
+      expect(map.banks![k] / 8).toBeGreaterThan(15);
+      expect(map.banks![k] / 8).toBeLessThan(26);
+      // Downhill's west.
+      expect(Math.abs(map.banks![k + 2] / 100)).toBeCloseTo(Math.PI, 1);
+    }
+    const level = mapOf({});
+    expect(findBanks(level, flat, toGrid, new Uint8Array(size * size), g)).toBe(0);
+    expect(level.banks).toBeUndefined();
   });
 });
