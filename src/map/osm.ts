@@ -93,6 +93,8 @@ export interface Road {
   passage?: boolean;
   /** Along an arcade or colonnade (`covered=arcade/colonnade`): under the front of a building, open along its side. */
   arcade?: boolean;
+  /** A car park's aisle (`service=parking_aisle`): bays painted along both sides. */
+  aisle?: boolean;
   /** Which sides it has pavements along (as it runs: left and right of its line), drawn with it. */
   pavement?: 'both' | 'left' | 'right';
   /** What it's surfaced with, if tagged (the drawing picks a usual one for its kind otherwise). */
@@ -841,7 +843,8 @@ const ROAD_WIDTH: Record<RoadKind, number> = {
 export const VEHICLE_ROADS: ReadonlySet<RoadKind> = new Set(['trunk', 'primary', 'secondary', 'tertiary', 'street', 'service', 'track']);
 
 export function roadKind(tags: Tags): RoadKind | null {
-  const kind = ROAD_KINDS[tags.highway];
+  // Being built (or mended: Pero's Bridge): what it'll be.
+  const kind = ROAD_KINDS[tags.highway === 'construction' ? tags.construction : tags.highway];
   if (!kind) return null;
   // Underground: not on the map.
   if (tags.tunnel === 'yes' || tags.tunnel === 'culvert') return null;
@@ -1393,6 +1396,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       ...(bridge ? { bridge } : {}),
       ...(passage ? { passage } : {}),
       ...(arcade ? { arcade } : {}),
+      ...(t.service === 'parking_aisle' ? { aisle: true } : {}),
       ...(pavement ? { pavement } : {}),
       ...(marks ? { marks } : {}),
       ...(surface ? { surface } : {}),

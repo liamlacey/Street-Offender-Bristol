@@ -60,7 +60,9 @@ All in `osm.ts`, `enrich.ts`, `lidar.ts` and `osgb.ts` (pure, tested).
 **Projection.** Flat, about the map's north-west corner: metres east and south,
 **8 px to the metre** (`PX_PER_METRE`), north up. The car is 4.75 m long.
 
-**Roads and paths** (`highway=*`; tunnels left out). Kind from `highway`; width
+**Roads and paths** (`highway=*`; tunnels left out; one being built or mended,
+`highway=construction`, as what it'll be, `construction=*`: Pero's Bridge is shut
+for repairs in OSM, and is a footbridge here). Kind from `highway`; width
 from `width`, else `lanes` × 3.3 m, else by kind (primary 10 m, secondary 9,
 tertiary 8, streets 7, service 4.5, driveways 3.5, pedestrian streets 5, footways
 2.4). One-way and bridges from their tags. **Pavements**, 2.4 m wide, along every
@@ -113,6 +115,10 @@ the left side's traffic goes the way's way, the right side's against it).
   90 px/s for a table, 60 a hump, 70 a cushion: a 1,200th of the speed over that, up
   to 18%, 32% and 25%) and gives it a little hop; between cushions there's nothing
   (`src/world/humps.ts`).
+- **Car parks** (`amenity=parking`): bays 2.5 m wide and 5 m deep along both sides
+  of each aisle mapped through one (`service=parking_aisle`); where none's mapped,
+  double rows of them with 6 m aisles between, lined up with its longest side. Only
+  bays wholly inside its outline, and none out on a road through it.
 - **Lane lines**: the centre line of a two-way road, and a dashed line between each
   lane each way where `lanes`, `lanes:forward` or `lanes:backward` say there's more
   than one (a one-way road wide enough for two and untagged gets one line); none

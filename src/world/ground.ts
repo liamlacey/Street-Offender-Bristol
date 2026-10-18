@@ -11,7 +11,7 @@
 
 import type { Area, AreaKind, GameMap, Pts, Road } from '../map/osm';
 import { type Paving, VEHICLE_ROADS, ringArea } from '../map/osm';
-import { drawHumps, drawLaneFills, drawLanes, drawPaint } from './paint';
+import { drawCarParks, drawHumps, drawLaneFills, drawLanes, drawPaint } from './paint';
 import { Surface, surfacePaint } from './surface';
 import { type ChunkIndex, lineLength, offsetLine, pointAlong, shadowOffset, subPolyline } from './world';
 
@@ -155,6 +155,7 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
     drawMarkings(paint, vehicle, palette.marking);
     for (const i of index.crossings) drawCrossing(paint, map, map.crossings[i], palette.marking);
     for (const i of index.signals) drawStopLine(paint, map.signals[i], palette.marking);
+    drawCarParks(paint, map, index);
     drawLanes(paint, vehicle, map.paint);
     drawPaint(paint, map, index);
     weather(paint, x0, y0, w, h);

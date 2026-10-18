@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PX_PER_METRE, Projection, buildMap, clipLine, clipRing, joinRings, areaKind, cutSpans, laneArrows, lanesAcross, metres, parseOsm, pavementSides, ringArea, roadLanes, roadWidth, sidewalkAlong } from './osm';
+import { PX_PER_METRE, Projection, buildMap, clipLine, clipRing, joinRings, areaKind, cutSpans, roadKind, laneArrows, lanesAcross, metres, parseOsm, pavementSides, ringArea, roadLanes, roadWidth, sidewalkAlong } from './osm';
 
 /** A tiny map: a street with a junction, a building with a part on it, a pond, a park inside a multipolygon, a tree and a bench. */
 const XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -193,6 +193,13 @@ describe('road markings', () => {
     expect(near.map((a) => a.turns)).toEqual(['through', 'right']);
     expect(near[0].y).toBeLessThan(near[1].y);
     expect(near[0].angle).toBeCloseTo(0);
+  });
+});
+
+describe('roads being built', () => {
+  it("takes one being built or mended as what it'll be", () => {
+    expect(roadKind({ highway: 'construction', construction: 'footway', bridge: 'movable' })).toBe('footway');
+    expect(roadKind({ highway: 'construction' })).toBeNull();
   });
 });
 
