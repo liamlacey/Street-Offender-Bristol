@@ -14,7 +14,8 @@ type Ctx = CanvasRenderingContext2D;
 const WHITE = 'rgba(236,233,220,0.9)';
 const YELLOW = 'rgba(240,196,40,0.95)';
 const BUS_RED = 'rgba(150,52,44,0.85)';
-const CYCLE_GREEN = 'rgba(62,140,74,0.8)';
+/** Cycle boxes at the lights: Bristol's are a terracotta red. */
+const CYCLE_RED = 'rgba(140,72,58,0.88)';
 const TACTILE_RED = '#a8453a';
 const TACTILE_BUFF = '#c9b487';
 
@@ -129,20 +130,20 @@ export function drawPaint(ctx: Ctx, map: GameMap, index: ChunkIndex): void {
         arrow(ctx, m.turns ?? 'through');
         break;
       case 'asl': {
-        // The box in front of the traffic's stop line, for bikes: green, a line at each end, a bike in it.
+        // The box in front of the traffic's stop line, for bikes: red, a line at each end, a big bike filling it.
         const depth = 4.5 * 8;
-        ctx.fillStyle = CYCLE_GREEN;
+        ctx.fillStyle = CYCLE_RED;
         ctx.fillRect(-m.width / 2, 0, m.width, depth);
         line(ctx, -m.width / 2, 0, m.width / 2, 0, WHITE, 2);
         line(ctx, -m.width / 2, depth, m.width / 2, depth, WHITE, 2);
         ctx.restore();
-        bike(ctx, ...behind(m, depth / 2), WHITE);
+        bike(ctx, ...behind(m, depth / 2), WHITE, 2.1);
         continue;
       }
       case 'busstop':
         busStop(ctx, m);
         ctx.restore();
-        words(ctx, ['BUS', 'STOP'], m.x, m.y, m.angle, YELLOW, 2.6 * 8);
+        words(ctx, ['BUS', 'STOP'], m.x, m.y, m.angle, YELLOW, 3 * 8, 13);
         continue;
       case 'tactile':
         tactile(ctx, m);
@@ -169,18 +170,15 @@ function giveWay(ctx: Ctx, m: PaintMark): void {
   ctx.stroke();
 }
 
-/** A bus stop's yellow box along the kerb (on the traffic's left), its ends slanting in. */
+/** A bus stop's bay along the kerb (on the traffic's left): surfaced red, edged in yellow on the road's side. */
 function busStop(ctx: Ctx, m: PaintMark): void {
   const half = m.width / 2;
-  const d = 2.6 * 8;
-  ctx.strokeStyle = YELLOW;
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.moveTo(-d / 2, half);
-  ctx.lineTo(d / 2, half - 3 * 8);
-  ctx.lineTo(d / 2, -half + 3 * 8);
-  ctx.lineTo(-d / 2, -half);
-  ctx.stroke();
+  const d = 3 * 8;
+  ctx.fillStyle = BUS_RED;
+  ctx.fillRect(-d / 2, -half, d, m.width);
+  ctx.setLineDash([10, 5]);
+  line(ctx, d / 2, -half, d / 2, half, YELLOW, 1.2);
+  ctx.setLineDash([]);
 }
 
 /** Blister paving: a slab of rows of raised dots, red at crossings with lights, buff at the rest. */
@@ -238,12 +236,13 @@ const TURNS: Record<string, [number, number]> = {
  * A bike, side on, laid along the way (the way it goes is up): two wheels and
  * its frame, about 1.8 m long, as painted in cycle lanes.
  */
-function bike(ctx: Ctx, x: number, y: number, angle: number, colour: string): void {
+function bike(ctx: Ctx, x: number, y: number, angle: number, colour: string, scale = 1): void {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle + Math.PI / 2);
+  ctx.scale(scale, scale);
   ctx.strokeStyle = colour;
-  ctx.lineWidth = 0.8;
+  ctx.lineWidth = scale > 1 ? 1.1 : 0.8;
   ctx.beginPath();
   ctx.arc(0, 4.5, 2.6, 0, Math.PI * 2);
   ctx.moveTo(2.6, -4.5);
@@ -265,15 +264,15 @@ function bike(ctx: Ctx, x: number, y: number, angle: number, colour: string): vo
 /**
  * Words painted on the road, one above the other, the first nearest the
  * driver coming up to them: each letter tall and thin, stretched along the
- * way (2.5 times), sized to fit across `across` px.
+ * way (2.5 times), sized to fit across `across` px (and no bigger than `biggest` px before stretching).
  */
-function words(ctx: Ctx, list: string[], x: number, y: number, angle: number, colour: string, across: number): void {
+function words(ctx: Ctx, list: string[], x: number, y: number, angle: number, colour: string, across: number, biggest = 8): void {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle + Math.PI / 2);
   const longest = Math.max(...list.map((w) => w.length));
   // Letters about 0.6 of their height wide; as big as fits, up to 1 m high before stretching.
-  const size = Math.min(8, (across * 0.85) / (longest * 0.62));
+  const size = Math.min(biggest, (across * 0.85) / (longest * 0.62));
   const stretch = 2.5;
   ctx.scale(1, stretch);
   ctx.font = `bold ${size.toFixed(2)}px sans-serif`;

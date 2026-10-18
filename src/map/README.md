@@ -102,11 +102,11 @@ the left side's traffic goes the way's way, the right side's against it).
   (the way `direction` says, or towards the nearer junction), and a triangle 7 m
   before them; **stop** (`highway=stop`): a solid line and STOP; a **mini-roundabout**
   (`highway=mini_roundabout`): a white circle 4 m across.
-- **Cycle boxes** (`cycleway=asl`): green, 4.5 m deep, behind a line across the lanes
-  coming in, with a bike in them.
-- **Bus stops** (`public_transport=stop_position`): a yellow box 22 m long along the
-  kerb on the side of the stop's sign or platform within 30 m (or the left, one-way),
-  BUS STOP in it.
+- **Cycle boxes** (`cycleway=asl`): terracotta red (as Bristol's are), 4.5 m deep,
+  behind a line across the lanes coming in, a big white bike filling them.
+- **Bus stops** (`public_transport=stop_position`): a bay 22 m long and 3 m wide along
+  the kerb, on the side of the stop's sign or platform within 30 m (or the left,
+  one-way), surfaced red with a dashed yellow edge, BUS STOP in big yellow letters.
 - **Tactile paving** (`tactile_paving=yes/partial`, on a crossing or a kerb within
   4 m of one): a 2.4 × 1.2 m slab of blister paving at each kerb, red at a crossing
   with lights, buff at the rest.
