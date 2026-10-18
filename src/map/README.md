@@ -145,7 +145,7 @@ ground):
   otherwise it's a new tree. Trees closer than their crowns are merged.
 
 **The hills.** The bare ground's height every 4 m (the average of the 16 one-metre
-readings round each point), gaps filled from their neighbours, smoothed twice,
+readings round each point), gaps filled from their neighbours, and smoothed twice.
 Stored as decimetres above the lowest point. (Bridges aren't in it: they're decks above it.)
 
 ## The files
