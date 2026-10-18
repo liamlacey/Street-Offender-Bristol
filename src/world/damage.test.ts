@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createCar } from '../car/CarPhysics';
-import { THINGS, WALLS, breaks, crumble, debris, fallen, fallenTree, gapFor, giveWay, impactSpeed, treeToughness } from './damage';
+import { THINGS, WALLS, breaks, crumble, debris, fallen, fallenTree, shards, gapFor, giveWay, impactSpeed, treeToughness } from './damage';
 
 /** A car at (0, 0) heading east at `speed` px/s. */
 const moving = (speed: number) => {
@@ -82,6 +82,13 @@ describe('what\'s left', () => {
     const [plank] = debris('plank', 1, 0, 0, 300, 0, () => 0.5);
     expect(leaves).toHaveLength(4);
     expect(leaves[0].invMass).toBeGreaterThan(plank.invMass);
+  });
+
+  it("leaves a fallen lamp's glass where its lamp hit the ground, and none from a bollard", () => {
+    const glass = shards('lamp', 0, 0, 300, 0, () => 0.5);
+    expect(glass.length).toBeGreaterThan(4);
+    for (const g of glass) expect(g.x).toBeGreaterThan(30);
+    expect(shards('bollard', 0, 0, 300, 0, () => 0.5)).toHaveLength(0);
   });
 
   it('lays a fallen lamp post along the way it was hit', () => {

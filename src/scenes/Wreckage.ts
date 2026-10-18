@@ -14,6 +14,7 @@ import {
   debris,
   fallen,
   fallenTree,
+  shards,
   gapFor,
   giveWay,
   impactSpeed,
@@ -130,6 +131,7 @@ export class Wreckage {
       this.effects.burst('plant', fall.crownX, fall.crownY, 30);
     } else if (post.thing !== 'fountain' && post.thing !== 'stump') {
       for (const d of fallen(post.thing, post.x, post.y, car.vx, car.vy, rand)) this.hooks.addDebris(d, level);
+      for (const d of shards(post.thing, post.x, post.y, car.vx, car.vy, rand)) this.hooks.addDebris(d, level);
       if (tough.material === 'electric') this.sparking.push({ x: post.x, y: post.y, until: this.scene.time.now / 1000 + SPARKING });
     }
     this.effects.burst(tough.material, post.x, post.y, tough.material === 'wood' ? 24 : 14);

@@ -266,6 +266,18 @@ export function createArt(scene: Phaser.Scene): void {
     ctx.stroke();
     circle(ctx, 6.6, 0.6, 0.7, '#417c31');
   });
+  // A shard of broken glass, catching the light.
+  canvasTexture(scene, TEX.debris('glass'), 3, 3, (ctx) => {
+    ctx.fillStyle = 'rgba(200, 228, 240, 0.9)';
+    ctx.beginPath();
+    ctx.moveTo(0.2, 2.6);
+    ctx.lineTo(1.6, 0.2);
+    ctx.lineTo(2.8, 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(1.3, 0.9, 0.6, 0.6);
+  });
   canvasTexture(scene, TEX.debris('rubble'), 6, 6, (ctx) => {
     ctx.fillStyle = '#8a7f70';
     ctx.beginPath();

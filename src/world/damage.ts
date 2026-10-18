@@ -108,7 +108,7 @@ export function gapFor(kind: WallKind, speed: number, weight = 1): number {
   return w.gap * Math.min(2, Math.max(1, (speed * weight) / w.strength));
 }
 
-export type DebrisKind = 'plank' | 'foliage' | 'twig' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head';
+export type DebrisKind = 'plank' | 'foliage' | 'twig' | 'glass' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head';
 
 /** A piece of what's broken, flying off: it ends up somewhere, in the way. */
 export interface Debris {
@@ -129,6 +129,7 @@ const PIECES: Record<DebrisKind, { r: number; length?: number; invMass: number }
   plank: { r: 1.6, length: 13, invMass: 14 },
   foliage: { r: 3, invMass: 30 },
   twig: { r: 1, length: 9, invMass: 30 },
+  glass: { r: 0.8, invMass: 40 },
   rubble: { r: 2.6, invMass: 9 },
   brick: { r: 2, invMass: 12 },
   rail: { r: 1.4, length: 18, invMass: 8 },
@@ -196,6 +197,22 @@ export function fallen(kind: Exclude<ThingKind, 'tree' | 'fountain' | 'stump'>, 
     case 'phone':
       return [lying('phonebox', 6, 0.25)];
   }
+}
+
+/** The glass that breaks when something goes over: how many shards, and how far along the way it fell they land (where its lamp, lenses or panes hit the ground), px. */
+const GLASS: Partial<Record<ThingKind, { count: number; at: number }>> = {
+  lamp: { count: 10, at: 42 },
+  signal: { count: 6, at: 24 },
+  beacon: { count: 6, at: 18 },
+  phone: { count: 14, at: 6 },
+};
+
+/** The broken glass a standing thing leaves when it goes over, hit going (vx, vy): its lamp's (or lenses', or panes') shards, where they hit the ground. */
+export function shards(kind: ThingKind, x: number, y: number, vx: number, vy: number, rand: () => number): Debris[] {
+  const glass = GLASS[kind];
+  if (!glass) return [];
+  const speed = Math.hypot(vx, vy) || 1;
+  return debris('glass', glass.count, x + (vx / speed) * glass.at, y + (vy / speed) * glass.at, vx * 0.25, vy * 0.25, rand, 14);
 }
 
 /**

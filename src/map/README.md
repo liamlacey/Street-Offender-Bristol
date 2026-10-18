@@ -164,10 +164,10 @@ bounces off.
 | Thing (from OSM) | Material | Strength | What happens |
 | --- | --- | --- | --- |
 | Tree | wood | 140 + 12 × height in m (180 to 420) | Splits at the foot and falls the way it was hit (and away from the side it was hit on): a stump, the trunk lying along the ground (solid), the crown at its end, leaves flying and clumps of them and broken branches strewn round it (more the bigger the tree); no shadow any more |
-| Street lamp, Belisha beacon, traffic light | metal with electrics | 150, 110, 170 | Bends over at the foot and lies the way it was hit (a heavy pole: shoved, not thrown); goes out (a traffic light's head lies loose) and sparks and fizzes for 5 s |
+| Street lamp, Belisha beacon, traffic light | metal with electrics | 150, 110, 170 | Bends over at the foot and lies the way it was hit (a heavy pole: shoved, not thrown); goes out (a traffic light's head lies loose), its glass smashed and strewn where its lamp (or lenses) hit the ground, and sparks and fizzes for 5 s |
 | Bollard | metal | 210 | Knocked flat, shoved along |
 | Post box | iron | 300 | Knocked off its foot, a heavy lump |
-| Phone box | glass | 170 | Goes over, glass everywhere |
+| Phone box | glass | 170 | Goes over, its panes smashed and strewn round it |
 | Bench | timber, in parts | 150 | Below: shoved. Above: smashed into planks, scattered the way the car was going |
 | Garden wall (`barrier=wall`, …) | stone | 200 | Crumbles: a gap 2 m wide (up to 4 m, the harder it's hit) in rubble and bricks; the rest stands |
 | Hedge | plant | 80 | Torn through (a 3 m gap, up to 6 m): leaves flying, and clumps of it and twigs strewn the way the car went |
