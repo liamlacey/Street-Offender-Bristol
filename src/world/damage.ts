@@ -3,7 +3,7 @@
  * strong it is (how fast a vehicle must be going into it, scaled by the
  * vehicle's weight), how much it slows the vehicle as it gives way, and what
  * it leaves behind. Everything except the buildings (and big structures like
- * fountains) gives way in the end: trees split and fall, lamp posts and traffic
+ * fountains and statues) gives way in the end: trees split and fall, lamp posts and traffic
  * lights bend over and spark, walls crumble, benches smash, hedges are torn
  * through, their leaves and twigs strewn about. What's left stays where it fell, in the way. Pure, so it's tested.
  */
@@ -14,9 +14,11 @@ import type { Segment } from '../physics/collisions';
 export type Material = 'wood' | 'electric' | 'metal' | 'iron' | 'glass' | 'stone' | 'plant' | 'timber' | 'plastic';
 
 /** Things that stand in one place until they're knocked down. */
-export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'postbox' | 'phone' | 'fountain' | 'stump';
+export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'postbox' | 'phone' | 'meter' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'stump';
+/** What stands and can't be knocked over: big stone fountains, statues on their plinths, and what's left of a tree. */
+export type Structure = 'tree' | 'fountain' | 'statue' | 'stump';
 /** Walls, by what OSM calls them. */
-export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing';
+export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing' | 'gate' | 'liftgate' | 'chain';
 
 export interface Toughness {
   material: Material;
@@ -33,8 +35,17 @@ export const THINGS: Record<Exclude<ThingKind, 'tree'>, Toughness> = {
   bollard: { material: 'metal', strength: 210, absorb: 0.35 },
   postbox: { material: 'iron', strength: 300, absorb: 0.45 },
   phone: { material: 'glass', strength: 170, absorb: 0.35 },
-  // A big stone fountain: a structure, not something to knock over.
+  // A pay-and-display machine: a metal box of electrics on a post, with a little screen.
+  meter: { material: 'electric', strength: 160, absorb: 0.25 },
+  // A street clock on its pole.
+  clock: { material: 'electric', strength: 170, absorb: 0.3 },
+  // A life ring on its post by the water.
+  lifering: { material: 'timber', strength: 110, absorb: 0.15 },
+  // A row of bike stands: steel hoops set in the ground.
+  bikes: { material: 'metal', strength: 140, absorb: 0.2 },
+  // A big stone fountain, and a statue on its plinth: structures, not things to knock over.
   fountain: { material: 'stone', strength: Infinity, absorb: 0 },
+  statue: { material: 'stone', strength: Infinity, absorb: 0 },
   // What's left of a tree: it's not going anywhere.
   stump: { material: 'wood', strength: Infinity, absorb: 0 },
 };
@@ -44,6 +55,10 @@ export const WALLS: Record<WallKind, Toughness & { /** How much of it a hit at i
   hedge: { material: 'plant', strength: 80, absorb: 0.25, gap: 3 * 8 },
   fence: { material: 'timber', strength: 70, absorb: 0.15, gap: 2.5 * 8 },
   railing: { material: 'metal', strength: 130, absorb: 0.2, gap: 2.5 * 8 },
+  // Gates and barriers across a way give way all at once (their gap's wider than they are).
+  gate: { material: 'metal', strength: 150, absorb: 0.25, gap: 20 * 8 },
+  liftgate: { material: 'plastic', strength: 60, absorb: 0.05, gap: 20 * 8 },
+  chain: { material: 'metal', strength: 50, absorb: 0.05, gap: 20 * 8 },
 };
 
 /** A bench smashes if hit this hard; slower, it's just shoved. */
@@ -112,7 +127,7 @@ export function gapFor(kind: WallKind, speed: number, weight = 1): number {
   return w.gap * Math.min(2, Math.max(1, (speed * weight) / w.strength));
 }
 
-export type DebrisKind = 'log' | 'billet' | 'splinter' | 'plank' | 'foliage' | 'twig' | 'glass' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head';
+export type DebrisKind = 'meter' | 'clockface' | 'post' | 'ring' | 'plastic' | 'arm' | 'log' | 'billet' | 'splinter' | 'plank' | 'foliage' | 'twig' | 'glass' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head';
 
 /** A piece of what's broken, flying off: it ends up somewhere, in the way. */
 export interface Debris {
@@ -130,6 +145,12 @@ export interface Debris {
 }
 
 const PIECES: Record<DebrisKind, { r: number; length?: number; invMass: number }> = {
+  meter: { r: 3, length: 8, invMass: 4 },
+  clockface: { r: 3, invMass: 8 },
+  post: { r: 1.6, length: 12, invMass: 10 },
+  ring: { r: 2.5, invMass: 20 },
+  plastic: { r: 1.2, invMass: 30 },
+  arm: { r: 1.2, length: 20, invMass: 12 },
   log: { r: 3, length: 22, invMass: 3 },
   billet: { r: 2.6, length: 10, invMass: 7 },
   splinter: { r: 0.8, length: 6, invMass: 30 },
@@ -175,7 +196,7 @@ export function debris(kind: DebrisKind, count: number, x: number, y: number, vx
 }
 
 /** What a standing thing leaves when it goes over, hit going (vx, vy): it falls the way it was hit. */
-export function fallen(kind: Exclude<ThingKind, 'tree' | 'fountain' | 'stump'>, x: number, y: number, vx: number, vy: number, rand: () => number): Debris[] {
+export function fallen(kind: Exclude<ThingKind, Structure>, x: number, y: number, vx: number, vy: number, rand: () => number): Debris[] {
   const speed = Math.hypot(vx, vy) || 1;
   const ux = vx / speed;
   const uy = vy / speed;
@@ -203,6 +224,14 @@ export function fallen(kind: Exclude<ThingKind, 'tree' | 'fountain' | 'stump'>, 
       return [lying('postbox', 4, 0.3)];
     case 'phone':
       return [lying('phonebox', 6, 0.25)];
+    case 'meter':
+      return [lying('meter', 5, 0.3)];
+    case 'clock':
+      return [lying('shortpole', 11, 0.2), lying('clockface', 26, 0.3)];
+    case 'lifering':
+      return [lying('post', 6, 0.2), lying('ring', 12, 0.6)];
+    case 'bikes':
+      return [lying('rail', 6, 0.3), lying('rail', 2, 0.4), lying('rail', 9, 0.35)];
   }
 }
 
@@ -212,9 +241,15 @@ export function fallen(kind: Exclude<ThingKind, 'tree' | 'fountain' | 'stump'>, 
  * ground) and smaller, the smaller the easier, down to bits too small to break.
  * What each piece is, how strong (as `Toughness`), and what it breaks into.
  */
-export const BREAKUP: Partial<Record<DebrisKind | 'bench', Toughness & { into: [DebrisKind, number][] }>> = {
-  // A bench, standing loose: smashed to planks.
+export const BREAKUP: Partial<Record<DebrisKind | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block', Toughness & { into: [DebrisKind, number][] }>> = {
+  // A bench and a picnic table, standing loose: smashed to planks.
   bench: { material: 'timber', strength: BENCH_SMASH, absorb: 0.12, into: [['plank', 5]] },
+  picnic: { material: 'timber', strength: BENCH_SMASH, absorb: 0.15, into: [['plank', 7]] },
+  // A grit bin: a plastic box, split open (its grit everywhere).
+  gritbin: { material: 'plastic', strength: 150, absorb: 0.15, into: [['plastic', 5]] },
+  // A stone planter and a concrete block: heavy, shoved more than broken, but hit hard enough they crack up.
+  planter: { material: 'stone', strength: 230, absorb: 0.3, into: [['rubble', 4], ['foliage', 4]] },
+  block: { material: 'stone', strength: 300, absorb: 0.4, into: [['rubble', 7]] },
   // A log off a fallen trunk splits in two, and the halves into splinters.
   log: { material: 'wood', strength: 85, absorb: 0.2, into: [['billet', 2], ['splinter', 2]] },
   billet: { material: 'wood', strength: 65, absorb: 0.08, into: [['splinter', 4]] },
@@ -273,13 +308,17 @@ export function toppleTime(heightMetres: number): number {
 }
 
 /** How the things that stand go over: how tall they are, px, how far from their foot their top ends up lying, px, and whether there's a pole between. */
-export const TOPPLE: Record<Exclude<ThingKind, 'tree' | 'fountain' | 'stump'>, { height: number; reach: number; pole: boolean }> = {
+export const TOPPLE: Record<Exclude<ThingKind, Structure>, { height: number; reach: number; pole: boolean }> = {
   lamp: { height: 5.5 * 8, reach: 42, pole: true },
   signal: { height: 3.5 * 8, reach: 24, pole: true },
   beacon: { height: 2.6 * 8, reach: 18, pole: true },
   bollard: { height: 1 * 8, reach: 4, pole: false },
   postbox: { height: 1.6 * 8, reach: 4, pole: false },
   phone: { height: 2.5 * 8, reach: 6, pole: false },
+  meter: { height: 1.6 * 8, reach: 8, pole: false },
+  clock: { height: 3.5 * 8, reach: 26, pole: true },
+  lifering: { height: 1.5 * 8, reach: 10, pole: true },
+  bikes: { height: 0.8 * 8, reach: 4, pole: false },
 };
 
 /** The glass that breaks when something goes over: how many shards, and how far along the way it fell they land (where its lamp, lenses or panes hit the ground), px. */
@@ -288,6 +327,8 @@ const GLASS: Partial<Record<ThingKind, { count: number; at: number }>> = {
   signal: { count: 6, at: 24 },
   beacon: { count: 6, at: 18 },
   phone: { count: 14, at: 6 },
+  meter: { count: 4, at: 8 },
+  clock: { count: 6, at: 26 },
 };
 
 /** The broken glass a standing thing leaves when it goes over, hit going (vx, vy): its lamp's (or lenses', or panes') shards, where they hit the ground. */

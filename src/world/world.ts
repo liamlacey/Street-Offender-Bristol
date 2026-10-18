@@ -20,6 +20,9 @@ const LINE_THICKNESS: Partial<Record<LineKind, number>> = {
   hedge: 5,
   fence: 1,
   railing: 1,
+  gate: 1,
+  liftgate: 0.8,
+  chain: 0.5,
 };
 
 /** How big each fixed post is, px radius; anything not listed here can be knocked about or is just painted on. */
@@ -29,12 +32,22 @@ const POST_RADIUS: Partial<Record<PropKind, number>> = {
   postbox: 4,
   phone: 6,
   fountain: 14,
+  meter: 2.5,
+  clock: 3,
+  lifering: 2,
+  bikes: 4,
+  statue: 10,
 };
 
 /** Street furniture that can be knocked about: how big, and how heavy (1 / mass, the car's being 1). */
 const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: number }>> = {
   bench: { r: 4, length: 15, invMass: 5 },
   bin: { r: 4, invMass: 12 },
+  picnic: { r: 6, length: 14, invMass: 3 },
+  gritbin: { r: 4, invMass: 3 },
+  // Heavy: shoved, not sent flying.
+  planter: { r: 6, invMass: 0.8 },
+  block: { r: 5, invMass: 0.4 },
 };
 
 /** A tree trunk's radius, px. */

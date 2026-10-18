@@ -203,6 +203,14 @@ bounces off.
 | Bollard | metal | 210 | Knocked flat, shoved along |
 | Post box | iron | 300 | Knocked off its foot, a heavy lump |
 | Phone box | glass | 170 | Goes over, its panes smashed and strewn round it |
+| Parking ticket machine (`vending=parking_tickets`) | metal with electrics | 160 | Topples, its screen smashed, sparks |
+| Street clock (`amenity=clock`, not on a building or a sundial) | metal with electrics | 170 | Topples on its pole; its face comes off, its glass smashed |
+| Life ring on its post (`emergency=life_ring`) | timber | 110 | The post snaps, the ring's thrown off |
+| Bike stands (`amenity=bicycle_parking`) | metal | 140 | Bent over, flat |
+| Gate across a road or path (`barrier=gate`, `swing_gate`) | metal | 150 | Gives way all at once, into bent bars |
+| Car park barrier (`barrier=lift_gate`) | plastic | 60 | Its arm snaps off, in pieces |
+| Chain across a way (`barrier=chain`) | metal | 50 | Gives way |
+| Statue or sculpture (`artwork_type=statue/sculpture`, `historic=monument`, `memorial=statue`) | stone | never | On its plinth: a structure, like the fountains |
 | Bench | timber, in parts | 150 | Below: shoved. Above: smashed into planks, scattered the way the car was going |
 | Garden wall (`barrier=wall`, …) | stone | 200 | Crumbles: a gap 2 m wide (up to 4 m, the harder it's hit) in rubble and bricks; the rest stands |
 | Hedge | plant | 80 | Torn through (a 3 m gap, up to 6 m): leaves flying, and clumps of it and twigs strewn the way the car went |
@@ -223,11 +231,21 @@ it's broken off (or one hit would break it right down at once).
 | Log | 85 | Two short logs and splinters |
 | Short log | 65 | Splinters |
 | Bench (loose) | 150 | Planks |
+| Picnic table (loose) | 150 | Planks |
+| Grit bin (loose) | 150 | Bits of yellow plastic (and its grit) |
+| Planter (loose, heavy) | 230 | Rubble and its plants |
+| Concrete block (loose, very heavy: shoved, hardly moved) | 300 | Rubble |
 | Plank | 110 | Splinters |
 | Fallen lamp post | 120 | Two short poles |
 | Short pole | 100 | Bent bits |
 | Traffic light's head | 80 | Glass and a bent bracket |
 | Fallen phone box | 120 | Glass and bent frame |
+
+Gates and barriers stand across the road or path they're on (OSM maps them as a
+point on it), as wide as it is; one on a wall or fence is just part of it. What's
+indoors, on a roof or gone (`indoor=yes`, `location=indoor/roof`, `disused=yes`:
+the Colston statue's in M Shed) isn't put out. Fire hydrants are left out: all of
+Bristol's here are underground (`fire_hydrant:type=underground`).
 
 Rubble, bricks, glass, bollards, post boxes, clumps of leaves, twigs and
 splinters just get kicked about.

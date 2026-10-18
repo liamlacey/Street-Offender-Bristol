@@ -119,6 +119,25 @@ describe('what\'s left', () => {
     expect(BREAKUP.glass).toBeUndefined();
   });
 
+  it('topples the new street furniture, with glass from what has a screen or a face, and leaves statues standing', () => {
+    expect(fallen('meter', 0, 0, 300, 0, () => 0.5).map((d) => d.kind)).toEqual(['meter']);
+    expect(fallen('lifering', 0, 0, 300, 0, () => 0.5).map((d) => d.kind)).toEqual(['post', 'ring']);
+    expect(shards('meter', 0, 0, 300, 0, () => 0.5).length).toBeGreaterThan(0);
+    expect(shards('bikes', 0, 0, 300, 0, () => 0.5)).toHaveLength(0);
+    expect(breaks(STANDING.statue, 1e6, 10)).toBe(false);
+  });
+
+  it('breaks a gate or a car park barrier all at once, the barrier far more easily', () => {
+    const { left } = crumble({ ax: 0, ay: 0, bx: 36, by: 0, r: 1 }, 18, 0, gapFor('gate', 200));
+    expect(left).toHaveLength(0);
+    expect(WALLS.liftgate.strength).toBeLessThan(WALLS.gate.strength);
+  });
+
+  it('shoves a concrete block more than it breaks it', () => {
+    expect(BREAKUP.block!.strength).toBeGreaterThan(BREAKUP.gritbin!.strength);
+    expect(BREAKUP.block!.strength).toBeGreaterThan(BREAKUP.picnic!.strength);
+  });
+
   it('topples tall things more slowly than short ones', () => {
     expect(toppleTime(1)).toBeLessThan(toppleTime(5.5));
     expect(toppleTime(5.5)).toBeLessThan(toppleTime(9));

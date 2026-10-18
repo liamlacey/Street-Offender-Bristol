@@ -246,6 +246,36 @@ export function createArt(scene: Phaser.Scene): void {
     ctx.fillStyle = '#8f6038';
     ctx.fillRect(0.5, 0.6, 12, 1);
   });
+  // A pay-and-display machine on its side, a clock's face, a life ring's post and the ring, bits of a grit bin, and a car park barrier's arm.
+  canvasTexture(scene, TEX.debris('meter'), 8, 6, (ctx) => {
+    roundRect(ctx, 0, 0, 8, 6, 1, '#5d636a');
+    roundRect(ctx, 5, 1, 2.4, 4, 0.4, '#2a4b66');
+  });
+  canvasTexture(scene, TEX.debris('clockface'), 6, 6, (ctx) => {
+    circle(ctx, 3, 3, 2.9, '#1f2a24');
+    circle(ctx, 3, 3, 2.1, '#d9d4c2');
+  });
+  canvasTexture(scene, TEX.debris('post'), 12, 3, (ctx) => roundRect(ctx, 0, 0.3, 12, 2.4, 0.6, '#3b2a1c'));
+  canvasTexture(scene, TEX.debris('ring'), 5, 5, (ctx) => {
+    circle(ctx, 2.5, 2.5, 2.4, '#e8601c');
+    ctx.globalCompositeOperation = 'destination-out';
+    circle(ctx, 2.5, 2.5, 1.1, '#000');
+    ctx.globalCompositeOperation = 'source-over';
+  });
+  canvasTexture(scene, TEX.debris('plastic'), 3, 2, (ctx) => {
+    ctx.fillStyle = '#f2c21a';
+    ctx.beginPath();
+    ctx.moveTo(0, 2);
+    ctx.lineTo(1.2, 0);
+    ctx.lineTo(3, 1.4);
+    ctx.closePath();
+    ctx.fill();
+  });
+  canvasTexture(scene, TEX.debris('arm'), 20, 2, (ctx) => {
+    roundRect(ctx, 0, 0, 20, 2, 0.8, '#eeeeee');
+    ctx.fillStyle = '#d8312a';
+    for (let x = 2; x < 20; x += 5) ctx.fillRect(x, 0, 2.5, 2);
+  });
   // A log off a fallen trunk, half of one, and a splinter.
   canvasTexture(scene, TEX.debris('log'), 22, 7, (ctx) => {
     roundRect(ctx, 0, 0.5, 22, 6, 2.5, '#5a3d24');
@@ -372,6 +402,68 @@ export function createArt(scene: Phaser.Scene): void {
     ctx.fillRect(0, 1.5, 1.5, 5);
   });
 
+  // A pay-and-display machine: a grey box with its little screen.
+  canvasTexture(scene, TEX.prop('meter'), 6, 5, (ctx) => {
+    roundRect(ctx, 0, 0, 6, 5, 1, '#5d636a');
+    roundRect(ctx, 0.8, 0.8, 4.4, 2, 0.4, '#3a8fd0');
+    ctx.fillStyle = '#d8dde2';
+    ctx.fillRect(1.2, 3.4, 3.6, 0.8);
+  });
+  // A street clock on its pole: the face from above, on its dark case.
+  canvasTexture(scene, TEX.prop('clock'), 10, 10, (ctx) => {
+    circle(ctx, 5, 5, 4.6, '#1f2a24');
+    circle(ctx, 5, 5, 3.6, '#f2eedf');
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(5, 5);
+    ctx.lineTo(5, 2.4);
+    ctx.moveTo(5, 5);
+    ctx.lineTo(6.8, 5.6);
+    ctx.stroke();
+  });
+  // A life ring, orange and white, on its post.
+  canvasTexture(scene, TEX.prop('lifering'), 8, 8, (ctx) => {
+    circle(ctx, 4, 4, 3.6, '#e8601c');
+    circle(ctx, 4, 4, 2, '#3b2a1c');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(3.4, 0.4, 1.2, 1.6);
+    ctx.fillRect(3.4, 6, 1.2, 1.6);
+  });
+  // A statue on its plinth: the stone plinth, and the bronze figure, lit from the top left.
+  canvasTexture(scene, TEX.prop('statue'), 22, 22, (ctx) => {
+    roundRect(ctx, 0.5, 0.5, 21, 21, 1.5, '#9c9488');
+    roundRect(ctx, 2.5, 2.5, 17, 17, 1, '#bdb4a2');
+    circle(ctx, 11, 11, 5.5, '#3f4a3c');
+    circle(ctx, 9.8, 9.6, 3.2, '#5b6b55');
+    circle(ctx, 9, 8.8, 1.2, '#7f9077');
+  });
+  // A concrete block, and a stone planter with its shrubs.
+  canvasTexture(scene, TEX.prop('block'), 10, 10, (ctx) => {
+    roundRect(ctx, 0, 0, 10, 10, 1, '#8e8b84');
+    roundRect(ctx, 1, 1, 8, 8, 0.8, '#b4b0a7');
+  });
+  canvasTexture(scene, TEX.prop('planter'), 12, 12, (ctx) => {
+    roundRect(ctx, 0, 0, 12, 12, 1.2, '#8a8174');
+    roundRect(ctx, 1.4, 1.4, 9.2, 9.2, 1, '#4a3a2a');
+    for (const [x, y, r] of [[4, 4, 2.4], [8, 5, 2.2], [5.5, 8, 2.4], [8.4, 8.6, 1.6]]) circle(ctx, x, y, r, '#3f7a2e');
+    circle(ctx, 3.6, 3.4, 1, '#5f9a45');
+  });
+  // A yellow grit bin.
+  canvasTexture(scene, TEX.prop('gritbin'), 8, 7, (ctx) => {
+    roundRect(ctx, 0, 0, 8, 7, 1.2, '#c99a10');
+    roundRect(ctx, 0.6, 0.6, 6.8, 4, 1, '#f2c21a');
+    ctx.fillStyle = '#8a6a0a';
+    ctx.fillRect(0.6, 4.8, 6.8, 0.6);
+  });
+  // A picnic table, with its benches either side.
+  canvasTexture(scene, TEX.prop('picnic'), 14, 12, (ctx) => {
+    roundRect(ctx, 0.5, 0, 13, 2.6, 0.6, '#5a3a22');
+    roundRect(ctx, 0.5, 9.4, 13, 2.6, 0.6, '#5a3a22');
+    roundRect(ctx, 0, 3.4, 14, 5.2, 0.8, '#6b4527');
+    ctx.fillStyle = '#8f6038';
+    for (const y of [3.9, 5.5, 7.1]) ctx.fillRect(0.5, y, 13, 1);
+  });
   canvasTexture(scene, TEX.prop('bikes'), 16, 8, (ctx) => {
     ctx.strokeStyle = '#7a7f86';
     ctx.lineWidth = 1;

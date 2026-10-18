@@ -45,11 +45,20 @@ describe('buildWorld', () => {
     expect(world.walls[0].filter((w) => !w.kind).length).toBeGreaterThan(1000);
   });
 
-  it('makes benches and bins loose, and lamp posts and trees fixed', () => {
-    expect(world.loose.every((l) => l.kind === 'bench' || l.kind === 'bin')).toBe(true);
+  it('makes benches, bins, picnic tables, grit bins, planters and blocks loose, and lamp posts and trees fixed', () => {
+    expect(world.loose.every((l) => ['bench', 'bin', 'picnic', 'gritbin', 'planter', 'block'].includes(l.kind))).toBe(true);
+    // The heavy ones are hard to shift.
+    expect(world.loose.find((l) => l.kind === 'block')!.invMass).toBeLessThan(1);
     expect(world.loose.length).toBeGreaterThan(100);
     expect(world.posts[0].length).toBeGreaterThan(map.trees.length / 4);
     expect(world.fixed.some((p) => p.kind === 'signals')).toBe(false);
+    // Parking machines, bike stands and statues stand in the way.
+    for (const thing of ['meter', 'bikes', 'statue']) expect(world.posts[0].some((p) => p.thing === thing)).toBe(true);
+  });
+
+  it('puts the gates and car park barriers across their ways, as walls that break', () => {
+    const gates = world.walls[0].filter((w) => w.kind === 'gate' || w.kind === 'liftgate');
+    expect(gates.length).toBeGreaterThan(30);
   });
 
   it('indexes each tree in the chunk it stands in', () => {

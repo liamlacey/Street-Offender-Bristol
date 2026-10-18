@@ -98,7 +98,7 @@ export interface Road {
 /** How far apart a bridge deck's measured heights are, px (2 m). */
 export const DECK_STEP = 2 * PX_PER_METRE;
 
-export type LineKind = 'wall' | 'fence' | 'hedge' | 'rail' | 'quay' | 'railing' | 'kerb';
+export type LineKind = 'wall' | 'fence' | 'hedge' | 'rail' | 'quay' | 'railing' | 'kerb' | 'gate' | 'liftgate' | 'chain';
 
 export interface Line {
   kind: LineKind;
@@ -139,7 +139,15 @@ export type PropKind =
   | 'signals'
   | 'busstop'
   | 'fountain'
-  | 'bikes';
+  | 'bikes'
+  | 'meter'
+  | 'clock'
+  | 'lifering'
+  | 'statue'
+  | 'block'
+  | 'planter'
+  | 'gritbin'
+  | 'picnic';
 
 export interface Prop {
   kind: PropKind;
@@ -655,6 +663,14 @@ const LINE_KINDS: Record<string, LineKind> = {
   kerb: 'kerb',
 };
 
+/** Gates and barriers across roads and paths, as lines across them. */
+const GATES: Record<string, LineKind> = {
+  gate: 'gate',
+  swing_gate: 'gate',
+  lift_gate: 'liftgate',
+  chain: 'chain',
+};
+
 /** A kerb that's been dropped to the road's level (`kerb=lowered`, `flush` or `no`): nothing to mount. */
 const DROPPED_KERB = new Set(['lowered', 'flush', 'no']);
 
@@ -773,8 +789,17 @@ function nearParallel(w: Pts, x: number, y: number, ux: number, uy: number): boo
   return false;
 }
 
-/** Props from tagged nodes. */
+/** Props from tagged nodes (those indoors, up on a roof or gone left out). */
 export function propKind(tags: Tags): PropKind | null {
+  if (tags.indoor === 'yes' || tags.disused === 'yes' || tags.location === 'indoor' || tags.location === 'roof') return null;
+  if (tags.amenity === 'vending_machine' && tags.vending === 'parking_tickets') return 'meter';
+  if (tags.amenity === 'clock' && tags.display !== 'sundial' && tags.support !== 'wall_mounted') return 'clock';
+  if (tags.emergency === 'life_ring') return 'lifering';
+  if ((tags.tourism === 'artwork' && (tags.artwork_type === 'statue' || tags.artwork_type === 'sculpture')) || tags.historic === 'monument' || tags.memorial === 'statue' || tags.memorial === 'sculpture') return 'statue';
+  if (tags.barrier === 'block') return 'block';
+  if (tags.barrier === 'planter' || tags.man_made === 'planter') return 'planter';
+  if (tags.amenity === 'grit_bin') return 'gritbin';
+  if (tags.leisure === 'picnic_table') return 'picnic';
   if (tags.highway === 'street_lamp') return 'lamp';
   if (tags.barrier === 'bollard') return 'bollard';
   if (tags.amenity === 'bench') return 'bench';
@@ -1058,6 +1083,30 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     return arms;
   };
   const dropped: number[] = [];
+  // Which nodes are on buildings' outlines, and each road's ways through each node, for gates.
+  const onBuilding = new Set<number>();
+  for (const way of data.ways.values()) if ((way.tags.building && way.tags.building !== 'no') || way.tags['building:part']) for (const id of way.nodes) onBuilding.add(id);
+  const waysOfNode = new Map<number, { way: OsmWay; index: number; kind: RoadKind }[]>();
+  for (const { way, kind } of roadWays) {
+    way.nodes.forEach((id, index) => {
+      const list = waysOfNode.get(id);
+      if (list) list.push({ way, index, kind });
+      else waysOfNode.set(id, [{ way, index, kind }]);
+    });
+  }
+  /** A line across the way through a node, as wide as the way: where a gate or barrier is. */
+  const gateAcross = (id: number, x: number, y: number): Pts | null => {
+    const on = waysOfNode.get(id)?.[0];
+    if (!on) return null;
+    const a = xy(on.way.nodes[Math.max(0, on.index - 1)]);
+    const b = xy(on.way.nodes[Math.min(on.way.nodes.length - 1, on.index + 1)]);
+    if (!a || !b) return null;
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (!len) return null;
+    const half = Math.max(1.5 * PX_PER_METRE, (roadWidth(on.kind, on.way.tags) * PX_PER_METRE) / 2);
+    const [nx, ny] = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
+    return [x - nx * half, y - ny * half, x + nx * half, y + ny * half];
+  };
   for (const node of data.nodes.values()) {
     const t = node.tags;
     const x = proj.x(node.lon);
@@ -1101,7 +1150,16 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       if (arms.length) lightPoints.push({ x, y, crossing: t.highway === 'crossing' || t.crossing === 'traffic_signals', arms });
     }
     if (t.highway === 'crossing' || t.highway === 'traffic_signals') continue;
+    const gate = GATES[t.barrier];
+    if (gate) {
+      // Across the way it's on, as wide as the way (a gate in a wall's just part of the wall).
+      const across = gateAcross(node.id, x, y);
+      if (across) lines.push({ kind: gate, pts: roundPts(across) });
+      continue;
+    }
     const prop = propKind(t);
+    // A clock or a statue on a building's wall is part of the building.
+    if (prop && (prop === 'clock' || prop === 'statue') && onBuilding.has(node.id)) continue;
     if (prop) props.push({ kind: prop, x: round(x), y: round(y) });
   }
 
