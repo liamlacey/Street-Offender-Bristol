@@ -12,7 +12,7 @@ import {
   stepCar,
 } from '../car/CarPhysics';
 import mapData from '../map/bristol.json';
-import { type GameMap, VEHICLE_ROADS } from '../map/osm';
+import { type GameMap, type Road, VEHICLE_ROADS } from '../map/osm';
 import {
   CircleGrid,
   type ContactPoint,
@@ -25,6 +25,8 @@ import {
   stepBody,
 } from '../physics/collisions';
 import { Buildings } from '../world/Buildings';
+import { DeckLayer } from '../world/DeckLayer';
+import { Decks } from '../world/decks';
 import { GroundLayer, paintSurfaces } from '../world/GroundLayer';
 import { Perspective } from '../world/perspective';
 import { Terrain } from '../world/terrain';
@@ -44,8 +46,13 @@ const DEPTH = {
   ground: 0,
   skids: 1,
   props: 2,
+  /** A bridge's deck, with the car on it. */
+  deckBelow: 2.5,
   carShadow: 3,
   car: 4,
+  /** A bridge's deck, with the car below it, and what stands on the decks. */
+  deckAbove: 4.5,
+  onDeck: 4.6,
   effects: 5,
   trees: 6,
   buildings: 7,
@@ -73,8 +80,13 @@ export class GameScene extends Phaser.Scene {
   private readonly perspective = new Perspective();
   /** The street furniture that never moves, and the height of the ground under each, px. */
   private props: { x: number; y: number; z: number; image: Phaser.GameObjects.Image }[] = [];
-  private walls!: SegmentGrid;
-  private posts!: CircleGrid;
+  /** What you hit on each level: the ground's, and the bridges' decks'. */
+  private walls!: [SegmentGrid, SegmentGrid];
+  private posts!: [CircleGrid, CircleGrid];
+  private decks!: Decks;
+  private deckLayer!: DeckLayer;
+  /** Which level the car's on: 0 the ground, 1 a bridge's deck. */
+  private level = 0;
   private car!: CarState;
   private carSprite!: Phaser.GameObjects.Image;
   private carShadow!: Phaser.GameObjects.Image;
@@ -114,13 +126,15 @@ export class GameScene extends Phaser.Scene {
     this.world = buildWorld(map);
     this.surfaces = paintSurfaces(this.world);
     createArt(this);
-    this.walls = new SegmentGrid(this.world.walls);
-    this.posts = new CircleGrid(this.world.posts);
+    this.walls = [new SegmentGrid(this.world.walls[0]), new SegmentGrid(this.world.walls[1])];
+    this.posts = [new CircleGrid(this.world.posts[0]), new CircleGrid(this.world.posts[1])];
     this.terrain = new Terrain(map.terrain, map.pxPerMetre);
     this.ground = new GroundLayer(this, this.world, this.terrain, DEPTH.ground);
     this.skids = new SkidMarks(this, this.terrain, DEPTH.skids);
     this.effects = new CarEffects(this, this.skids, DEPTH.effects);
     this.buildings = new Buildings(this, this.world, this.terrain, DEPTH.buildings);
+    this.decks = new Decks(map.roads, (x, y) => this.groundAt(x, y));
+    this.deckLayer = new DeckLayer(this, this.decks);
     this.addProps();
     this.addTrees();
     this.addLights();
@@ -179,11 +193,18 @@ export class GameScene extends Phaser.Scene {
   /** Lamp posts, bollards, benches, bins and the rest. */
   private addProps(): void {
     for (const p of this.world.fixed) {
-      const image = this.add.image(p.x, p.y, TEX.prop(p.kind)).setScale(1 / ART_SCALE).setDepth(DEPTH.props).setVisible(false);
-      this.props.push({ x: p.x, y: p.y, z: this.groundAt(p.x, p.y), image });
+      // Those on a bridge stand on its deck, and are drawn over it.
+      const deck = p.level === 1 ? this.decks.over(p.x, p.y) : null;
+      const z = deck ? this.decks.height(deck.deck, deck.along) : this.groundAt(p.x, p.y);
+      const image = this.add.image(p.x, p.y, TEX.prop(p.kind)).setScale(1 / ART_SCALE).setDepth(deck ? DEPTH.onDeck : DEPTH.props).setVisible(false);
+      this.props.push({ x: p.x, y: p.y, z, image });
     }
     this.world.loose.forEach((body, i) => {
-      const image = this.add.image(body.x, body.y, TEX.prop(body.kind)).setScale(1 / ART_SCALE).setRotation(body.angle).setDepth(DEPTH.props);
+      const image = this.add
+        .image(body.x, body.y, TEX.prop(body.kind))
+        .setScale(1 / ART_SCALE)
+        .setRotation(body.angle)
+        .setDepth(body.level === 1 ? DEPTH.onDeck : DEPTH.props);
       this.loose.push({ body, image });
       const key = chunkKey(Math.floor(body.x / CHUNK), Math.floor(body.y / CHUNK));
       const list = this.looseByChunk.get(key);
@@ -258,14 +279,17 @@ export class GameScene extends Phaser.Scene {
     this.updateSinking(dt);
     this.updateLoose();
     this.drawCar();
-    if (this.sinking < 0) this.effects.update(this.car, this.input_, SURFACE_KIND[this.surface], dt);
+    // No tyre marks on the bridges (they'd be laid on the ground below).
+    if (this.sinking < 0 && this.level === 0) this.effects.update(this.car, this.input_, SURFACE_KIND[this.surface], dt);
     this.skids.flush();
     this.updateCamera(dt);
     this.updatePerspective();
     const view = this.cameras.main.worldView;
     this.ground.update(view, this.perspective);
     this.skids.update(view, this.perspective);
-    this.buildings.update(view, this.perspective);
+    // A bridge is drawn over the car when it's underneath, and under it when it's on top.
+    this.deckLayer.update(view, this.perspective, this.level === 1 ? DEPTH.deckBelow : DEPTH.deckAbove);
+    this.buildings.update(view, this.perspective, this.car.x, this.car.y);
     this.updateTrees(view);
     this.updateProps(view);
     this.updateLights(view);
@@ -310,16 +334,26 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const before = this.surface;
-    this.surface = this.surfaces.at(car.x, car.y);
-    const [sx, sy] = this.terrain.slope(car.x, car.y);
+    // On a bridge, its deck's surface and slope; otherwise the ground's.
+    const on = this.level === 1 ? this.decks.over(car.x, car.y) : null;
+    this.surface = on ? deckSurface(on.deck.road) : this.surfaces.at(car.x, car.y);
+    const [sx, sy] = on ? this.decks.slope(on.deck, on.along) : this.terrain.slope(car.x, car.y);
     stepCar(car, this.input_, dt, SURFACE_GRIP[SURFACE_KIND[this.surface]], DEFAULT_TUNING, { x: sx, y: sy });
 
-    const wall = collideCarWithWalls(car, this.walls, undefined, this.contact);
+    const wall = collideCarWithWalls(car, this.walls[this.level], undefined, this.contact);
     if (wall > 0) this.hit(wall);
-    const post = collideCarWithStatic(car, this.posts, undefined, this.contact);
+    const post = collideCarWithStatic(car, this.posts[this.level], undefined, this.contact);
     if (post > 0) this.hit(post);
+    // Up onto a bridge at its end, or down off it.
+    const level = this.decks.levelAt(this.level, car.x, car.y);
+    if (level !== this.level) {
+      this.level = level;
+      // So no tyre mark joins one level to the other.
+      this.effects.reset();
+    }
     for (const i of this.nearbyLoose(car.x, car.y)) {
       const { body } = this.loose[i];
+      if (body.level !== this.level) continue;
       const knock = collideCarWithBody(car, body);
       if (knock > 0) {
         body.moved = true;
@@ -327,7 +361,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    if (this.surface === Surface.Deep) {
+    if (this.surface === Surface.Deep && this.level === 0) {
       this.sinking = 0;
       this.audio?.splash(Math.hypot(car.vx, car.vy) + 150);
       this.audio?.sink();
@@ -365,8 +399,8 @@ export class GameScene extends Phaser.Scene {
     for (const { body } of this.loose) {
       if (!body.moved) continue;
       stepBody(body, dt, 3);
-      collideBodyWithStatic(body, this.posts);
-      for (const s of this.walls.near(body.x, body.y, body.r + 8)) {
+      collideBodyWithStatic(body, this.posts[body.level]);
+      for (const s of this.walls[body.level].near(body.x, body.y, body.r + 8)) {
         const [px, py] = nearestOnSegment(body.x, body.y, s);
         const dx = body.x - px;
         const dy = body.y - py;
@@ -410,7 +444,7 @@ export class GameScene extends Phaser.Scene {
         this.safeTimer = 0.4;
         const { x, y, heading } = this.car;
         const clear = [0, 1, 2, 3, 4, 5, 6, 7].every((k) => this.surfaces.at(x + Math.cos(k * 0.785) * 48, y + Math.sin(k * 0.785) * 48) !== Surface.Deep);
-        if (this.surface === Surface.Road && clear) this.safe = { x, y, heading };
+        if (this.surface === Surface.Road && clear && this.level === 0) this.safe = { x, y, heading };
       }
       return;
     }
@@ -423,6 +457,7 @@ export class GameScene extends Phaser.Scene {
   private resetCar(): void {
     Object.assign(this.car, { x: this.safe.x, y: this.safe.y, heading: this.safe.heading, vx: 0, vy: 0, spin: 0 });
     this.sinking = -1;
+    this.level = 0;
     this.surface = this.surfaces.at(this.car.x, this.car.y);
     this.effects.reset();
     this.carSprite.setAlpha(1).setTint(0xffffff);
@@ -459,6 +494,13 @@ export class GameScene extends Phaser.Scene {
     cam.centerOn(car.x + this.lookX, car.y + this.lookY);
   }
 
+  /** How high the car is, px: on the ground, or on the deck of the bridge it's on. */
+  private carHeight(): number {
+    const { x, y } = this.car;
+    const on = this.level === 1 ? this.decks.over(x, y) : null;
+    return on ? this.decks.height(on.deck, on.along) : this.groundAt(x, y);
+  }
+
   /** The ground's height at (x, y), px. */
   private groundAt(x: number, y: number): number {
     return this.terrain.at(x, y) * this.terrain.px;
@@ -471,7 +513,7 @@ export class GameScene extends Phaser.Scene {
     p.cx = view.centerX;
     p.cy = view.centerY;
     p.height = CAMERA_HEIGHT * (this.restZoom() / this.zoom);
-    p.ground = this.groundAt(this.car.x, this.car.y);
+    p.ground = this.carHeight();
   }
 
   /** The trees near the view, their crowns lifted towards the camera like the roofs. */
@@ -503,7 +545,8 @@ export class GameScene extends Phaser.Scene {
       const show = body.x > view.left - pad && body.x < view.right + pad && body.y > view.top - pad && body.y < view.bottom + pad;
       if (image.visible !== show) image.setVisible(show);
       if (!show) continue;
-      const s = p.lift(this.groundAt(body.x, body.y));
+      const deck = body.level === 1 ? this.decks.over(body.x, body.y) : null;
+      const s = p.lift(deck ? this.decks.height(deck.deck, deck.along) : this.groundAt(body.x, body.y));
       image.setPosition(p.x(body.x, s), p.y(body.y, s)).setRotation(body.angle);
     }
   }
@@ -535,4 +578,9 @@ export class GameScene extends Phaser.Scene {
       this.events.emit(STREET_EVENT, best);
     }
   }
+}
+
+/** What a bridge's deck is to drive on: tarmac for a road bridge, paving or planks for a footbridge or jetty. */
+function deckSurface(road: Road): Surface {
+  return VEHICLE_ROADS.has(road.kind) && road.kind !== 'track' ? Surface.Road : Surface.Pavement;
 }

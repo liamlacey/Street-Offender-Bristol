@@ -93,7 +93,7 @@ export class SkidMarks {
     const key = this.key(i, j);
     if (!this.chunks.has(key)) {
       this.scene.textures.addDynamicTexture(key, CHUNK * RESOLUTION, CHUNK * RESOLUTION);
-      this.chunks.set(key, new TerrainSheet(this.scene, key, i * CHUNK, j * CHUNK, CHUNK, CHUNK, this.depth, this.terrain));
+      this.chunks.set(key, new TerrainSheet(this.scene, key, i * CHUNK, j * CHUNK, CHUNK, CHUNK, this.depth, (x, y) => this.terrain.at(x, y) * this.terrain.px));
     }
     return this.scene.textures.get(key) as Phaser.Textures.DynamicTexture;
   }

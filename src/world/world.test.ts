@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { GameMap } from '../map/osm';
+import type { GameMap, Road } from '../map/osm';
 import bristol from '../map/bristol.json';
 import { buildingLook, clipHalfPlane, parseColour } from './buildingLook';
 import { Surface, SurfaceGrid, surfacePaint } from './surface';
-import { CHUNK, buildWorld, chunkKey, lineLength, pointAlong, shadowOffset, subPolyline } from './world';
+import { CHUNK, buildWorld, chunkKey, cutWall, lineLength, pointAlong, shadowOffset, subPolyline } from './world';
+import { DECK_END, Decks } from './decks';
+import { nearestOnSegment } from '../physics/collisions';
 
 const map = bristol as unknown as GameMap;
 
@@ -29,14 +31,15 @@ describe('buildWorld', () => {
 
   it('walls in every solid building and the edge of the map', () => {
     const solid = map.buildings.filter((b) => b.solid);
-    expect(world.walls.length).toBeGreaterThan(solid.length * 3);
-    expect(world.walls).toContainEqual({ ax: 0, ay: 0, bx: map.width, by: 0, r: 0 });
+    expect(world.walls[0].length).toBeGreaterThan(solid.length * 3);
+    expect(world.walls[0]).toContainEqual({ ax: 0, ay: 0, bx: map.width, by: 0, r: 0 });
+    expect(world.walls[1]).toContainEqual({ ax: 0, ay: 0, bx: map.width, by: 0, r: 0 });
   });
 
   it('makes benches and bins loose, and lamp posts and trees fixed', () => {
     expect(world.loose.every((l) => l.kind === 'bench' || l.kind === 'bin')).toBe(true);
     expect(world.loose.length).toBeGreaterThan(100);
-    expect(world.posts.length).toBeGreaterThan(map.trees.length / 4);
+    expect(world.posts[0].length).toBeGreaterThan(map.trees.length / 4);
     expect(world.fixed.some((p) => p.kind === 'signals')).toBe(false);
   });
 
@@ -164,5 +167,74 @@ describe('pointAlong', () => {
     const [, , tx, ty] = pointAlong(bend, 100, 10);
     expect(tx).toBeCloseTo(Math.SQRT1_2);
     expect(ty).toBeCloseTo(Math.SQRT1_2);
+  });
+});
+
+describe('archways', () => {
+  const road = (pts: number[], width = 56): Road => ({ kind: 'service', width, pts, passage: true });
+
+  it('cuts a gap as wide as the road where it passes through a wall', () => {
+    const wall = { ax: 0, ay: 100, bx: 400, by: 100, r: 0 };
+    const pieces = cutWall(wall, [road([200, 0, 200, 300])]);
+    expect(pieces).toHaveLength(2);
+    expect(pieces[0].bx).toBeCloseTo(172);
+    expect(pieces[1].ax).toBeCloseTo(228);
+  });
+
+  it('leaves a wall the road doesn\'t cross alone', () => {
+    const wall = { ax: 0, ay: 100, bx: 400, by: 100, r: 0 };
+    expect(cutWall(wall, [road([600, 0, 600, 300])])).toEqual([wall]);
+  });
+
+  it('opens Bristol\'s buildings where its archways go under them', () => {
+    const world = buildWorld(map);
+    const passages = map.roads.filter((r) => r.passage && r.kind === 'service');
+    expect(passages.length).toBeGreaterThan(5);
+    // A point along each archway's road, inside its building: no wall right across the way.
+    let open = 0;
+    for (const p of passages) {
+      const [x, y] = pointAlong(p.pts, lineLength(p.pts) / 2);
+      const blocked = world.walls[0].some((w) => {
+        const [nx, ny] = nearestOnSegment(x, y, w);
+        return Math.hypot(nx - x, ny - y) < 4;
+      });
+      if (!blocked) open++;
+    }
+    expect(open / passages.length).toBeGreaterThan(0.8);
+  });
+});
+
+describe('Decks', () => {
+  // A bridge from (0, 0) to (800, 0), 80 px wide, with the ground rising 1 px per 10 eastwards.
+  const bridge: Road = { kind: 'primary', width: 80, pts: [0, 0, 800, 0], bridge: true };
+  const decks = new Decks([bridge], (x) => x / 10);
+
+  it('runs from the ground\'s height at one end to its height at the other', () => {
+    const [deck] = decks.decks;
+    expect(decks.height(deck, 0)).toBe(0);
+    expect(decks.height(deck, 400)).toBe(40);
+    expect(decks.slope(deck, 400)[0]).toBeCloseTo(0.1);
+  });
+
+  it('takes a car onto it only at its ends, and off it once it\'s off the deck', () => {
+    // Driving across underneath, in the middle: still on the ground.
+    expect(decks.levelAt(0, 400, 0)).toBe(0);
+    // Driving on at an end.
+    expect(decks.levelAt(0, DECK_END / 2, 0)).toBe(1);
+    // Along it, it stays up.
+    expect(decks.levelAt(1, 400, 0)).toBe(1);
+    // Off the far end, down again.
+    expect(decks.levelAt(1, 900, 0)).toBe(0);
+  });
+
+  it('has parapets along both sides, open at the ends', () => {
+    const walls = decks.parapets();
+    expect(walls).toHaveLength(2);
+    expect(walls.map((w) => Math.abs(w.ay)).every((y) => y > 40)).toBe(true);
+  });
+
+  it('finds Park Street\'s bridge over Frogmore Street in Bristol', () => {
+    const bristol = new Decks(map.roads, () => 0);
+    expect(bristol.decks.some((d) => d.road.name === 'Park Street')).toBe(true);
   });
 });

@@ -99,7 +99,7 @@ export class GroundLayer {
     drawGround(ctx, this.world.map, index, this.palette, x0, y0, size, size, 1, this.scratch);
     this.shadeHills(ctx, x0, y0, size);
     texture.refresh();
-    const sheet = new TerrainSheet(this.scene, key, x0, y0, size, size, this.depth, this.terrain);
+    const sheet = new TerrainSheet(this.scene, key, x0, y0, size, size, this.depth, (x, y) => this.terrain.at(x, y) * this.terrain.px);
     this.pieces.set(chunkKey(i, j), { sheet, key, used: this.frame });
     return sheet;
   }

@@ -7,7 +7,8 @@
  */
 
 import type { Body, Circle, Segment } from '../physics/collisions';
-import type { Building, GameMap, LineKind, Prop, PropKind, Pts } from '../map/osm';
+import type { Building, GameMap, LineKind, Prop, PropKind, Pts, Road } from '../map/osm';
+import { Decks } from './decks';
 
 /** Size of the pieces the ground is drawn in, and indexed by, px. */
 export const CHUNK = 512;
@@ -57,6 +58,8 @@ export function beacons(map: GameMap): { x: number; y: number }[] {
 
 export interface LooseProp extends Body {
   kind: PropKind;
+  /** 0 on the ground, 1 on a bridge. */
+  level: number;
   /** Whether it's been knocked from where it stood. */
   moved: boolean;
 }
@@ -72,13 +75,19 @@ export interface ChunkIndex {
   trees: number[];
 }
 
+export interface FixedProp extends Prop {
+  /** 0 on the ground, 1 on a bridge. */
+  level: number;
+}
+
 export interface World {
   map: GameMap;
-  walls: Segment[];
-  posts: Circle[];
+  /** What you crash into on each level: [0] the ground, [1] the bridges' decks. */
+  walls: [Segment[], Segment[]];
+  posts: [Circle[], Circle[]];
   loose: LooseProp[];
   /** The props that are fixed or painted on (all but the loose ones). */
-  fixed: Prop[];
+  fixed: FixedProp[];
   chunks: Map<string, ChunkIndex>;
 }
 
@@ -86,40 +95,115 @@ export function chunkKey(cx: number, cy: number): string {
   return `${cx},${cy}`;
 }
 
+/** An archway is at least this wide, px, so a car fits through. */
+const ARCHWAY = 3.4 * 8;
+
+/**
+ * The stretches (as fractions along it, start and end) of a wall that the
+ * roads through archways cut through: each as wide as its road, measured
+ * along the wall, where the road crosses it.
+ */
+export function openings(ax: number, ay: number, bx: number, by: number, passages: Road[]): [number, number][] {
+  const out: [number, number][] = [];
+  const wx = bx - ax;
+  const wy = by - ay;
+  const len = Math.hypot(wx, wy);
+  if (!len) return out;
+  for (const road of passages) {
+    const half = Math.max(road.width, ARCHWAY) / 2;
+    const p = road.pts;
+    for (let i = 0; i + 3 < p.length; i += 2) {
+      const [cx, cy, dx, dy] = [p[i], p[i + 1], p[i + 2], p[i + 3]];
+      const rx = dx - cx;
+      const ry = dy - cy;
+      const denom = wx * ry - wy * rx;
+      if (Math.abs(denom) < 1e-9) continue;
+      // Where the road's line crosses the wall: t along the wall, u along the road.
+      const t = ((cx - ax) * ry - (cy - ay) * rx) / denom;
+      const u = ((cx - ax) * wy - (cy - ay) * wx) / denom;
+      if (t < -0.2 || t > 1.2 || u < 0 || u > 1) continue;
+      // Crossing at a slant, the gap along the wall is wider.
+      const sin = Math.abs(denom) / (len * Math.hypot(rx, ry));
+      const gap = Math.min(half / Math.max(sin, 0.3), half * 3) / len;
+      out.push([t - gap, t + gap]);
+    }
+  }
+  return out;
+}
+
+/** A wall with the archways cut out of it: what's left of it. */
+export function cutWall(s: Segment, passages: Road[]): Segment[] {
+  const gaps = openings(s.ax, s.ay, s.bx, s.by, passages).sort((a, b) => a[0] - b[0]);
+  if (!gaps.length) return [s];
+  const pieces: Segment[] = [];
+  let from = 0;
+  const at = (t: number) => [s.ax + (s.bx - s.ax) * t, s.ay + (s.by - s.ay) * t];
+  for (const [g0, g1] of [...gaps, [1, 1] as [number, number]]) {
+    const to = Math.min(1, Math.max(from, g0));
+    if (to - from > 1e-3) {
+      const [x0, y0] = at(from);
+      const [x1, y1] = at(to);
+      pieces.push({ ax: x0, ay: y0, bx: x1, by: y1, r: s.r });
+    }
+    from = Math.max(from, Math.min(1, g1));
+  }
+  return pieces;
+}
+
 export function buildWorld(map: GameMap): World {
-  const walls: Segment[] = [];
-  const addRing = (ring: Pts, r: number, closed: boolean) => {
+  // Which level things are on: on a bridge's deck, or the ground.
+  const decks = new Decks(map.roads, () => 0);
+  const onDeck = (x: number, y: number) => decks.over(x, y) !== null;
+  const passages = map.roads.filter((r) => r.passage);
+
+  const ground: Segment[] = [];
+  const deck: Segment[] = [];
+  const addRing = (to: Segment[], ring: Pts, r: number, closed: boolean, cut = false) => {
     const n = ring.length;
     for (let i = 0; i + (closed ? 1 : 3) < n; i += 2) {
       const j = (i + 2) % n;
-      walls.push({ ax: ring[i], ay: ring[i + 1], bx: ring[j], by: ring[j + 1], r });
+      const s = { ax: ring[i], ay: ring[i + 1], bx: ring[j], by: ring[j + 1], r };
+      to.push(...(cut ? cutWall(s, passages) : [s]));
     }
   };
-  for (const b of map.buildings) if (b.solid) for (const ring of b.rings) addRing(ring, 0, true);
+  // Buildings, with their archways open, stand in the way on both levels.
+  const buildings: Segment[] = [];
+  for (const b of map.buildings) if (b.solid) for (const ring of b.rings) addRing(buildings, ring, 0, true, true);
+  // Garden walls, fences and railings: on a bridge if they run along one (its handrails), otherwise on the ground.
   for (const line of map.lines) {
     const r = LINE_THICKNESS[line.kind];
-    if (r !== undefined) addRing(line.pts, r, false);
+    if (r === undefined) continue;
+    const mid = Math.floor(line.pts.length / 4) * 2;
+    addRing(onDeck(line.pts[mid], line.pts[mid + 1]) ? deck : ground, line.pts, r, false);
   }
   // The edge of the map.
-  addRing([0, 0, map.width, 0, map.width, map.height, 0, map.height], 0, true);
+  const edge: Segment[] = [];
+  addRing(edge, [0, 0, map.width, 0, map.width, map.height, 0, map.height], 0, true);
+  const walls: [Segment[], Segment[]] = [
+    [...buildings, ...ground, ...edge],
+    [...buildings, ...deck, ...decks.parapets(), ...edge],
+  ];
 
-  const posts: Circle[] = [];
-  for (let i = 0; i < map.trees.length; i += 4) posts.push({ x: map.trees[i], y: map.trees[i + 1], r: TRUNK });
-  for (const s of map.signals) posts.push({ x: s.x, y: s.y, r: SIGNAL_POLE });
-  for (const b of beacons(map)) posts.push({ x: b.x, y: b.y, r: BEACON_POLE });
+  // Trees grow on the ground; anything else standing on a bridge is on the bridge.
+  const posts: [Circle[], Circle[]] = [[], []];
+  const levelOf = (x: number, y: number) => (onDeck(x, y) ? 1 : 0);
+  for (let i = 0; i < map.trees.length; i += 4) posts[0].push({ x: map.trees[i], y: map.trees[i + 1], r: TRUNK });
+  for (const s of map.signals) posts[levelOf(s.x, s.y)].push({ x: s.x, y: s.y, r: SIGNAL_POLE });
+  for (const b of beacons(map)) posts[levelOf(b.x, b.y)].push({ x: b.x, y: b.y, r: BEACON_POLE });
   const loose: LooseProp[] = [];
-  const fixed: Prop[] = [];
+  const fixed: FixedProp[] = [];
   map.props.forEach((p, i) => {
+    const level = levelOf(p.x, p.y);
     const post = POST_RADIUS[p.kind];
-    if (post !== undefined) posts.push({ x: p.x, y: p.y, r: post });
+    if (post !== undefined) posts[level].push({ x: p.x, y: p.y, r: post });
     // Traffic lights and bus stops are mapped on the road's centre line, not where they stand: left off for now.
     if (p.kind === 'signals' || p.kind === 'busstop') return;
     const l = LOOSE[p.kind];
     if (l) {
       // Benches face along the nearest wall or path; without knowing which, turn each its own way.
-      loose.push({ kind: p.kind, x: p.x, y: p.y, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: ((i * 2.399) % Math.PI) - Math.PI / 2, spin: 0, moved: false });
+      loose.push({ kind: p.kind, x: p.x, y: p.y, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: ((i * 2.399) % Math.PI) - Math.PI / 2, spin: 0, moved: false, level });
     } else {
-      fixed.push(p);
+      fixed.push({ ...p, level });
     }
   });
 

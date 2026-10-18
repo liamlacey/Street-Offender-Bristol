@@ -113,14 +113,14 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
     }
   }
 
-  const roads = index.roads.map((i) => map.roads[i]);
+  // Bridges aren't on the ground: they're decks above it (see drawDeck).
+  const roads = index.roads.map((i) => map.roads[i]).filter((r) => !r.bridge);
   const vehicle = roads.filter((r) => VEHICLE_ROADS.has(r.kind) && r.kind !== 'track');
   // Pavements along the roads.
-  for (const r of vehicle) if (r.pavement && !r.bridge) stroke(ctx, r.pts, palette.pavement, r.width + PAVEMENT * 2);
-  // Footpaths, cycle paths, pedestrian streets and steps (bridges over the water get their parapets).
+  for (const r of vehicle) if (r.pavement) stroke(ctx, r.pts, palette.pavement, r.width + PAVEMENT * 2);
+  // Footpaths, cycle paths, pedestrian streets and steps.
   for (const r of roads) {
     if (VEHICLE_ROADS.has(r.kind) && r.kind !== 'track') continue;
-    if (r.bridge && !palette.surface) stroke(ctx, r.pts, palette.parapet, r.width + 5);
     stroke(ctx, r.pts, pathFill(r, palette), r.width);
     if (r.kind === 'steps' && !palette.surface) {
       // Each step's edge.
@@ -132,7 +132,7 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
     }
   }
   // Kerbs, then the tarmac over them, so the roads run together at junctions.
-  for (const r of vehicle) stroke(ctx, r.pts, r.bridge ? palette.parapet : palette.kerb, r.width + (r.bridge ? 7 : KERB * 2));
+  for (const r of vehicle) stroke(ctx, r.pts, palette.kerb, r.width + KERB * 2);
   for (const r of vehicle) stroke(ctx, r.pts, r.surface && r.surface !== 'asphalt' ? palette.paving[r.surface] : palette.asphalt, r.width);
 
   if (!palette.surface) {
@@ -186,6 +186,24 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
 
   if (shadows && !palette.surface) drawShadows(ctx, shadows, map, index, x0, y0, w, h, scale);
   ctx.restore();
+}
+
+/**
+ * A bridge's deck, for drawing above the ground: its parapets either side,
+ * and its surface (tarmac and a centre line for a road, the path's paving or
+ * planks for a footbridge or jetty), in map px.
+ */
+export function drawDeck(ctx: Ctx, r: Road, palette: Palette): void {
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'butt';
+  const vehicle = VEHICLE_ROADS.has(r.kind) && r.kind !== 'track';
+  // Stone parapets, with a dark edge to show they stand up off the deck.
+  stroke(ctx, r.pts, '#3f3a34', r.width + 10);
+  stroke(ctx, r.pts, '#b9ae99', r.width + 7);
+  stroke(ctx, r.pts, 'rgba(0,0,0,0.35)', r.width + 2);
+  stroke(ctx, r.pts, vehicle ? (r.surface && r.surface !== 'asphalt' ? palette.paving[r.surface] : palette.asphalt) : pathFill(r, palette), r.width);
+  if (vehicle) drawMarkings(ctx, [r], palette.marking);
+  ctx.lineCap = 'round';
 }
 
 function pathFill(r: Road, p: Palette): Fill {
@@ -356,6 +374,19 @@ function drawShadows(ctx: Ctx, scratch: Ctx, map: GameMap, index: ChunkIndex, x0
     }
   }
   scratch.fill('nonzero');
+  // The bridges' decks, overhead.
+  scratch.strokeStyle = '#000';
+  scratch.lineCap = 'butt';
+  for (const i of index.roads) {
+    const r = map.roads[i];
+    if (!r.bridge) continue;
+    const [sx, sy] = shadowOffset(5 * 8);
+    scratch.lineWidth = r.width + 6;
+    scratch.beginPath();
+    scratch.moveTo(r.pts[0] + sx, r.pts[1] + sy);
+    for (let k = 2; k < r.pts.length; k += 2) scratch.lineTo(r.pts[k] + sx, r.pts[k + 1] + sy);
+    scratch.stroke();
+  }
   // Trees: a soft round shadow off to the side.
   for (const t of index.trees) {
     const [x, y, r, h] = [map.trees[t * 4], map.trees[t * 4 + 1], map.trees[t * 4 + 2], map.trees[t * 4 + 3]];

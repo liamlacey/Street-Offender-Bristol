@@ -106,6 +106,22 @@ ways in that line up (or face each other) go green together, as a group; groups
 take turns (red and amber 2 s, green 12 s, amber 3 s, red all round 2 s), then,
 where there's a crossing, people get 8 s with everything red (`src/world/lights.ts`).
 
+**Levels.** The ground is level 0; every bridge's deck (`bridge=*`: road bridges,
+footbridges, jetties) is level 1, above whatever's below it (the water, another
+road: Park Street crosses Frog Lane on one). A deck runs straight from the
+ground's height at one end to its height at the other, has parapets along both
+sides, and you get on or off only within 8 m of an end that meets the ground
+(`src/world/decks.ts`); driving under it in the middle you stay below, and it's
+drawn over you. Each level has its own walls and posts (buildings stand on both;
+garden walls, railings, lamps and the like belong to the deck when they're on
+it, and trees to the ground), and its own surface (a deck's is tarmac for a road
+bridge, paving for the rest). The ground under a bridge isn't raised to meet it.
+
+**Archways** (`tunnel=building_passage`: roads, lanes and footpaths through
+buildings). The building's walls are cut open where the road passes through,
+as wide as the road (at least 3.4 m, so a car fits), and the building is drawn
+see-through while the car is under it.
+
 **Lining up the LIDAR.** OSM is in latitude and longitude (WGS84); the LIDAR is
 on the Ordnance Survey's National Grid. `osgb.ts` converts (Helmert transform to
 OSGB36, then the National Grid's transverse Mercator: good to a few metres), and
@@ -130,8 +146,7 @@ ground):
 
 **The hills.** The bare ground's height every 4 m (the average of the 16 one-metre
 readings round each point), gaps filled from their neighbours, smoothed twice,
-and each bridge's deck laid straight from one end to the other over what it
-spans. Stored as decimetres above the lowest point.
+Stored as decimetres above the lowest point. (Bridges aren't in it: they're decks above it.)
 
 ## The files
 

@@ -179,8 +179,8 @@ const TERRAIN_CELL = 4;
 
 /**
  * The bare ground's height every TERRAIN_CELL metres (the average of the
- * LIDAR's readings round each point), with the bridges' decks laid across
- * the water and roads they span rather than dipping down to them.
+ * LIDAR's readings round each point). Bridges aren't in it: they're decks
+ * above it, a level of their own (see src/world/decks.ts).
  */
 export function terrainOf(map: GameMap, dtm: Raster, toGrid: (x: number, y: number) => [number, number]): TerrainData {
   const px = map.pxPerMetre;
@@ -208,33 +208,6 @@ export function terrainOf(map: GameMap, dtm: Raster, toGrid: (x: number, y: numb
   fillGaps(z, cols, rows);
   // Smooth out the bumps (kerbs, walls, what's left where buildings were taken out of the survey).
   for (let pass = 0; pass < 2; pass++) smooth(z, cols, rows);
-
-  // Bridges: a straight deck from one end to the other, over whatever's below.
-  const at = (x: number, y: number) => z[Math.max(0, Math.min(rows - 1, Math.round(y / cell))) * cols + Math.max(0, Math.min(cols - 1, Math.round(x / cell)))];
-  for (const r of map.roads) {
-    if (!r.bridge || r.pts.length < 4) continue;
-    const n = r.pts.length;
-    const z0 = at(r.pts[0], r.pts[1]);
-    const z1 = at(r.pts[n - 2], r.pts[n - 1]);
-    let total = 0;
-    for (let k = 0; k + 3 < n; k += 2) total += Math.hypot(r.pts[k + 2] - r.pts[k], r.pts[k + 3] - r.pts[k + 1]);
-    let along = 0;
-    const reach = r.width / 2 + cell;
-    for (let k = 0; k + 3 < n; k += 2) {
-      const [ax, ay, bx, by] = [r.pts[k], r.pts[k + 1], r.pts[k + 2], r.pts[k + 3]];
-      const len = Math.hypot(bx - ax, by - ay);
-      for (let i = Math.floor((Math.min(ax, bx) - reach) / cell); i <= Math.ceil((Math.max(ax, bx) + reach) / cell); i++) {
-        for (let j = Math.floor((Math.min(ay, by) - reach) / cell); j <= Math.ceil((Math.max(ay, by) + reach) / cell); j++) {
-          if (i < 0 || j < 0 || i >= cols || j >= rows) continue;
-          const t = len ? Math.max(0, Math.min(1, ((i * cell - ax) * (bx - ax) + (j * cell - ay) * (by - ay)) / (len * len))) : 0;
-          if (Math.hypot(ax + (bx - ax) * t - i * cell, ay + (by - ay) * t - j * cell) > reach) continue;
-          const deck = z0 + ((z1 - z0) * (along + t * len)) / (total || 1);
-          z[j * cols + i] = Math.max(z[j * cols + i], deck);
-        }
-      }
-      along += len;
-    }
-  }
 
   let base = Infinity;
   for (const v of z) base = Math.min(base, v);

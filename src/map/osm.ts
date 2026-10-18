@@ -81,8 +81,10 @@ export interface Road {
   width: number;
   pts: Pts;
   oneway?: boolean;
-  /** On a bridge (drawn over the water, and you can drive across). */
+  /** On a bridge: a deck above whatever's below it (the water, another road), a level of its own. */
   bridge?: boolean;
+  /** Through an archway under a building (OSM's `tunnel=building_passage`): the building's walls open to let it through. */
+  passage?: boolean;
   /** Whether it has pavements along it. */
   pavement?: boolean;
   /** What it's surfaced with, if tagged (the drawing picks a usual one for its kind otherwise). */
@@ -894,6 +896,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     const vehicle = VEHICLE_ROADS.has(kind);
     const oneway = t.oneway === 'yes' || t.oneway === '1' || t.junction === 'roundabout';
     const bridge = t.bridge !== undefined && t.bridge !== 'no';
+    const passage = t.tunnel === 'building_passage';
     const surface = paving(t.surface);
     let marks: number[] | undefined;
     if (vehicle && kind !== 'service' && kind !== 'track' && width >= 6 * PX_PER_METRE) {
@@ -926,6 +929,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       pts: roundPts(pts),
       ...(oneway ? { oneway } : {}),
       ...(bridge ? { bridge } : {}),
+      ...(passage ? { passage } : {}),
       ...(pavement ? { pavement } : {}),
       ...(marks ? { marks } : {}),
       ...(surface ? { surface } : {}),

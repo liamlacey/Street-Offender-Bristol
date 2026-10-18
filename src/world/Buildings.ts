@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser';
 import { type BuildingLook, FLOOR, buildingLook } from './buildingLook';
+import { pointInRing } from '../map/osm';
 import type { Perspective } from './perspective';
 import type { Terrain } from './terrain';
 import type { World } from './world';
@@ -37,8 +38,11 @@ export class Buildings {
     this.g = scene.add.graphics().setDepth(depth);
   }
 
-  /** Call once a frame. */
-  update(view: Phaser.Geom.Rectangle, perspective: Perspective): void {
+  /**
+   * Call once a frame. A building the car's under (driving through an
+   * archway), at (carX, carY), is drawn see-through, so the car can be seen.
+   */
+  update(view: Phaser.Geom.Rectangle, perspective: Perspective, carX: number, carY: number): void {
     const g = this.g;
     g.clear();
     const cx = view.centerX;
@@ -58,6 +62,8 @@ export class Buildings {
       const [fx0, fx1, fy0, fy1] = [cx + (look.x0 - cx) * sBase, cx + (look.x1 - cx) * sBase, cy + (look.y0 - cy) * sBase, cy + (look.y1 - cy) * sBase];
       if (Math.max(fx1, rx1) < left || Math.min(fx0, rx0) > right) continue;
       if (Math.max(fy1, ry1) < top || Math.min(fy0, ry0) > bottom) continue;
+      const over = carX > look.x0 && carX < look.x1 && carY > look.y0 && carY < look.y1 && pointInRing(carX, carY, b.rings[0]);
+      const alpha = over ? 0.3 : 1;
 
       if (!look.canopy) {
         for (const w of look.walls) {
@@ -79,11 +85,11 @@ export class Buildings {
             g.fillTriangle(a0x, a0y, b0x, b0y, b1x, b1y);
             g.fillTriangle(a0x, a0y, b1x, b1y, a1x, a1y);
           };
-          g.fillStyle(w.colour);
+          g.fillStyle(w.colour, alpha);
           quad(sBase, sTop);
           // A band of windows along each floor.
           if (look.windows !== null && Math.hypot(w.bx - w.ax, w.by - w.ay) > 12) {
-            g.fillStyle(look.windows, 0.85);
+            g.fillStyle(look.windows, 0.85 * alpha);
             for (let h = b.bottom + FLOOR * 0.35; h + FLOOR * 0.4 < b.top - 4; h += FLOOR) quad(lift(h), lift(h + FLOOR * 0.4));
           }
         }
@@ -93,7 +99,7 @@ export class Buildings {
       const tx = cx * (1 - sTop);
       const ty = cy * (1 - sTop);
       for (const f of look.facets) {
-        g.fillStyle(f.colour, look.canopy ? 0.9 : 1);
+        g.fillStyle(f.colour, (look.canopy ? 0.9 : 1) * alpha);
         const t = f.tris;
         for (let i = 0; i + 5 < t.length; i += 6) {
           g.fillTriangle(tx + t[i] * sTop, ty + t[i + 1] * sTop, tx + t[i + 2] * sTop, ty + t[i + 3] * sTop, tx + t[i + 4] * sTop, ty + t[i + 5] * sTop);
@@ -101,7 +107,7 @@ export class Buildings {
       }
       if (look.rim) {
         // A parapet round a flat roof.
-        g.lineStyle(2 * sTop, look.rimColour, 1);
+        g.lineStyle(2 * sTop, look.rimColour, alpha);
         const r = look.rim;
         const n = r.length;
         for (let i = 0; i < n; i += 2) {
@@ -111,15 +117,15 @@ export class Buildings {
       }
       if (look.ridge) {
         const [ax, ay, bx, by] = look.ridge;
-        g.lineStyle(2 * sTop, look.ridgeColour, 1);
+        g.lineStyle(2 * sTop, look.ridgeColour, alpha);
         g.lineBetween(tx + ax * sTop, ty + ay * sTop, tx + bx * sTop, ty + by * sTop);
       }
       for (const [x, y, w, h] of look.boxes) {
         const px = tx + x * sTop;
         const py = ty + y * sTop;
-        g.fillStyle(0x000000, 0.22).fillRect(px + 2, py + 3, w * sTop, h * sTop);
-        g.fillStyle(0xa4a7ab).fillRect(px, py, w * sTop, h * sTop);
-        g.fillStyle(0xc4c7ca).fillRect(px + 1.5, py + 1.5, w * sTop - 3, h * sTop * 0.45);
+        g.fillStyle(0x000000, 0.22 * alpha).fillRect(px + 2, py + 3, w * sTop, h * sTop);
+        g.fillStyle(0xa4a7ab, alpha).fillRect(px, py, w * sTop, h * sTop);
+        g.fillStyle(0xc4c7ca, alpha).fillRect(px + 1.5, py + 1.5, w * sTop - 3, h * sTop * 0.45);
       }
     }
   }

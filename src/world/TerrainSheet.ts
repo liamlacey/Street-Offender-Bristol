@@ -1,21 +1,21 @@
 import * as Phaser from 'phaser';
 import type { Perspective } from './perspective';
-import type { Terrain } from './terrain';
 
 /** Grid points this far apart, px: the hills are smooth, so this follows them closely enough. */
 const STEP = 32;
 
 /**
  * A flat picture of a piece of the ground (the paving and roads, the tyre
- * marks) laid over the hills: a mesh of triangles whose corners are moved
- * every frame to where the perspective puts the ground under them.
+ * marks) laid over the hills, or of a bridge's deck: a mesh of triangles
+ * whose corners are moved every frame to where the perspective puts them.
  */
 export class TerrainSheet {
   readonly mesh: Phaser.GameObjects.Mesh2D;
   /** Each grid point's place on the map and height, px: x, y, z, ... */
   private readonly points: Float32Array;
 
-  constructor(scene: Phaser.Scene, texture: string, x0: number, y0: number, w: number, h: number, depth: number, terrain: Terrain) {
+  /** `height` gives the surface's height (px) under each point: the ground's, or a deck's. */
+  constructor(scene: Phaser.Scene, texture: string, x0: number, y0: number, w: number, h: number, depth: number, height: (x: number, y: number) => number) {
     const cols = Math.ceil(w / STEP) + 1;
     const rows = Math.ceil(h / STEP) + 1;
     const vertices: number[] = [];
@@ -29,7 +29,7 @@ export class TerrainSheet {
         const k = j * cols + i;
         this.points[k * 3] = x;
         this.points[k * 3 + 1] = y;
-        this.points[k * 3 + 2] = terrain.at(x, y) * terrain.px;
+        this.points[k * 3 + 2] = height(x, y);
         vertices.push(x, y, u, v);
       }
     }
