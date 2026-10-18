@@ -236,6 +236,19 @@ describe('Decks', () => {
     expect(decks.levelAt(1, 900, 0)).toBe(0);
   });
 
+  it('follows the height the LIDAR measured along it, meeting the ground at its ends', () => {
+    // An arched footbridge 64 px long over level ground: up 16 px in the middle, measured every 16 px, a little off at the ends.
+    const arch: Road = { kind: 'footway', width: 24, pts: [0, 0, 64, 0], bridge: true, deck: [2, 10, 16, 10, 2] };
+    const level = new Decks([arch], () => 0);
+    const [deck] = level.decks;
+    // Both ends 2 px above the ground, taken up over DECK_END from each.
+    expect(level.height(deck, 32)).toBeCloseTo(16 - 2 * 2 * Math.max(0, 1 - 32 / DECK_END));
+    expect(level.height(deck, 0)).toBeCloseTo(0);
+    expect(level.height(deck, 64)).toBeCloseTo(0);
+    expect(level.slope(deck, 16)[0]).toBeGreaterThan(0);
+    expect(level.slope(deck, 48)[0]).toBeLessThan(0);
+  });
+
   it('has parapets along both sides, open at the ends', () => {
     const walls = decks.parapets();
     expect(walls).toHaveLength(2);

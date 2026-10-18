@@ -83,17 +83,22 @@ export interface Road {
   oneway?: boolean;
   /** On a bridge: a deck above whatever's below it (the water, another road), a level of its own. */
   bridge?: boolean;
+  /** A bridge's deck's height every DECK_STEP px along it, px (as the terrain's: above its base), measured by the LIDAR. */
+  deck?: number[];
   /** Through an archway under a building (OSM's `tunnel=building_passage`): the building's walls open to let it through. */
   passage?: boolean;
-  /** Whether it has pavements along it. */
-  pavement?: boolean;
+  /** Which sides it has pavements along (as it runs: left and right of its line), drawn with it. */
+  pavement?: 'both' | 'left' | 'right';
   /** What it's surfaced with, if tagged (the drawing picks a usual one for its kind otherwise). */
   surface?: Paving;
   /** Stretches (distances along it, start, end, start, end, ...) with lane markings: not across junctions. */
   marks?: number[];
 }
 
-export type LineKind = 'wall' | 'fence' | 'hedge' | 'rail' | 'quay' | 'railing';
+/** How far apart a bridge deck's measured heights are, px (2 m). */
+export const DECK_STEP = 2 * PX_PER_METRE;
+
+export type LineKind = 'wall' | 'fence' | 'hedge' | 'rail' | 'quay' | 'railing' | 'kerb';
 
 export interface Line {
   kind: LineKind;
@@ -189,6 +194,8 @@ export interface GameMap {
   controllers: Controller[];
   /** The lie of the land, if measured (see src/map/enrich.ts). */
   terrain?: TerrainData;
+  /** Where the kerb's dropped (lowered or flush, OSM's `kerb=*` on a node): x, y, ... */
+  dropped?: number[];
 }
 
 /**
@@ -645,7 +652,11 @@ const LINE_KINDS: Record<string, LineKind> = {
   guard_rail: 'railing',
   handrail: 'railing',
   hedge: 'hedge',
+  kerb: 'kerb',
 };
+
+/** A kerb that's been dropped to the road's level (`kerb=lowered`, `flush` or `no`): nothing to mount. */
+const DROPPED_KERB = new Set(['lowered', 'flush', 'no']);
 
 /** Default heights in metres for each kind of building, when there's nothing better to go on. */
 const BUILDING_HEIGHT: Record<string, number> = {
@@ -698,6 +709,68 @@ export function buildingHeights(tags: Tags, kind: string): { top: number; bottom
   if (bottom === undefined && minLevel > 0) bottom = minLevel * LEVEL;
   bottom = Math.max(0, Math.min(bottom ?? 0, top - 1));
   return { top: Math.min(top, 150), bottom };
+}
+
+/**
+ * Which sides of a road there's a pavement drawn with it, from OSM's
+ * `sidewalk`, `sidewalk:both`, `sidewalk:left` and `sidewalk:right` (left and
+ * right as the way runs): both, unless they say otherwise. One mapped as a
+ * footpath of its own (`separate`) isn't drawn with the road: it's drawn as
+ * that footpath.
+ */
+export function pavementSides(t: Tags): [boolean, boolean] {
+  const has = (v: string | undefined, otherwise: boolean) => (v === undefined ? otherwise : v === 'yes' || v === 'both' || v === 'left' || v === 'right');
+  let left = true;
+  let right = true;
+  const s = t.sidewalk;
+  if (s === 'left' || s === 'right') [left, right] = [s === 'left', s === 'right'];
+  else if (s !== undefined) left = right = has(s, true);
+  if (t['sidewalk:both'] !== undefined) left = right = has(t['sidewalk:both'], true);
+  left = has(t['sidewalk:left'], left);
+  right = has(t['sidewalk:right'], right);
+  return [left, right];
+}
+
+/** How far out from a road's edge, px, a footpath of its own counts as its pavement; and how much of the road it has to run along. */
+const SIDEWALK_NEAR = 4 * PX_PER_METRE;
+const SIDEWALK_ALONG = 0.5;
+
+/**
+ * Whether a footpath mapped on its own (`footway=sidewalk`) runs along one
+ * side of a road (left: +1, right: -1, as the road runs), for at least half
+ * its length: then that's the pavement, not one drawn with the road.
+ */
+export function sidewalkAlong(road: Pts, width: number, side: 1 | -1, sidewalks: Pts[]): boolean {
+  const step = 8 * PX_PER_METRE;
+  let samples = 0;
+  let along = 0;
+  for (let i = 0; i + 3 < road.length; i += 2) {
+    const [ax, ay, bx, by] = [road[i], road[i + 1], road[i + 2], road[i + 3]];
+    const len = Math.hypot(bx - ax, by - ay);
+    if (!len) continue;
+    const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
+    // Left of the way as it runs, with y down: (uy, -ux).
+    const [nx, ny] = [uy * side, -ux * side];
+    for (let d = Math.min(step / 2, len / 2); d < len; d += step) {
+      samples++;
+      const px = ax + ux * d + nx * (width / 2 + 1.2 * PX_PER_METRE);
+      const py = ay + uy * d + ny * (width / 2 + 1.2 * PX_PER_METRE);
+      if (sidewalks.some((w) => nearParallel(w, px, py, ux, uy))) along++;
+    }
+  }
+  return samples > 0 && along / samples >= SIDEWALK_ALONG;
+}
+
+function nearParallel(w: Pts, x: number, y: number, ux: number, uy: number): boolean {
+  for (let i = 0; i + 3 < w.length; i += 2) {
+    const [ax, ay, bx, by] = [w[i], w[i + 1], w[i + 2], w[i + 3]];
+    const len = Math.hypot(bx - ax, by - ay);
+    if (!len) continue;
+    const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / (len * len)));
+    if (Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y) > SIDEWALK_NEAR) continue;
+    if (Math.abs(((bx - ax) * ux + (by - ay) * uy) / len) > 0.7) return true;
+  }
+  return false;
 }
 
 /** Props from tagged nodes. */
@@ -852,7 +925,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       continue;
     }
 
-    const lineKind = t.barrier ? LINE_KINDS[t.barrier] : t.railway === 'rail' || t.railway === 'tram' ? 'rail' : t.man_made === 'quay' && !closed ? 'quay' : undefined;
+    const lineKind = t.barrier === 'kerb' && DROPPED_KERB.has(t.kerb) ? undefined : t.barrier ? LINE_KINDS[t.barrier] : t.railway === 'rail' || t.railway === 'tram' ? 'rail' : t.man_made === 'quay' && !closed ? 'quay' : undefined;
     if (lineKind) {
       const pts = pointsOf(way.nodes);
       if (pts) for (const piece of clipLine(pts, cx0, cy0, cx1, cy1)) lines.push({ kind: lineKind, pts: roundPts(piece) });
@@ -887,6 +960,13 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
 
   /** Each road's index in `roads`, by its OSM way. */
   const roadIndexOfWay = new Map<number, number>();
+  // The pavements mapped as footpaths of their own.
+  const sidewalks: Pts[] = [];
+  for (const { way } of roadWays) {
+    if (way.tags.footway !== 'sidewalk') continue;
+    const pts = pointsOf(way.nodes);
+    if (pts) sidewalks.push(pts);
+  }
   // Roads, with their junctions found so the lane markings stop short of them.
   for (const { way, kind } of roadWays) {
     const t = way.tags;
@@ -918,7 +998,14 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       }
       if (marks.length === 0) marks = undefined;
     }
-    const pavement = vehicle && kind !== 'service' && kind !== 'track' && t.sidewalk !== 'no' && t.sidewalk !== 'none';
+    let pavement: Road['pavement'];
+    if (vehicle && kind !== 'service' && kind !== 'track') {
+      let [left, right] = pavementSides(t);
+      // Where the pavement's mapped as a footpath of its own, it's that, not one drawn with the road too.
+      if (left && sidewalkAlong(pts, width, 1, sidewalks)) left = false;
+      if (right && sidewalkAlong(pts, width, -1, sidewalks)) right = false;
+      pavement = left && right ? 'both' : left ? 'left' : right ? 'right' : undefined;
+    }
     // Clipping the line loses the distances the markings are measured along, so only roads wholly beyond the edge are dropped.
     if (!pts.some((v, i) => i % 2 === 0 && inside(v, pts[i + 1], pad))) continue;
     roadIndexOfWay.set(way.id, roads.length);
@@ -970,11 +1057,13 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     }
     return arms;
   };
+  const dropped: number[] = [];
   for (const node of data.nodes.values()) {
     const t = node.tags;
     const x = proj.x(node.lon);
     const y = proj.y(node.lat);
     if (!inside(x, y)) continue;
+    if (DROPPED_KERB.has(t.kerb)) dropped.push(round(x), round(y));
     if (t.natural === 'tree') {
       const crown = metres(t.diameter_crown);
       const r = Math.max(2.2, Math.min(crown ? crown / 2 : 3.2 + ((node.id % 7) / 7) * 1.6, 7));
@@ -1053,6 +1142,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     crossings,
     signals,
     controllers,
+    ...(dropped.length ? { dropped } : {}),
   };
 }
 

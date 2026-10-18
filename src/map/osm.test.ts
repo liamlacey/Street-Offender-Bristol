@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PX_PER_METRE, Projection, buildMap, clipLine, clipRing, joinRings, metres, parseOsm, ringArea, roadWidth } from './osm';
+import { PX_PER_METRE, Projection, buildMap, clipLine, clipRing, joinRings, metres, parseOsm, pavementSides, ringArea, roadWidth, sidewalkAlong } from './osm';
 
 /** A tiny map: a street with a junction, a building with a part on it, a pond, a park inside a multipolygon, a tree and a bench. */
 const XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -92,7 +92,7 @@ describe('buildMap', () => {
     const anchor = map.roads.find((r) => r.name === 'Anchor Road')!;
     expect(anchor.kind).toBe('primary');
     expect(anchor.width).toBe(80);
-    expect(anchor.pavement).toBe(true);
+    expect(anchor.pavement).toBe('both');
     // The junction is at node 2, about 139 m along (the road starts beyond the map): no markings near it.
     const junction = 139 * PX_PER_METRE;
     for (let k = 0; k < anchor.marks!.length; k += 2) {
@@ -124,5 +124,31 @@ describe('buildMap', () => {
   it('starts the car on the nearest road, along it', () => {
     expect(Math.abs(map.spawn.y - map.height / 2)).toBeLessThan(2);
     expect(Math.abs(Math.cos(map.spawn.heading))).toBeCloseTo(1, 2);
+  });
+});
+
+describe('pavements', () => {
+  it('reads which sides of a road have them, both unless told otherwise', () => {
+    expect(pavementSides({})).toEqual([true, true]);
+    expect(pavementSides({ sidewalk: 'both' })).toEqual([true, true]);
+    expect(pavementSides({ sidewalk: 'left' })).toEqual([true, false]);
+    expect(pavementSides({ sidewalk: 'right' })).toEqual([false, true]);
+    expect(pavementSides({ sidewalk: 'no' })).toEqual([false, false]);
+    expect(pavementSides({ sidewalk: 'separate' })).toEqual([false, false]);
+    expect(pavementSides({ 'sidewalk:both': 'separate' })).toEqual([false, false]);
+    expect(pavementSides({ 'sidewalk:left': 'separate', 'sidewalk:right': 'yes' })).toEqual([false, true]);
+    expect(pavementSides({ 'sidewalk:right': 'no' })).toEqual([true, false]);
+  });
+
+  it("finds a pavement mapped as a footpath of its own along one side, and doesn't draw one there too", () => {
+    // A road 8 m wide running east (left of it is north, y down), and a footpath 5.5 m north of its middle.
+    const road = [0, 0, 400, 0];
+    const footpath = [-20, -44, 420, -44];
+    expect(sidewalkAlong(road, 64, 1, [footpath])).toBe(true);
+    expect(sidewalkAlong(road, 64, -1, [footpath])).toBe(false);
+    // One crossing it isn't one along it.
+    expect(sidewalkAlong(road, 64, 1, [[200, -100, 200, 100]])).toBe(false);
+    // Nor is one along only a little of it.
+    expect(sidewalkAlong(road, 64, 1, [[0, -44, 80, -44]])).toBe(false);
   });
 });

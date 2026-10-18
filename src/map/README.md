@@ -63,8 +63,17 @@ All in `osm.ts`, `enrich.ts`, `lidar.ts` and `osgb.ts` (pure, tested).
 **Roads and paths** (`highway=*`; tunnels left out). Kind from `highway`; width
 from `width`, else `lanes` × 3.3 m, else by kind (primary 10 m, secondary 9,
 tertiary 8, streets 7, service 4.5, driveways 3.5, pedestrian streets 5, footways
-2.4). One-way, bridges and pavements (2.4 m either side of every road but service
-roads and tracks, unless `sidewalk=no`) from their tags. Dashed centre lines on
+2.4). One-way and bridges from their tags. **Pavements**, 2.4 m wide, along every
+road but service roads and tracks: on both sides unless `sidewalk`,
+`sidewalk:both`, `sidewalk:left` or `sidewalk:right` say otherwise (left and right
+as the way runs); none on a side where it's `no` or `separate` (mapped as a footpath
+of its own), or where a `footway=sidewalk` path runs alongside, within 4 m of the
+kerb and roughly parallel, for at least half the road's length (it's that footpath
+that's drawn). **Kerbs**: along both edges of every road; also any `barrier=kerb`
+way, unless it's `kerb=lowered`, `flush` or `no`. Where a node says the kerb's
+dropped (`kerb=lowered`, `flush` or `no`), and across every crossing (half the
+road's width plus 3 m from its middle), there's no kerb to mount; anywhere else,
+going up a kerb at speed takes 8% off it and coming down 4% (`src/world/kerbs.ts`). Dashed centre lines on
 roads 6 m or wider (not service roads or tracks), stopping 9 m short of each junction, and not on cobbles. The
 surface (`surface=*`) is sorted into tarmac, paving, setts (cobbles), concrete,
 gravel, decking or grass, and drawn as that and driven on as that.
@@ -117,6 +126,20 @@ garden walls, railings, lamps and the like belong to the deck when they're on
 it, and trees to the ground), and its own surface (a deck's is tarmac for a road
 bridge, paving for the rest). The ground under a bridge isn't raised to meet it.
 
+**Bridge decks, measured.** A deck's height every 2 m along it is the LIDAR's
+first-return surface there (the deck, not what's under it): the median of the
+readings across it, a metre in from its edges. Readings more than 2.5 m above, or
+1.5 m below, the straight line between the ground 8 m out beyond each end (or the
+readings' median, at an end that meets another piece of the bridge) are thrown
+out (trees over it, buildings at its ends, vans on it; the water or road below),
+and the gaps filled from either side; then it's smoothed over 6 m. If over half
+are thrown out, or it's still more than 2.5 m off that line anywhere, it's not
+measured, and runs straight from the ground at one end to the ground at the other
+(walkways between buildings' upper floors, ramps into car parks). The ground of
+the road onto a measured deck is brought up or down to meet it over the last
+12 m (and the 4 m under its end), and in the game the deck meets the ground at an
+open end, any difference left taken up over the 8 m you get on in.
+
 **Archways** (`tunnel=building_passage`: roads, lanes and footpaths through
 buildings). The building's walls are cut open where the road passes through,
 as wide as the road (at least 3.4 m, so a car fits), and the building is drawn
@@ -146,7 +169,12 @@ ground):
 
 **The hills.** The bare ground's height every 4 m (the average of the 16 one-metre
 readings round each point), gaps filled from their neighbours, and smoothed twice.
-Stored as decimetres above the lowest point. (Bridges aren't in it: they're decks above it.)
+Stored as decimetres above the lowest point. (Bridges aren't in it: they're decks
+above it.) What's under a bridge (between 4 m in from each of its ends, and to a
+metre beyond its edges) is kept apart from the ground round it: readings, gap
+filling and smoothing never mix the two, or the road would dip as it came to the
+bridge (Park Street's did, by 2 m). Then the roads onto measured decks are brought
+to meet them (above).
 
 ## Damage
 

@@ -4,12 +4,14 @@
  * cross the harbour. Below a deck is the ground (a road, the water) at
  * level 0; on it, level 1. A car gets onto a deck only at its ends, where it
  * meets the ground (driving under it in the middle, it stays below), and
- * gets off at the ends too: its sides have parapets. Each deck runs straight
- * from the ground's height at one end to the ground's height at the other.
+ * gets off at the ends too: its sides have parapets. Each deck is as high as
+ * the LIDAR measured it along its length (arched, humped, level), meeting the
+ * ground at its ends; or, not measured, straight from the ground's height at
+ * one end to the ground's height at the other.
  * Pure, so it's tested.
  */
 
-import type { Pts, Road } from '../map/osm';
+import { DECK_STEP, type Pts, type Road } from '../map/osm';
 import type { Segment } from '../physics/collisions';
 import { lineLength, pointAlong } from './world';
 
@@ -112,15 +114,29 @@ export class Decks {
 
   /** The deck's height `along` px along it, px. */
   height(deck: Deck, along: number): number {
-    const t = deck.length ? Math.max(0, Math.min(1, along / deck.length)) : 0;
-    return deck.z0 + (deck.z1 - deck.z0) * t;
+    const a = Math.max(0, Math.min(deck.length, along));
+    const measured = deck.road.deck;
+    if (!measured || measured.length < 2) {
+      const t = deck.length ? a / deck.length : 0;
+      return deck.z0 + (deck.z1 - deck.z0) * t;
+    }
+    const k = Math.min(measured.length - 1.000001, a / DECK_STEP);
+    const i = Math.floor(k);
+    const z = measured[i] + (measured[i + 1] - measured[i]) * (k - i);
+    // Where it meets the ground, it's at the ground's height: any difference taken up over the way on.
+    const fade = (d: number) => Math.max(0, 1 - d / DECK_END);
+    const start = deck.open0 ? (deck.z0 - measured[0]) * fade(a) : 0;
+    const end = deck.open1 ? (deck.z1 - measured[measured.length - 1]) * fade(deck.length - a) : 0;
+    return z + start + end;
   }
 
   /** How steep the deck is at `along`: its rise per unit east and per unit south, as Terrain.slope gives it. */
   slope(deck: Deck, along: number): [number, number] {
     const [, , tx, ty] = pointAlong(deck.road.pts, along);
-    // The deck's heights and length are both in px, so this is rise over run.
-    const grade = deck.length ? (deck.z1 - deck.z0) / deck.length : 0;
+    // The deck's heights and its length are both in px, so this is rise over run.
+    const d = DECK_STEP;
+    const a = Math.max(d, Math.min(deck.length - d, along));
+    const grade = deck.length > 2 * d ? (this.height(deck, a + d) - this.height(deck, a - d)) / (2 * d) : deck.length ? (deck.z1 - deck.z0) / deck.length : 0;
     return [tx * grade, ty * grade];
   }
 

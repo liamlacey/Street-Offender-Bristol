@@ -36,6 +36,7 @@ import { CHUNK, type LooseProp, type Post, type World, beacons, buildWorld, chun
 import { ART_SCALE, TEX, TREE_KINDS, TREE_RADIUS, createArt } from './art';
 import { CarEffects } from './CarEffects';
 import { Wreckage } from './Wreckage';
+import { Kerbs } from '../world/kerbs';
 import { WallLayer } from '../world/WallLayer';
 import { type Debris, impactSpeed } from '../world/damage';
 import { HudScene, RESET_EVENT, STREET_EVENT } from './HudScene';
@@ -103,6 +104,7 @@ export class GameScene extends Phaser.Scene {
   /** The Belisha beacons' globes, flashing. */
   private beacons: { x: number; y: number; z: number; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
   private wreckage!: Wreckage;
+  private kerbs!: Kerbs;
   private wallLayer!: WallLayer;
   private loose: { body: LooseProp; image: Phaser.GameObjects.Image }[] = [];
   private looseByChunk = new Map<string, number[]>();
@@ -143,6 +145,7 @@ export class GameScene extends Phaser.Scene {
     this.skids = new SkidMarks(this, this.terrain, DEPTH.skids);
     this.effects = new CarEffects(this, this.skids, DEPTH.effects);
     this.buildings = new Buildings(this, this.world, this.terrain, DEPTH.buildings);
+    this.kerbs = new Kerbs(map);
     this.decks = new Decks(map.roads, (x, y) => this.groundAt(x, y));
     this.deckLayer = new DeckLayer(this, this.decks);
     this.wallLayer = new WallLayer(this, this.walls, (x, y, level) => this.surfaceHeight(x, y, level), DEPTH.walls);
@@ -377,6 +380,16 @@ export class GameScene extends Phaser.Scene {
     this.surface = on ? deckSurface(on.deck.road) : this.surfaces.at(car.x, car.y);
     const [sx, sy] = on ? this.decks.slope(on.deck, on.along) : this.terrain.slope(car.x, car.y);
     stepCar(car, this.input_, dt, SURFACE_GRIP[SURFACE_KIND[this.surface]], DEFAULT_TUNING, { x: sx, y: sy });
+    // Up or down a kerb: a jolt.
+    if (this.level === 0 && before !== this.surface) {
+      const up = before === Surface.Road && this.surface === Surface.Pavement;
+      const down = before === Surface.Pavement && this.surface === Surface.Road;
+      const jolt = up || down ? this.kerbs.bump(car, up) : 0;
+      if (jolt > 0) {
+        this.audio?.crash(jolt * 2);
+        if (up && jolt > 16) this.cameras.main.shake(70, Math.min(0.003, jolt / 10000));
+      }
+    }
 
     // Whatever the car's going into hard enough gives way first; then it bounces off what's left.
     this.wreckage.hit(car, this.level);

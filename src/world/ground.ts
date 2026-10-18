@@ -117,7 +117,11 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
   const roads = index.roads.map((i) => map.roads[i]).filter((r) => !r.bridge);
   const vehicle = roads.filter((r) => VEHICLE_ROADS.has(r.kind) && r.kind !== 'track');
   // Pavements along the roads.
-  for (const r of vehicle) if (r.pavement) stroke(ctx, r.pts, palette.pavement, r.width + PAVEMENT * 2);
+  for (const r of vehicle) {
+    if (r.pavement === 'both') stroke(ctx, r.pts, palette.pavement, r.width + PAVEMENT * 2);
+    // On one side only: a strip from the middle of the road out (the road's drawn over the inner half).
+    else if (r.pavement) stroke(ctx, offsetLine(r.pts, ((r.width / 2 + PAVEMENT) / 2) * (r.pavement === 'left' ? 1 : -1)), palette.pavement, r.width / 2 + PAVEMENT);
+  }
   // Footpaths, cycle paths, pedestrian streets and steps.
   for (const r of roads) {
     if (VEHICLE_ROADS.has(r.kind) && r.kind !== 'track') continue;
@@ -156,6 +160,10 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
         // Garden walls, hedges, fences and railings stand up off the ground, and can be knocked down: see WallLayer.
         case 'quay':
           stroke(ctx, l.pts, palette.quay, 4);
+          break;
+        // A kerb mapped on its own (round a square, along a path): its edge stones.
+        case 'kerb':
+          stroke(ctx, l.pts, palette.kerb, KERB);
           break;
         case 'rail':
           // Sleepers, then the two rails along them (a wide steel line with the middle painted out).
@@ -402,6 +410,29 @@ function line(ctx: Ctx, ax: number, ay: number, bx: number, by: number): void {
   ctx.moveTo(ax, ay);
   ctx.lineTo(bx, by);
   ctx.stroke();
+}
+
+/** A line running alongside another, `d` px to its left (as it runs; right if negative), keeping its corners square-ish. */
+export function offsetLine(pts: Pts, d: number): Pts {
+  const n = pts.length / 2;
+  const out: number[] = [];
+  const unit = (i: number): [number, number] => {
+    const dx = pts[i * 2 + 2] - pts[i * 2];
+    const dy = pts[i * 2 + 3] - pts[i * 2 + 1];
+    const len = Math.hypot(dx, dy) || 1;
+    return [dx / len, dy / len];
+  };
+  for (let i = 0; i < n; i++) {
+    const [ax, ay] = unit(Math.max(0, i - 1));
+    const [bx, by] = unit(Math.min(n - 2, i));
+    // Left of the way as it runs, with y down: (uy, -ux); at a corner, the two sides' normals averaged, pushed out so the strip keeps its width (within reason).
+    let [nx, ny] = [ay + by, -(ax + bx)];
+    const len = Math.hypot(nx, ny) || 1;
+    [nx, ny] = [nx / len, ny / len];
+    const k = Math.min(2, 1 / Math.max(0.5, nx * ay - ny * ax));
+    out.push(pts[i * 2] + nx * d * k, pts[i * 2 + 1] + ny * d * k);
+  }
+  return out;
 }
 
 function stroke(ctx: Ctx, pts: Pts, fill: Fill, width: number): void {

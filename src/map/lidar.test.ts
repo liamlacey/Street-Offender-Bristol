@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { mergeRasters, roofShape, shiftRaster } from './enrich';
+import { deckProfile, mergeRasters, roofShape, shiftRaster, underBridges } from './enrich';
 import { type HeightGrid, type Raster, bestShift, findTrees, parseWcsText, quantile, sample } from './lidar';
 import { toNationalGrid } from './osgb';
-import { paving } from './osm';
+import { type Road, paving } from './osm';
 
 describe('toNationalGrid', () => {
   it('lands within a few metres of the Ordnance Survey\'s own worked example', () => {
@@ -131,5 +131,36 @@ describe('shiftRaster and mergeRasters', () => {
     expect(sample(merged, 102, 200)).toBe(2);
     // The first has no reading here, so the second's is used.
     expect(sample(merged, 101, 199)).toBe(2);
+  });
+});
+
+describe('bridge decks', () => {
+  // A bridge 20 m long running east, 6 m wide, on a map where px = east and south metres × 8.
+  const bridge: Road = { kind: 'street', width: 48, pts: [0, 0, 160, 0], bridge: true };
+  const toGrid = (x: number, y: number): [number, number] => [x / 8, -y / 8];
+  // The surface: the deck 10 m up, a tree over the middle of it 18 m up.
+  const cols = 40;
+  const rows = 20;
+  const data = new Float32Array(cols * rows);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) data[r * cols + c] = Math.abs(c - 5 - 10) < 2 ? 18 : 10;
+  const dsm: Raster = { e0: -5, n0: 10, cols, rows, data };
+
+  it('measures the deck, leaving out a tree over it', () => {
+    const deck = deckProfile(bridge, dsm, toGrid, 8, [10, 10])!;
+    expect(deck).toHaveLength(11);
+    for (const z of deck) expect(z).toBeCloseTo(10);
+  });
+
+  it("doesn't measure one that's mostly something else", () => {
+    // The ground at its ends 6 m below everything read: walkways between upper floors, say.
+    expect(deckProfile(bridge, dsm, toGrid, 8, [4, 4])).toBeUndefined();
+  });
+
+  it("finds what's under a bridge, but not past its ends or off its sides", () => {
+    const under = underBridges([bridge]);
+    expect(under(80, 0)).toBe(1);
+    expect(under(80, 40)).toBe(0);
+    expect(under(-8, 0)).toBe(0);
+    expect(under(16, 0)).toBe(0);
   });
 });

@@ -7,7 +7,7 @@
  */
 
 import { type HeightGrid, type Raster, bestShift, findTrees, heightAt, heightGrid, quantile, sample } from './lidar.ts';
-import { type GameMap, Projection, type Pts, type TerrainData, VEHICLE_ROADS, pointInRing, ridgeAxis, ringArea } from './osm.ts';
+import { DECK_STEP, type GameMap, Projection, type Road, type Pts, type TerrainData, VEHICLE_ROADS, pointInRing, ridgeAxis, ringArea } from './osm.ts';
 import { toNationalGrid } from './osgb.ts';
 
 export interface LidarReport {
@@ -170,9 +170,160 @@ export function addLidar(map: GameMap, dsm: Raster, dtm: Raster): LidarReport {
   }
   osm.push(...added);
   report.treesAdded = added.length / 4;
-  map.terrain = terrainOf(map, dtm, grid);
+  map.terrain = terrainOf(map, dtm, grid, dsm);
   return report;
 }
+
+/** How far out from a bridge's end the road onto it is brought to meet it, px; and where the ground's measured to check the deck against. */
+const APPROACH = 12 * 8;
+const BEYOND = 8 * 8;
+
+/**
+ * Measures the bridges' decks (see deckProfile), and brings the ground of the
+ * roads onto them (`z`, the terrain grid, metres) up or down to meet each one
+ * that's measured, over the last APPROACH px. The decks are in metres above
+ * sea level: the caller makes them relative to the terrain's base.
+ */
+function measureDecks(map: GameMap, dsm: Raster, toGrid: (x: number, y: number) => [number, number], z: Float32Array, cols: number, rows: number, cell: number): Map<Road, number[]> {
+  const px = map.pxPerMetre;
+  const at = (x: number, y: number) => {
+    const gx = Math.max(0, Math.min(cols - 1.001, x / cell));
+    const gy = Math.max(0, Math.min(rows - 1.001, y / cell));
+    const [i, j] = [Math.floor(gx), Math.floor(gy)];
+    const [fx, fy] = [gx - i, gy - j];
+    const k = j * cols + i;
+    return (z[k] * (1 - fx) + z[k + 1] * fx) * (1 - fy) + (z[k + cols] * (1 - fx) + z[k + cols + 1] * fx) * fy;
+  };
+  const bridges = map.roads.filter((r) => r.bridge && r.pts.length >= 4);
+  // An end that meets another bridge's (a bridge mapped in pieces) isn't on the ground.
+  const joint = (x: number, y: number, self: Road) => bridges.some((r) => r !== self && [0, r.pts.length - 2].some((k) => Math.hypot(r.pts[k] - x, r.pts[k + 1] - y) < 2));
+  // Each end: where it is, which way is out from it, and whether it's on the ground.
+  const endsOf = (road: Road) => {
+    const p = road.pts;
+    const n = p.length;
+    const out = (x: number, y: number, fx: number, fy: number) => {
+      const len = Math.hypot(x - fx, y - fy) || 1;
+      return { x, y, ux: (x - fx) / len, uy: (y - fy) / len, open: !joint(x, y, road) };
+    };
+    return [out(p[0], p[1], p[2], p[3]), out(p[n - 2], p[n - 1], p[n - 4], p[n - 3])];
+  };
+  const decks = new Map<Road, number[]>();
+  for (const road of bridges) {
+    const ends = endsOf(road);
+    // The ground a little way out along the road onto it: right at the end, it's already dipping to what's below.
+    const ground = ends.map((e) => (e.open ? at(e.x + e.ux * BEYOND, e.y + e.uy * BEYOND) : null)) as [number | null, number | null];
+    const deck = deckProfile(road, dsm, toGrid, px, ground);
+    if (deck) decks.set(road, deck);
+  }
+  // The roads onto them, brought to meet them.
+  for (const [road, deck] of decks) {
+    const half = road.width / 2 + 3 * px;
+    endsOf(road).forEach((e, k) => {
+      if (!e.open) return;
+      const h = k === 0 ? deck[0] : deck[deck.length - 1];
+      for (let j = Math.floor((e.y - APPROACH) / cell); j <= Math.ceil((e.y + APPROACH) / cell); j++) {
+        for (let i = Math.floor((e.x - APPROACH) / cell); i <= Math.ceil((e.x + APPROACH) / cell); i++) {
+          if (i < 0 || j < 0 || i >= cols || j >= rows) continue;
+          const [dx, dy] = [i * cell - e.x, j * cell - e.y];
+          // How far out from the end (a cell in under it counts as at it), and how far to the side.
+          const out = dx * e.ux + dy * e.uy;
+          const side = Math.abs(-dx * e.uy + dy * e.ux);
+          if (out < -cell || out > APPROACH || side > half) continue;
+          const w = 1 - Math.max(0, out) / APPROACH;
+          z[j * cols + i] += (h - z[j * cols + i]) * w;
+        }
+      }
+    });
+  }
+  return decks;
+}
+
+/**
+ * A bridge's deck, measured: the first-return surface (the deck itself, not
+ * the water or road below) every DECK_STEP px along its middle, each the
+ * median of the readings across it (a metre in from its edges, clear of the
+ * parapets; the median, so a van or a lamp post on it doesn't count), gaps
+ * filled from either side and smoothed; metres above sea level. Readings far
+ * off the line between the ground at its ends are thrown out, and if too many
+ * are (or what's left is still far off it), nothing: it's not measured.
+ */
+export function deckProfile(
+  road: Road,
+  dsm: Raster,
+  toGrid: (x: number, y: number) => [number, number],
+  px: number,
+  /** The ground's height (metres) at each end, where it's on the ground (not where it meets another piece of the bridge). */
+  ends: [number | null, number | null] = [null, null],
+): number[] | undefined {
+  const p = road.pts;
+  const half = road.width / 2 / px;
+  const across: number[] = [];
+  for (let o = -(half - 1); o <= half - 1 + 1e-9; o += 1) across.push(o * px);
+  if (across.length === 0) across.push(0);
+  // Every DECK_STEP along it, and its very end.
+  const stations: [number, number, number, number][] = [];
+  let run = 0;
+  let next = 0;
+  for (let i = 0; i + 3 < p.length; i += 2) {
+    const [ax, ay, bx, by] = [p[i], p[i + 1], p[i + 2], p[i + 3]];
+    const len = Math.hypot(bx - ax, by - ay);
+    if (!len) continue;
+    const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
+    while (next <= run + len) {
+      const d = next - run;
+      stations.push([ax + ux * d, ay + uy * d, ux, uy]);
+      next += DECK_STEP;
+    }
+    run += len;
+  }
+  if (stations.length === 0) return undefined;
+  if (next - DECK_STEP < run - 1) {
+    const n = p.length;
+    const [ux, uy] = stations[stations.length - 1].slice(2) as [number, number];
+    stations.push([p[n - 2], p[n - 1], ux, uy]);
+  }
+  const z = stations.map(([x, y, ux, uy]) => {
+    const readings = across.map((o) => sample(dsm, ...toGrid(x - uy * o, y + ux * o))).filter((v) => v === v);
+    return readings.length ? quantile(readings, 0.5) : NaN;
+  });
+  if (z.every((v) => v !== v)) return undefined;
+  // What it should be near: straight between the ground at its ends (where they're on the ground; the
+  // readings' middle, where they're not). Readings well above that are trees over it, buildings at its
+  // ends or vans on it; well below, the water or the road beneath.
+  const middle = quantile(z.filter((v) => v === v), 0.5);
+  const [e0, e1] = ends.map((e) => (e === null ? middle : e));
+  const line = (i: number) => e0 + ((e1 - e0) * i) / Math.max(1, z.length - 1);
+  let rejected = 0;
+  for (let i = 0; i < z.length; i++) {
+    if (z[i] !== z[i]) continue;
+    const off = z[i] - line(i);
+    if (off > DECK_ABOVE || off < -DECK_BELOW) {
+      z[i] = NaN;
+      rejected++;
+    }
+  }
+  if (rejected > z.length / 2 || z.every((v) => v !== v)) return undefined;
+  // Gaps filled from the nearest readings either side.
+  for (let i = 0; i < z.length; i++) {
+    if (z[i] === z[i]) continue;
+    let a = i - 1;
+    while (a >= 0 && z[a] !== z[a]) a--;
+    let b = i + 1;
+    while (b < z.length && z[b] !== z[b]) b++;
+    z[i] = a < 0 ? z[b] : b >= z.length ? z[a] : z[a] + ((z[b] - z[a]) * (i - a)) / (b - a);
+  }
+  // Smoothed, over 6 m.
+  const smooth = z.map((_, i) => {
+    const near = z.slice(Math.max(0, i - 1), i + 2);
+    return near.reduce((s, v) => s + v, 0) / near.length;
+  });
+  if (smooth.some((v, i) => Math.abs(v - line(i)) > DECK_ABOVE)) return undefined;
+  return smooth;
+}
+
+/** How far above, and below, the straight line between its ends a bridge's deck may be measured, metres. */
+const DECK_ABOVE = 2.5;
+const DECK_BELOW = 1.5;
 
 /** The terrain grid's spacing, metres: the hills are smooth enough for this, and it keeps the map small. */
 const TERRAIN_CELL = 4;
@@ -182,19 +333,27 @@ const TERRAIN_CELL = 4;
  * LIDAR's readings round each point). Bridges aren't in it: they're decks
  * above it, a level of their own (see src/world/decks.ts).
  */
-export function terrainOf(map: GameMap, dtm: Raster, toGrid: (x: number, y: number) => [number, number]): TerrainData {
+export function terrainOf(map: GameMap, dtm: Raster, toGrid: (x: number, y: number) => [number, number], dsm?: Raster): TerrainData {
   const px = map.pxPerMetre;
   const cell = TERRAIN_CELL * px;
   const cols = Math.ceil(map.width / cell) + 1;
   const rows = Math.ceil(map.height / cell) + 1;
   const z = new Float32Array(cols * rows);
+  // What's under a bridge (a road, the water) is lower than the road that runs onto it: the ground's
+  // heights aren't mixed across a bridge's edges, or the road would dip as it came to the bridge.
+  const under = underBridges(map.roads);
+  const region = new Int32Array(cols * rows);
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
+      const own = under(i * cell, j * cell);
+      region[j * cols + i] = own;
       let sum = 0;
       let n = 0;
       for (let dy = -1.5; dy <= 1.5; dy++) {
         for (let dx = -1.5; dx <= 1.5; dx++) {
-          const [e, nn] = toGrid(i * cell + dx * px, j * cell + dy * px);
+          const [x, y] = [i * cell + dx * px, j * cell + dy * px];
+          if (under(x, y) !== own) continue;
+          const [e, nn] = toGrid(x, y);
           const v = sample(dtm, e, nn);
           if (v === v) {
             sum += v;
@@ -205,9 +364,12 @@ export function terrainOf(map: GameMap, dtm: Raster, toGrid: (x: number, y: numb
       z[j * cols + i] = n ? sum / n : NaN;
     }
   }
+  fillGaps(z, cols, rows, region);
   fillGaps(z, cols, rows);
   // Smooth out the bumps (kerbs, walls, what's left where buildings were taken out of the survey).
-  for (let pass = 0; pass < 2; pass++) smooth(z, cols, rows);
+  for (let pass = 0; pass < 2; pass++) smooth(z, cols, rows, region);
+  // The bridges' decks, measured; and the roads onto them brought up (or down) to meet them.
+  const decks = dsm ? measureDecks(map, dsm, toGrid, z, cols, rows, cell) : new Map<Road, number[]>();
 
   let base = Infinity;
   for (const v of z) base = Math.min(base, v);
@@ -220,11 +382,53 @@ export function terrainOf(map: GameMap, dtm: Raster, toGrid: (x: number, y: numb
   }
   let binary = '';
   for (const b of bytes) binary += String.fromCharCode(b);
+  for (const road of map.roads) delete road.deck;
+  for (const [road, deck] of decks) road.deck = deck.map((v) => Math.round((v - base) * px));
   return { cell, cols, rows, base, heights: btoa(binary) };
 }
 
 /** Averages each point with its neighbours. */
-function smooth(z: Float32Array, cols: number, rows: number): void {
+/**
+ * Which bridge (its index in the roads, plus 1) is overhead at a point, under
+ * its deck between its ends; 0 for none.
+ */
+export function underBridges(roads: Road[]): (x: number, y: number) => number {
+  const bridges = roads
+    .map((road, index) => ({ road, index }))
+    .filter(({ road }) => road.bridge && road.pts.length >= 4)
+    .map(({ road, index }) => {
+      const p = road.pts;
+      const reach = road.width / 2 + 1 * 8;
+      let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+      let length = 0;
+      for (let k = 0; k < p.length; k += 2) {
+        [x0, y0, x1, y1] = [Math.min(x0, p[k]), Math.min(y0, p[k + 1]), Math.max(x1, p[k]), Math.max(y1, p[k + 1])];
+        if (k) length += Math.hypot(p[k] - p[k - 2], p[k + 1] - p[k - 1]);
+      }
+      return { p, reach, length, index, box: [x0 - reach, y0 - reach, x1 + reach, y1 + reach] };
+    });
+  return (x, y) => {
+    for (const b of bridges) {
+      if (x < b.box[0] || y < b.box[1] || x > b.box[2] || y > b.box[3]) continue;
+      let run = 0;
+      for (let k = 0; k + 3 < b.p.length; k += 2) {
+        const [ax, ay, bx, by] = [b.p[k], b.p[k + 1], b.p[k + 2], b.p[k + 3]];
+        const len = Math.hypot(bx - ax, by - ay);
+        const t = len ? ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / (len * len) : 0;
+        const along = run + Math.max(0, Math.min(1, t)) * len;
+        run += len;
+        // Past its ends (and for a grid cell in from them, over its abutments), it's the road it runs onto.
+        if (along <= TERRAIN_CELL * 8 || along >= b.length - TERRAIN_CELL * 8) continue;
+        const c = Math.max(0, Math.min(1, t));
+        if (Math.hypot(ax + (bx - ax) * c - x, ay + (by - ay) * c - y) <= b.reach) return b.index + 1;
+      }
+    }
+    return 0;
+  };
+}
+
+/** Smooths the heights, each with its neighbours (only those in the same region, if given). */
+function smooth(z: Float32Array, cols: number, rows: number, region?: Int32Array): void {
   const out = z.slice();
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
@@ -235,6 +439,7 @@ function smooth(z: Float32Array, cols: number, rows: number): void {
           const ii = i + di;
           const jj = j + dj;
           if (ii < 0 || jj < 0 || ii >= cols || jj >= rows) continue;
+          if (region && region[jj * cols + ii] !== region[j * cols + i]) continue;
           const w = di === 0 && dj === 0 ? 4 : di === 0 || dj === 0 ? 2 : 1;
           sum += z[jj * cols + ii] * w;
           weight += w;
@@ -246,8 +451,8 @@ function smooth(z: Float32Array, cols: number, rows: number): void {
   z.set(out);
 }
 
-/** Fills in the cells with no reading from their neighbours, a ring at a time. */
-function fillGaps(z: Float32Array, cols: number, rows: number): void {
+/** Fills in the cells with no reading from their neighbours, a ring at a time (only those in the same region, if given). */
+function fillGaps(z: Float32Array, cols: number, rows: number, region?: Int32Array): void {
   for (let pass = 0; pass < 50; pass++) {
     let missing = 0;
     const next = z.slice();
@@ -260,6 +465,7 @@ function fillGaps(z: Float32Array, cols: number, rows: number): void {
           const ii = i + di;
           const jj = j + dj;
           if (ii < 0 || jj < 0 || ii >= cols || jj >= rows) continue;
+          if (region && region[jj * cols + ii] !== region[j * cols + i]) continue;
           const v = z[jj * cols + ii];
           if (v === v) {
             sum += v;
@@ -273,7 +479,8 @@ function fillGaps(z: Float32Array, cols: number, rows: number): void {
     z.set(next);
     if (!missing) return;
   }
-  for (let k = 0; k < z.length; k++) if (z[k] !== z[k]) z[k] = 0;
+  // Anything still empty is left for a pass across regions; with none, it's 0.
+  if (!region) for (let k = 0; k < z.length; k++) if (z[k] !== z[k]) z[k] = 0;
 }
 
 /** Points every `step` px inside some rings (filled even-odd). */
