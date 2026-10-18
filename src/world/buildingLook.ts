@@ -200,7 +200,8 @@ export function buildingLook(b: Building, triangulate: Triangulate): BuildingLoo
   const pick = <T>(list: T[], salt: number) => list[Math.floor(((seed * 7919 * (salt + 1)) % 1) * list.length)];
   const { walls: wallChoices, roofs: roofChoices } = palette(b.kind);
   const wallColour = parseColour(b.wall) ?? pick(wallChoices, 0);
-  const roofColour = parseColour(b.roof) ?? pick(roofChoices, 1);
+  // A petrol station's canopy: white, with a red fascia round its edge.
+  const roofColour = b.fuel ? 0xecece8 : parseColour(b.roof) ?? pick(roofChoices, 1);
   const outer = b.rings[0];
   let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
   for (let i = 0; i < outer.length; i += 2) {
@@ -298,8 +299,8 @@ export function buildingLook(b: Building, triangulate: Triangulate): BuildingLoo
     y1,
     walls,
     facets,
-    rim: pitched || pyramid || b.kind === 'roof' || b.roofShape === 'skillion' ? null : outer,
-    rimColour: shade(roofColour, 1.18),
+    rim: b.fuel ? outer : pitched || pyramid || b.kind === 'roof' || b.roofShape === 'skillion' ? null : outer,
+    rimColour: b.fuel ? 0xc62828 : shade(roofColour, 1.18),
     ridge,
     ridgeColour: shade(roofColour, 0.7),
     boxes,

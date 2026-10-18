@@ -34,6 +34,7 @@ const POST_RADIUS: Partial<Record<PropKind, number>> = {
   phone: 6,
   fountain: 14,
   meter: 2.5,
+  pump: 3.5,
   clock: 3,
   lifering: 2,
   bikes: 4,

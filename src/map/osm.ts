@@ -36,6 +36,7 @@ export type AreaKind =
   | 'pier'
   | 'pontoon'
   | 'slipway'
+  | 'forecourt'
   | 'island';
 
 export interface Area {
@@ -46,6 +47,8 @@ export interface Area {
   surface?: Paving;
   /** A slipway's way down, into the water, radians. */
   angle?: number;
+  /** Lines painted on it: a petrol station forecourt's lanes (x0, y0, x1, y1, ...). */
+  lines?: number[];
 }
 
 /** What a road, path or square is surfaced with (tarmac, the usual for roads, is left unsaid). */
@@ -363,6 +366,8 @@ export interface Building {
   heightFrom?: 'tag' | 'lidar';
   /** What its roof's made of (OSM's `roof:material`): how it's textured. */
   roofMaterial?: string;
+  /** A petrol station's canopy over its pumps. */
+  fuel?: boolean;
 }
 
 export type PropKind =
@@ -386,7 +391,8 @@ export type PropKind =
   | 'picnic'
   | 'crane'
   | 'ladder'
-  | 'mooring';
+  | 'mooring'
+  | 'pump';
 
 export interface Prop {
   kind: PropKind;
@@ -880,6 +886,7 @@ export function areaKind(tags: Tags): AreaKind | null {
   if (tags.leisure === 'garden') return 'garden';
   if (['grass', 'meadow', 'village_green', 'recreation_ground', 'cemetery'].includes(tags.landuse) || tags.natural === 'grassland' || tags.amenity === 'grave_yard') return 'grass';
   if (tags.landuse === 'construction' || tags.landuse === 'brownfield') return 'dirt';
+  if (tags.amenity === 'fuel' && !tags.building) return 'forecourt';
   if (tags.amenity === 'parking' && !tags.building && tags.parking !== 'underground' && tags.parking !== 'multi-storey') return 'parking';
   if (tags.highway === 'pedestrian' || tags.place === 'square' || tags.amenity === 'marketplace' || tags['area:highway'] || (tags.highway === 'footway' && tags.area === 'yes')) return 'plaza';
   return null;
@@ -902,6 +909,7 @@ export const AREA_ORDER: Record<AreaKind, number> = {
   pier: 11,
   pontoon: 11,
   slipway: 11,
+  forecourt: 6,
   island: 12,
 };
 
@@ -974,6 +982,11 @@ const HUMPS: Record<string, 'table' | 'hump' | 'cushion'> = {
   hump: 'hump',
   cushion: 'cushion',
 };
+
+/** A petrol station's pump islands: how far apart along the canopy, how long, how wide, px. */
+const ISLAND_EVERY = 6 * PX_PER_METRE;
+const ISLAND_LONG = 4 * PX_PER_METRE;
+const ISLAND_WIDE = 1.2 * PX_PER_METRE;
 
 /** A crane's height, if it's not tagged, m: the harbour's are about this. */
 const CRANE_HEIGHT = 15;
@@ -1861,6 +1874,43 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       const [ox, oy] = [-Math.sin(c.angle) * side, Math.cos(c.angle) * side];
       const out = c.width / 2 + 0.8 * PX_PER_METRE;
       paint.push({ kind: 'tactile', x: round(c.x + ox * out), y: round(c.y + oy * out), angle: +Math.atan2(oy, ox).toFixed(3), width: round(2.4 * PX_PER_METRE), ...(c.kind === 'lights' ? { red: true } : {}) });
+    }
+  }
+
+  // Petrol stations: under the canopy on the forecourt (OSM doesn't map the pumps), a raised island every
+  // 6 m along its long side, square to it, 4 m long, with a pump at each end; dashed lanes between them.
+  for (const f of areas.filter((a) => a.kind === 'forecourt')) {
+    const court = f.rings[0];
+    for (const b of buildings) {
+      if (b.kind !== 'roof') continue;
+      const c = centroid(b.rings[0]);
+      if (!pointInRing(c.x, c.y, court)) continue;
+      b.fuel = true;
+      const axis = ridgeAxis(b.rings[0]);
+      const { ux, uy, t0, t1 } = axis;
+      const [nx, ny] = [-uy, ux];
+      // Along the canopy's long side, through its middle.
+      const mid = (t0 + t1) / 2;
+      const [ox, oy] = [axis.ox + ux * mid, axis.oy + uy * mid];
+      const span = t1 - t0;
+      const count = Math.max(1, Math.floor(span / ISLAND_EVERY));
+      const lines: number[] = [];
+      for (let k = 0; k < count; k++) {
+        const along = (k - (count - 1) / 2) * ISLAND_EVERY;
+        const [ix, iy] = [ox + ux * along, oy + uy * along];
+        const [hl, hw] = [ISLAND_LONG / 2, ISLAND_WIDE / 2];
+        areas.push({
+          kind: 'island',
+          rings: [roundPts([ix - nx * hl - ux * hw, iy - ny * hl - uy * hw, ix + nx * hl - ux * hw, iy + ny * hl - uy * hw, ix + nx * hl + ux * hw, iy + ny * hl + uy * hw, ix - nx * hl + ux * hw, iy - ny * hl + uy * hw])],
+        });
+        for (const end of [-1, 1]) props.push({ kind: 'pump', x: round(ix + nx * end * (hl - 0.7 * PX_PER_METRE)), y: round(iy + ny * end * (hl - 0.7 * PX_PER_METRE)), angle: +Math.atan2(ny, nx).toFixed(3) });
+        // A lane either side of each island: a dashed line halfway to the next.
+        for (const side of [-0.5, 0.5]) {
+          const [lx, ly] = [ix + ux * side * ISLAND_EVERY, iy + uy * side * ISLAND_EVERY];
+          lines.push(round(lx - nx * (hl + 2 * PX_PER_METRE)), round(ly - ny * (hl + 2 * PX_PER_METRE)), round(lx + nx * (hl + 2 * PX_PER_METRE)), round(ly + ny * (hl + 2 * PX_PER_METRE)));
+        }
+      }
+      f.lines = [...(f.lines ?? []), ...lines];
     }
   }
 

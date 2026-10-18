@@ -208,5 +208,6 @@ describe('the harbour', () => {
     expect(areaKind({ man_made: 'pier', floating: 'yes' })).toBe('pontoon');
     expect(areaKind({ man_made: 'pier' })).toBe('pier');
     expect(areaKind({ man_made: 'pier', floating: 'no' })).toBe('pier');
+    expect(areaKind({ amenity: 'fuel' })).toBe('forecourt');
   });
 });

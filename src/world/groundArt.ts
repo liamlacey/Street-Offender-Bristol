@@ -228,6 +228,7 @@ export function artPalette(ctx: Ctx): Palette {
     pool: pattern(water(64, '#4c9fc4', 'rgba(220,245,255,0.5)', 14)),
     pier: pattern(planks(64)),
     pontoon: pattern(composite(64)),
+    forecourt: pattern(asphalt(64, '#4f5053', 25)),
     slipway: pattern(slabs([164, 160, 152], 64, 64, 'rgba(70,68,62,0.18)', 23)),
     island: pavement,
   };

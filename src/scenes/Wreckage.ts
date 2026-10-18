@@ -33,7 +33,7 @@ import type { CarEffects } from './CarEffects';
 /** How long what's just broken off can't be broken again, seconds. */
 const FRESH = 0.5;
 /** What's got glass in it, to smash as it lands. */
-const GLASSY = new Set(['lamp', 'signal', 'beacon', 'phone', 'meter', 'clock']);
+const GLASSY = new Set(['lamp', 'signal', 'beacon', 'phone', 'meter', 'pump', 'clock']);
 /** How long a broken light's wires go on sparking, seconds. */
 const SPARKING = 5;
 /** How high a fallen tree's crown lies, px (as its treetop: the crown's drawn a little below), and the top of anything else. */

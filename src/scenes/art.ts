@@ -320,6 +320,13 @@ export function createArt(scene: Phaser.Scene): void {
     roundRect(ctx, 0, 0, 8, 6, 1, '#5d636a');
     roundRect(ctx, 5, 1, 2.4, 4, 0.4, '#2a4b66');
   });
+  canvasTexture(scene, TEX.debris('pump'), 12, 8, (ctx) => {
+    roundRect(ctx, 0, 0.5, 12, 7, 1, '#d6d6d2');
+    ctx.fillStyle = '#c62828';
+    ctx.fillRect(4.5, 0.5, 2.4, 7);
+    ctx.fillStyle = '#1d1f22';
+    ctx.fillRect(9, 1.8, 2.2, 4.4);
+  });
   canvasTexture(scene, TEX.debris('clockface'), 6, 6, (ctx) => {
     circle(ctx, 3, 3, 2.9, '#1f2a24');
     circle(ctx, 3, 3, 2.1, '#d9d4c2');
@@ -477,6 +484,15 @@ export function createArt(scene: Phaser.Scene): void {
     roundRect(ctx, 0.8, 0.8, 4.4, 2, 0.4, '#3a8fd0');
     ctx.fillStyle = '#d8dde2';
     ctx.fillRect(1.2, 3.4, 3.6, 0.8);
+  });
+  // A petrol pump from above: its white cabinet, a red band along its top, the hoses hanging either side.
+  canvasTexture(scene, TEX.prop('pump'), 8, 12, (ctx) => {
+    roundRect(ctx, 0.5, 0.5, 7, 11, 1, '#e8e8e4');
+    ctx.fillStyle = '#c62828';
+    ctx.fillRect(0.5, 4.8, 7, 2.4);
+    ctx.fillStyle = '#1d1f22';
+    ctx.fillRect(1.5, 1.5, 5, 2.4);
+    ctx.fillRect(1.5, 8.1, 5, 2.4);
   });
   // A street clock on its pole: the face from above, on its dark case.
   canvasTexture(scene, TEX.prop('clock'), 10, 10, (ctx) => {

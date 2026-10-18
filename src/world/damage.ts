@@ -14,7 +14,7 @@ import type { Segment } from '../physics/collisions';
 export type Material = 'wood' | 'electric' | 'metal' | 'iron' | 'glass' | 'stone' | 'plant' | 'timber' | 'plastic';
 
 /** Things that stand in one place until they're knocked down. */
-export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'mooring' | 'postbox' | 'phone' | 'meter' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'crane' | 'stump';
+export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'mooring' | 'postbox' | 'phone' | 'meter' | 'pump' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'crane' | 'stump';
 /** What stands and can't be knocked over: big stone fountains, statues on their plinths, and what's left of a tree. */
 export type Structure = 'tree' | 'fountain' | 'statue' | 'crane' | 'stump';
 /** Walls, by what OSM calls them. */
@@ -39,6 +39,8 @@ export const THINGS: Record<Exclude<ThingKind, 'tree'>, Toughness> = {
   phone: { material: 'glass', strength: 170, absorb: 0.35 },
   // A pay-and-display machine: a metal box of electrics on a post, with a little screen.
   meter: { material: 'electric', strength: 160, absorb: 0.25 },
+  // A petrol pump: a cabinet of electrics and pipework, with a screen.
+  pump: { material: 'electric', strength: 180, absorb: 0.35 },
   // A street clock on its pole.
   clock: { material: 'electric', strength: 170, absorb: 0.3 },
   // A life ring on its post by the water.
@@ -131,7 +133,7 @@ export function gapFor(kind: WallKind, speed: number, weight = 1): number {
   return w.gap * Math.min(2, Math.max(1, (speed * weight) / w.strength));
 }
 
-export type DebrisKind = 'meter' | 'clockface' | 'post' | 'ring' | 'plastic' | 'arm' | 'log' | 'billet' | 'splinter' | 'plank' | 'foliage' | 'twig' | 'glass' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head';
+export type DebrisKind = 'pump' | 'meter' | 'clockface' | 'post' | 'ring' | 'plastic' | 'arm' | 'log' | 'billet' | 'splinter' | 'plank' | 'foliage' | 'twig' | 'glass' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head';
 
 /** A piece of what's broken, flying off: it ends up somewhere, in the way. */
 export interface Debris {
@@ -150,6 +152,7 @@ export interface Debris {
 
 const PIECES: Record<DebrisKind, { r: number; length?: number; invMass: number }> = {
   meter: { r: 3, length: 8, invMass: 4 },
+  pump: { r: 3.5, length: 12, invMass: 2.5 },
   clockface: { r: 3, invMass: 8 },
   post: { r: 1.6, length: 12, invMass: 10 },
   ring: { r: 2.5, invMass: 20 },
@@ -232,6 +235,8 @@ export function fallen(kind: Exclude<ThingKind, Structure>, x: number, y: number
       return [lying('phonebox', 6, 0.25)];
     case 'meter':
       return [lying('meter', 5, 0.3)];
+    case 'pump':
+      return [lying('pump', 6, 0.25)];
     case 'clock':
       return [lying('shortpole', 11, 0.2), lying('clockface', 26, 0.3)];
     case 'lifering':
@@ -323,6 +328,7 @@ export const TOPPLE: Record<Exclude<ThingKind, Structure>, { height: number; rea
   postbox: { height: 1.6 * 8, reach: 4, pole: false },
   phone: { height: 2.5 * 8, reach: 6, pole: false },
   meter: { height: 1.6 * 8, reach: 8, pole: false },
+  pump: { height: 1.9 * 8, reach: 8, pole: false },
   clock: { height: 3.5 * 8, reach: 26, pole: true },
   lifering: { height: 1.5 * 8, reach: 10, pole: true },
   bikes: { height: 0.8 * 8, reach: 4, pole: false },
@@ -335,6 +341,7 @@ const GLASS: Partial<Record<ThingKind, { count: number; at: number }>> = {
   beacon: { count: 6, at: 18 },
   phone: { count: 14, at: 6 },
   meter: { count: 4, at: 8 },
+  pump: { count: 5, at: 8 },
   clock: { count: 6, at: 26 },
 };
 

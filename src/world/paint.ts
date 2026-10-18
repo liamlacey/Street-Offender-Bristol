@@ -50,6 +50,21 @@ const BAY_AISLE = 6 * 8;
 export function drawCarParks(ctx: Ctx, map: GameMap, index: ChunkIndex): void {
   for (const i of index.areas) {
     const a = map.areas[i];
+    if (a.lines) {
+      // A forecourt's lanes: dashed lines between the pump islands.
+      ctx.save();
+      ctx.strokeStyle = WHITE;
+      ctx.lineWidth = 1.2;
+      ctx.lineCap = 'butt';
+      ctx.setLineDash([8, 6]);
+      ctx.beginPath();
+      for (let k = 0; k + 3 < a.lines.length; k += 4) {
+        ctx.moveTo(a.lines[k], a.lines[k + 1]);
+        ctx.lineTo(a.lines[k + 2], a.lines[k + 3]);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
     if (a.kind !== 'parking') continue;
     const ring = a.rings[0];
     let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];

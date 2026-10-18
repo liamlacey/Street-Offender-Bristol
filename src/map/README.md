@@ -246,6 +246,13 @@ the road onto a measured deck is brought up or down to meet it over the last
 12 m (and the 4 m under its end), and in the game the deck meets the ground at an
 open end, any difference left taken up over the 8 m you get on in.
 
+**Petrol stations** (`amenity=fuel`, an outline): the forecourt's tarmac (driven on
+like a road). A canopy (`building=roof`) standing on it is the station's: white, with
+a red fascia round its edge (no brand's colours or logo). OSM doesn't map the pumps,
+so they're made: under the canopy, a raised island every 6 m along its long side,
+square to it, 4 m long and 1.2 m wide, with a pump at each end; dashed lanes painted
+between the islands.
+
 **Arcades and colonnades** (`covered=arcade` or `colonnade` on a path): the walk
 under a building's front, open along its side. The building's walls are taken out
 wherever they're within 2 m of the path's edge (along it, not just where it crosses
@@ -316,6 +323,7 @@ bounces off.
 | Post box | iron | 300 | Knocked off its foot, a heavy lump |
 | Phone box | glass | 170 | Goes over, its panes smashed and strewn round it |
 | Parking ticket machine (`vending=parking_tickets`) | metal with electrics | 160 | Topples, its screen smashed, sparks |
+| Petrol pump (made, on a station's islands) | metal with electrics | 180 | Topples off its island, its screen smashed, sparks |
 | Street clock (`amenity=clock`, not on a building or a sundial) | metal with electrics | 170 | Topples on its pole; its face comes off, its glass smashed |
 | Life ring on its post (`emergency=life_ring`) | timber | 110 | The post snaps, the ring's thrown off |
 | Bike stands (`amenity=bicycle_parking`) | metal | 140 | Bent over, flat |
