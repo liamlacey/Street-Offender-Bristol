@@ -245,6 +245,27 @@ export function createArt(scene: Phaser.Scene): void {
     ctx.fillStyle = '#8f6038';
     ctx.fillRect(0.5, 0.6, 12, 1);
   });
+  // A clump torn out of a hedge, and a broken twig.
+  canvasTexture(scene, TEX.debris('foliage'), 7, 7, (ctx) => {
+    circle(ctx, 3.5, 3.5, 3.2, '#2c5323');
+    circle(ctx, 2.6, 2.8, 1.6, '#417c31');
+    circle(ctx, 4.6, 4.2, 1.3, '#417c31');
+    circle(ctx, 2.4, 2.4, 0.6, '#5f9a45');
+  });
+  canvasTexture(scene, TEX.debris('twig'), 9, 4, (ctx) => {
+    ctx.strokeStyle = '#5b4630';
+    ctx.lineWidth = 0.9;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0.5, 2.2);
+    ctx.lineTo(8.5, 1.8);
+    ctx.moveTo(4, 2);
+    ctx.lineTo(6.5, 0.5);
+    ctx.moveTo(5.5, 1.9);
+    ctx.lineTo(7.5, 3.4);
+    ctx.stroke();
+    circle(ctx, 6.6, 0.6, 0.7, '#417c31');
+  });
   canvasTexture(scene, TEX.debris('rubble'), 6, 6, (ctx) => {
     ctx.fillStyle = '#8a7f70';
     ctx.beginPath();

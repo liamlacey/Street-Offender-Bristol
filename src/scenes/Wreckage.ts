@@ -138,9 +138,15 @@ export class Wreckage {
     const [mx, my] = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
     const gap = Math.hypot(to[0] - from[0], to[1] - from[1]);
     const material: Material = WALLS[kind].material;
-    // What it breaks into: a stone wall into rubble and bricks, a fence into planks, a railing into bent bars.
+    // What it breaks into: a stone wall into rubble and bricks, a hedge into clumps of leaves and twigs, a fence into planks, a railing into bent bars.
     const pieces: [Parameters<typeof debris>[0], number][] =
-      kind === 'wall' ? [['rubble', Math.round(gap / 5)], ['brick', Math.round(gap / 8)]] : kind === 'fence' ? [['plank', Math.round(gap / 7)]] : kind === 'railing' ? [['rail', Math.max(1, Math.round(gap / 16))]] : [];
+      kind === 'wall'
+        ? [['rubble', Math.round(gap / 5)], ['brick', Math.round(gap / 8)]]
+        : kind === 'hedge'
+          ? [['foliage', Math.round(gap / 4)], ['twig', Math.round(gap / 8)]]
+          : kind === 'fence'
+            ? [['plank', Math.round(gap / 7)]]
+            : [['rail', Math.max(1, Math.round(gap / 16))]];
     for (const [piece, count] of pieces) for (const d of debris(piece, Math.min(count, 10), mx, my, car.vx, car.vy, rand, gap / 2)) this.hooks.addDebris(d, level);
     this.effects.burst(material, mx, my, kind === 'hedge' ? 30 : 18);
     this.hooks.audio()?.shatter(material, speed);

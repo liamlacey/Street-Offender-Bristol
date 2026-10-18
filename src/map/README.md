@@ -170,7 +170,7 @@ bounces off.
 | Phone box | glass | 170 | Goes over, glass everywhere |
 | Bench | timber, in parts | 150 | Below: shoved. Above: smashed into planks, scattered the way the car was going |
 | Garden wall (`barrier=wall`, …) | stone | 200 | Crumbles: a gap 2 m wide (up to 4 m, the harder it's hit) in rubble and bricks; the rest stands |
-| Hedge | plant | 80 | Torn through (a 3 m gap, up to 6 m), leaves everywhere |
+| Hedge | plant | 80 | Torn through (a 3 m gap, up to 6 m): leaves flying, and clumps of it and twigs strewn the way the car went |
 | Fence | timber | 70 | Broken through (2.5 m, up to 5 m) into planks |
 | Railings | metal | 130 | Broken through (2.5 m, up to 5 m), bent bars |
 

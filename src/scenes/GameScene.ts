@@ -547,7 +547,7 @@ export class GameScene extends Phaser.Scene {
   /** A piece of something broken, flying off loose: it ends up in the way. */
   private addDebris(d: Debris, level: number): void {
     // Enough is enough: past this, the smallest bits are left out.
-    if (this.loose.length > MAX_LOOSE && (d.kind === 'rubble' || d.kind === 'brick')) return;
+    if (this.loose.length > MAX_LOOSE && (d.kind === 'rubble' || d.kind === 'brick' || d.kind === 'foliage' || d.kind === 'twig')) return;
     const body: LooseProp = { ...d, level, moved: true };
     const image = this.add
       .image(d.x, d.y, TEX.debris(d.kind))

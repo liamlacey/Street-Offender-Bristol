@@ -77,6 +77,13 @@ describe('what\'s left', () => {
     for (const b of bits) expect(b.vx).toBeGreaterThan(0);
   });
 
+  it("strews a hedge's clumps and twigs about, light enough to be kicked along", () => {
+    const leaves = debris('foliage', 4, 0, 0, 300, 0, () => 0.5);
+    const [plank] = debris('plank', 1, 0, 0, 300, 0, () => 0.5);
+    expect(leaves).toHaveLength(4);
+    expect(leaves[0].invMass).toBeGreaterThan(plank.invMass);
+  });
+
   it('lays a fallen lamp post along the way it was hit', () => {
     const [pole] = fallen('lamp', 0, 0, 0, 300, () => 0.5);
     expect(pole.kind).toBe('pole');

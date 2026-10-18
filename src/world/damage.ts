@@ -5,7 +5,7 @@
  * it leaves behind. Everything except the buildings (and big structures like
  * fountains) gives way in the end: trees split and fall, lamp posts and traffic
  * lights bend over and spark, walls crumble, benches smash, hedges are torn
- * through. What's left stays where it fell, in the way. Pure, so it's tested.
+ * through, their leaves and twigs strewn about. What's left stays where it fell, in the way. Pure, so it's tested.
  */
 
 import { CAR_LENGTH, CAR_WIDTH, type CarState } from '../car/CarPhysics';
@@ -108,7 +108,7 @@ export function gapFor(kind: WallKind, speed: number, weight = 1): number {
   return w.gap * Math.min(2, Math.max(1, (speed * weight) / w.strength));
 }
 
-export type DebrisKind = 'plank' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head';
+export type DebrisKind = 'plank' | 'foliage' | 'twig' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head';
 
 /** A piece of what's broken, flying off: it ends up somewhere, in the way. */
 export interface Debris {
@@ -127,6 +127,8 @@ export interface Debris {
 
 const PIECES: Record<DebrisKind, { r: number; length?: number; invMass: number }> = {
   plank: { r: 1.6, length: 13, invMass: 14 },
+  foliage: { r: 3, invMass: 30 },
+  twig: { r: 1, length: 9, invMass: 30 },
   rubble: { r: 2.6, invMass: 9 },
   brick: { r: 2, invMass: 12 },
   rail: { r: 1.4, length: 18, invMass: 8 },
