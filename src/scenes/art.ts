@@ -17,6 +17,8 @@ export const TEX = {
   spark: 'spark',
   tree: (k: number) => `tree-${k}`,
   prop: (kind: string) => `prop-${kind}`,
+  light: (state: string) => `light-${state}`,
+  beacon: (on: boolean) => `beacon-${on ? 'on' : 'off'}`,
 } as const;
 
 export const TREE_KINDS = 4;
@@ -150,12 +152,48 @@ export function createArt(scene: Phaser.Scene): void {
     circle(ctx, 3, 3, 2.6, '#1f2225');
     circle(ctx, 2.6, 2.6, 1.3, '#4b5056');
   });
-  canvasTexture(scene, TEX.prop('signals'), 10, 10, (ctx) => {
-    circle(ctx, 5, 5, 3, '#202326');
-    roundRect(ctx, 3, 1, 4, 8, 1, '#111');
-    circle(ctx, 5, 3, 1.1, '#ff3b30');
-    circle(ctx, 5, 7, 1.1, '#3ad16b');
-  });
+  // Traffic lights, drawn for traffic heading right: the pole, and the head
+  // with its three lamps (red, amber, green) in a row, the lit ones glowing.
+  const lamps: Record<string, [boolean, boolean, boolean]> = {
+    red: [true, false, false],
+    redamber: [true, true, false],
+    green: [false, false, true],
+    amber: [false, true, false],
+  };
+  for (const [state, [r, a, g]] of Object.entries(lamps)) {
+    canvasTexture(scene, TEX.light(state), 12, 16, (ctx) => {
+      circle(ctx, 6, 2.5, 2.2, '#2a2d31');
+      roundRect(ctx, 3, 2, 6, 13, 1.5, '#15171a');
+      const lamp = (y: number, on: boolean, lit: string, dim: string) => {
+        if (on) {
+          const glow = ctx.createRadialGradient(6, y, 0, 6, y, 4.5);
+          glow.addColorStop(0, lit);
+          glow.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = glow;
+          ctx.fillRect(0, y - 4.5, 12, 9);
+        }
+        circle(ctx, 6, y, 1.6, on ? '#ffffff' : dim);
+        if (on) circle(ctx, 6, y, 1.3, lit);
+      };
+      lamp(5, r, '#ff3b30', '#4a1512');
+      lamp(8.5, a, '#ffb21a', '#4a3410');
+      lamp(12, g, '#3ad16b', '#123d22');
+    });
+  }
+  // A Belisha beacon: the amber globe on its striped pole, lit or not.
+  for (const on of [true, false]) {
+    canvasTexture(scene, TEX.beacon(on), 12, 12, (ctx) => {
+      if (on) {
+        const glow = ctx.createRadialGradient(6, 6, 0, 6, 6, 6);
+        glow.addColorStop(0, 'rgba(255,190,40,0.9)');
+        glow.addColorStop(1, 'rgba(255,170,0,0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, 12, 12);
+      }
+      circle(ctx, 6, 6, 2.6, on ? '#ffc23a' : '#b9772a');
+      circle(ctx, 5.3, 5.3, 0.9, on ? '#fff6d0' : '#d9a560');
+    });
+  }
   canvasTexture(scene, TEX.prop('postbox'), 9, 9, (ctx) => {
     circle(ctx, 4.5, 4.5, 4, '#9d1010');
     circle(ctx, 4.5, 4.5, 3, '#d0201e');

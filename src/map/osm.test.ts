@@ -118,7 +118,7 @@ describe('buildMap', () => {
   it('keeps trees, props and crossings', () => {
     expect(map.trees).toHaveLength(4);
     expect(map.props).toEqual([expect.objectContaining({ kind: 'bench' })]);
-    expect(map.crossings).toEqual([expect.objectContaining({ zebra: true, width: 80 })]);
+    expect(map.crossings).toEqual([expect.objectContaining({ kind: 'zebra', width: 80 })]);
   });
 
   it('starts the car on the nearest road, along it', () => {

@@ -83,6 +83,26 @@ landmark's from `landmarks.ts` first, then OSM's `building:colour`,
 Roof shape: `roof:shape`, else what the LIDAR shows, else pitched for houses and
 churches and flat for the rest.
 
+**Crossings** (`highway=crossing` nodes on roads): a **zebra** (`crossing=zebra`,
+`crossing_ref=zebra`, or zebra `crossing:markings`) gets stripes, zig-zags along
+both kerbs and a flashing Belisha beacon on the pavement at each end; one with
+**lights** (`crossing=traffic_signals`, or a pelican, puffin, toucan or pegasus
+`crossing_ref`) gets two lines of studs and zig-zags, and is worked by the
+nearest controller; any other (unmarked, a dropped kerb) has nothing painted.
+
+**Traffic lights** (`highway=traffic_signals` nodes, and crossings with lights, on
+roads; `signals.ts`). Each way into one (each road meeting it, as the traffic
+heads, allowing for one-way streets and `traffic_signals:direction`) gets a stop
+line across its own lanes (the left half of a two-way road, the whole of a
+one-way one) and a pole on the kerb to its left, as in Britain. Traffic stops at
+the point itself for lights on their own (OSM maps them at the stop line), 2.5 m
+short of a crossing, and half the widest road plus 2 m short of a junction.
+Lights within 40 m of each other are one controller; of several along the same
+road one after another, the traffic stops only at the first. A controller's
+ways in that line up (or face each other) go green together, as a group; groups
+take turns (red and amber 2 s, green 12 s, amber 3 s, red all round 2 s), then,
+where there's a crossing, people get 8 s with everything red (`src/world/lights.ts`).
+
 **Lining up the LIDAR.** OSM is in latitude and longitude (WGS84); the LIDAR is
 on the Ordnance Survey's National Grid. `osgb.ts` converts (Helmert transform to
 OSGB36, then the National Grid's transverse Mercator: good to a few metres), and

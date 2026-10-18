@@ -29,7 +29,8 @@ import { GroundLayer, paintSurfaces } from '../world/GroundLayer';
 import { Perspective } from '../world/perspective';
 import { Terrain } from '../world/terrain';
 import { SURFACE_KIND, Surface, type SurfaceGrid } from '../world/surface';
-import { CHUNK, type LooseProp, type World, buildWorld, chunkKey } from '../world/world';
+import { type Light, lightAt } from '../world/lights';
+import { CHUNK, type LooseProp, type World, beacons, buildWorld, chunkKey } from '../world/world';
 import { ART_SCALE, TEX, TREE_KINDS, TREE_RADIUS, createArt } from './art';
 import { CarEffects } from './CarEffects';
 import { HudScene, RESET_EVENT, STREET_EVENT } from './HudScene';
@@ -52,6 +53,9 @@ const DEPTH = {
 
 /** How high the camera is when stopped, px (the lower it is, the more the buildings lean). */
 const CAMERA_HEIGHT = 1250;
+/** How high traffic lights' heads and Belisha beacons' globes are, px. */
+const LIGHT_HEIGHT = 3.5 * 8;
+const BEACON_HEIGHT = 2.6 * 8;
 /** The view's shorter side, in map px, when the car's stopped (it pulls back as you speed up, as in the old games). */
 const VIEW_AT_REST = 430;
 const PULL_BACK = 0.38;
@@ -75,6 +79,10 @@ export class GameScene extends Phaser.Scene {
   private carSprite!: Phaser.GameObjects.Image;
   private carShadow!: Phaser.GameObjects.Image;
   private trees: { x: number; y: number; z: number; h: number; image: Phaser.GameObjects.Image }[] = [];
+  /** Each traffic light's head, up its pole, with what it's showing. */
+  private signalHeads: { x: number; y: number; z: number; controller: number; group: number; light: Light; image: Phaser.GameObjects.Image }[] = [];
+  /** The Belisha beacons' globes, flashing. */
+  private beacons: { x: number; y: number; z: number; image: Phaser.GameObjects.Image }[] = [];
   private loose: { body: LooseProp; image: Phaser.GameObjects.Image }[] = [];
   private looseByChunk = new Map<string, number[]>();
   private effects!: CarEffects;
@@ -115,6 +123,7 @@ export class GameScene extends Phaser.Scene {
     this.buildings = new Buildings(this, this.world, this.terrain, DEPTH.buildings);
     this.addProps();
     this.addTrees();
+    this.addLights();
 
     const { spawn } = map;
     this.car = createCar(spawn.x, spawn.y, spawn.heading);
@@ -183,6 +192,48 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /** The traffic lights and Belisha beacons, up on their poles. */
+  private addLights(): void {
+    const { signals } = this.world.map;
+    for (const s of signals) {
+      const image = this.add.image(s.x, s.y, TEX.light('red')).setScale(1.3 / ART_SCALE).setRotation(s.angle).setDepth(DEPTH.trees).setVisible(false);
+      this.signalHeads.push({ x: s.x, y: s.y, z: this.groundAt(s.x, s.y) + LIGHT_HEIGHT, controller: s.controller, group: s.group, light: 'red', image });
+    }
+    for (const b of beacons(this.world.map)) {
+      const image = this.add.image(b.x, b.y, TEX.beacon(true)).setScale(1.3 / ART_SCALE).setDepth(DEPTH.trees).setVisible(false);
+      this.beacons.push({ x: b.x, y: b.y, z: this.groundAt(b.x, b.y) + BEACON_HEIGHT, image });
+    }
+  }
+
+  /** Sets each light near the view to what its controller says, and the beacons flashing. */
+  private updateLights(view: Phaser.Geom.Rectangle): void {
+    const p = this.perspective;
+    const time = this.time.now / 1000;
+    const { controllers } = this.world.map;
+    const near = (x: number, y: number) => x > view.left - 120 && x < view.right + 120 && y > view.top - 120 && y < view.bottom + 120;
+    for (const l of this.signalHeads) {
+      const show = near(l.x, l.y);
+      if (l.image.visible !== show) l.image.setVisible(show);
+      if (!show) continue;
+      const light = lightAt(controllers[l.controller], l.controller, l.group, time);
+      if (light !== l.light) {
+        l.light = light;
+        l.image.setTexture(TEX.light(light));
+      }
+      const s = p.lift(l.z);
+      l.image.setPosition(p.x(l.x, s), p.y(l.y, s));
+    }
+    const on = time % 1 < 0.5;
+    for (const b of this.beacons) {
+      const show = near(b.x, b.y);
+      if (b.image.visible !== show) b.image.setVisible(show);
+      if (!show) continue;
+      b.image.setTexture(TEX.beacon(on));
+      const s = p.lift(b.z);
+      b.image.setPosition(p.x(b.x, s), p.y(b.y, s));
+    }
+  }
+
   private addTrees(): void {
     const t = this.world.map.trees;
     for (let i = 0; i < t.length; i += 4) {
@@ -217,6 +268,7 @@ export class GameScene extends Phaser.Scene {
     this.buildings.update(view, this.perspective);
     this.updateTrees(view);
     this.updateProps(view);
+    this.updateLights(view);
     this.updateStreet(dt);
     const speed = Math.hypot(this.car.vx, this.car.vy);
     this.audio?.update({

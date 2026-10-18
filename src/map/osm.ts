@@ -8,6 +8,9 @@
  */
 
 import { LANDMARKS, STREETS } from './landmarks.ts';
+import { type Arm, type Controller, type LightPoint, type Signal, trafficLights } from './signals.ts';
+
+export type { Controller, Signal } from './signals.ts';
 
 /** Game pixels per metre: a car is about 4.75 m long, 38 px. */
 export const PX_PER_METRE = 8;
@@ -144,7 +147,20 @@ export interface Crossing {
   angle: number;
   /** The road's width, px. */
   width: number;
-  zebra: boolean;
+  /** A zebra (stripes, flashing beacons), one with lights (studs; traffic stops at its lights), or just a dropped kerb (nothing painted). */
+  kind: CrossingKind;
+  /** For one with lights, the controller that works them. */
+  controller?: number;
+}
+
+export type CrossingKind = 'zebra' | 'lights' | 'plain';
+
+/** What sort of crossing OSM's tags make it. */
+export function crossingKind(t: Tags): CrossingKind {
+  const markings = t['crossing:markings'] ?? '';
+  if (t.crossing === 'traffic_signals' || ['pelican', 'puffin', 'toucan', 'pegasus'].includes(t.crossing_ref)) return 'lights';
+  if (t.crossing === 'zebra' || t.crossing_ref === 'zebra' || markings.includes('zebra')) return 'zebra';
+  return 'plain';
 }
 
 export interface GameMap {
@@ -163,6 +179,9 @@ export interface GameMap {
   trees: number[];
   props: Prop[];
   crossings: Crossing[];
+  /** Each way into each set of traffic lights, and the controllers that work them. */
+  signals: Signal[];
+  controllers: Controller[];
   /** The lie of the land, if measured (see src/map/enrich.ts). */
   terrain?: TerrainData;
 }
@@ -907,12 +926,40 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     });
   }
 
-  // Nodes: trees, street furniture and crossings.
-  const roadOfNode = new Map<number, { way: OsmWay; index: number; kind: RoadKind }>();
+  // Nodes: trees, street furniture, crossings and traffic lights.
+  const roadsOfNode = new Map<number, { way: OsmWay; index: number; kind: RoadKind }[]>();
   for (const { way, kind } of roadWays) {
     if (!VEHICLE_ROADS.has(kind)) continue;
-    way.nodes.forEach((id, index) => roadOfNode.set(id, { way, index, kind }));
+    way.nodes.forEach((id, index) => {
+      const list = roadsOfNode.get(id);
+      if (list) list.push({ way, index, kind });
+      else roadsOfNode.set(id, [{ way, index, kind }]);
+    });
   }
+  const roadOfNode = new Map([...roadsOfNode].map(([id, list]) => [id, list[0]]));
+  const lightPoints: LightPoint[] = [];
+  /** The ways into a point on the roads, as the traffic heads (allowing for one-way streets and which way the lights face). */
+  const armsOf = (node: OsmNode, facing: string | undefined): Arm[] => {
+    const arms: Arm[] = [];
+    const p = xy(node.id)!;
+    for (const { way, index, kind } of roadsOfNode.get(node.id) ?? []) {
+      const t = way.tags;
+      const oneway = t.oneway === 'yes' || t.oneway === '1' || t.junction === 'roundabout';
+      const width = roadWidth(kind, t) * PX_PER_METRE;
+      const arm = (from: number, forwards: boolean) => {
+        const q = xy(way.nodes[from]);
+        if (!q) return;
+        const len = Math.hypot(p[0] - q[0], p[1] - q[1]);
+        if (len < 1) return;
+        if (facing === 'forward' && !forwards) return;
+        if (facing === 'backward' && forwards) return;
+        arms.push({ dx: (p[0] - q[0]) / len, dy: (p[1] - q[1]) / len, width, oneway, road: way.id });
+      };
+      if (index > 0 && t.oneway !== '-1') arm(index - 1, true);
+      if (index < way.nodes.length - 1 && !oneway) arm(index + 1, false);
+    }
+    return arms;
+  };
   for (const node of data.nodes.values()) {
     const t = node.tags;
     const x = proj.x(node.lon);
@@ -931,14 +978,35 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
         const a = xy(on.way.nodes[on.index - 1]);
         const b = xy(on.way.nodes[on.index + 1]);
         if (a && b) {
-          const zebra = t.crossing === 'zebra' || t['crossing:markings'] === 'zebra' || t.crossing_ref === 'zebra' || t.crossing === 'uncontrolled' || t.crossing === 'marked';
-          crossings.push({ x: round(x), y: round(y), angle: +Math.atan2(b[1] - a[1], b[0] - a[0]).toFixed(3), width: round(roadWidth(on.kind, on.way.tags) * PX_PER_METRE), zebra });
+          const kind = crossingKind(t);
+          crossings.push({ x: round(x), y: round(y), angle: +Math.atan2(b[1] - a[1], b[0] - a[0]).toFixed(3), width: round(roadWidth(on.kind, on.way.tags) * PX_PER_METRE), kind });
         }
       }
-      if (t.highway === 'crossing') continue;
     }
+    const lights = t.highway === 'traffic_signals' || (t.highway === 'crossing' && crossingKind(t) === 'lights');
+    if (lights && roadsOfNode.has(node.id)) {
+      const arms = armsOf(node, t['traffic_signals:direction']);
+      if (arms.length) lightPoints.push({ x, y, crossing: t.highway === 'crossing' || t.crossing === 'traffic_signals', arms });
+    }
+    if (t.highway === 'crossing' || t.highway === 'traffic_signals') continue;
     const prop = propKind(t);
     if (prop) props.push({ kind: prop, x: round(x), y: round(y) });
+  }
+
+  // The traffic lights, and which controller works each crossing with lights.
+  const { signals, controllers } = trafficLights(lightPoints);
+  for (const c of crossings) {
+    if (c.kind !== 'lights') continue;
+    let best = -1;
+    let bestD = 40 * PX_PER_METRE;
+    controllers.forEach((k, i) => {
+      const d = Math.hypot(k.x - c.x, k.y - c.y);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+    if (best >= 0) c.controller = best;
   }
 
   // Draw small areas over big ones of the same kind.
@@ -960,6 +1028,8 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     trees,
     props,
     crossings,
+    signals,
+    controllers,
   };
 }
 

@@ -37,6 +37,23 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
 
 /** A tree trunk's radius, px. */
 const TRUNK = 4;
+/** Traffic lights' and Belisha beacons' poles, px. */
+const SIGNAL_POLE = 2.5;
+const BEACON_POLE = 2;
+
+/** The Belisha beacons: on the pavement at each end of each zebra crossing. */
+export function beacons(map: GameMap): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+  for (const c of map.crossings) {
+    if (c.kind !== 'zebra') continue;
+    const reach = c.width / 2 + 1.2 * 8;
+    // Across the road, either way.
+    const nx = -Math.sin(c.angle);
+    const ny = Math.cos(c.angle);
+    for (const side of [-1, 1]) out.push({ x: Math.round(c.x + nx * reach * side), y: Math.round(c.y + ny * reach * side) });
+  }
+  return out;
+}
 
 export interface LooseProp extends Body {
   kind: PropKind;
@@ -51,6 +68,7 @@ export interface ChunkIndex {
   lines: number[];
   buildings: number[];
   crossings: number[];
+  signals: number[];
   trees: number[];
 }
 
@@ -87,6 +105,8 @@ export function buildWorld(map: GameMap): World {
 
   const posts: Circle[] = [];
   for (let i = 0; i < map.trees.length; i += 4) posts.push({ x: map.trees[i], y: map.trees[i + 1], r: TRUNK });
+  for (const s of map.signals) posts.push({ x: s.x, y: s.y, r: SIGNAL_POLE });
+  for (const b of beacons(map)) posts.push({ x: b.x, y: b.y, r: BEACON_POLE });
   const loose: LooseProp[] = [];
   const fixed: Prop[] = [];
   map.props.forEach((p, i) => {
@@ -115,7 +135,7 @@ function indexChunks(map: GameMap): Map<string, ChunkIndex> {
         const key = chunkKey(cx, cy);
         let c = chunks.get(key);
         if (!c) {
-          c = { areas: [], roads: [], lines: [], buildings: [], crossings: [], trees: [] };
+          c = { areas: [], roads: [], lines: [], buildings: [], crossings: [], signals: [], trees: [] };
           chunks.set(key, c);
         }
         c[list].push(i);
@@ -141,7 +161,15 @@ function indexChunks(map: GameMap): Map<string, ChunkIndex> {
     const [sx, sy] = shadowOffset(b.top);
     add('buildings', i, x0 - 2, y0 - 2, x1 + Math.max(0, sx) + 2, y1 + Math.max(0, sy) + 2);
   });
-  map.crossings.forEach((c, i) => add('crossings', i, c.x - c.width, c.y - c.width, c.x + c.width, c.y + c.width));
+  // With their zig-zags, which run along the road either side.
+  map.crossings.forEach((c, i) => {
+    const reach = c.width + 14 * 8;
+    add('crossings', i, c.x - reach, c.y - reach, c.x + reach, c.y + reach);
+  });
+  map.signals.forEach((s, i) => {
+    const [x0, y0, x1, y1] = s.stop;
+    add('signals', i, Math.min(x0, x1, s.x) - 4, Math.min(y0, y1, s.y) - 4, Math.max(x0, x1, s.x) + 4, Math.max(y0, y1, s.y) + 4);
+  });
   for (let i = 0; i < map.trees.length; i += 4) {
     const [x, y, r, h] = [map.trees[i], map.trees[i + 1], map.trees[i + 2], map.trees[i + 3]];
     const [sx, sy] = shadowOffset(h * 0.7);
