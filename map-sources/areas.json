@@ -1,7 +1,9 @@
 {
   "start": {
-    "lat": 51.45095,
-    "lon": -2.6005
+    "about": "On College Green (the road along the green), just up from its crossing, facing away from the hill, down towards the city centre.",
+    "lat": 51.452658,
+    "lon": -2.600188,
+    "facing": "downhill"
   },
   "areas": [
     {

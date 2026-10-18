@@ -19,6 +19,7 @@ import { addLidar, alignLidar, mergeRasters, shiftRaster } from '../src/map/enri
 import { type Raster, parseWcsText } from '../src/map/lidar.ts';
 import { Projection, buildMap, parseOsm, type OsmData } from '../src/map/osm.ts';
 import { toNationalGrid } from '../src/map/osgb.ts';
+import { Terrain } from '../src/world/terrain.ts';
 
 interface Bounds {
   minlat: number;
@@ -41,8 +42,8 @@ interface Area {
 }
 
 interface Sources {
-  /** Where the car starts: it's put on the nearest road. */
-  start: { lat: number; lon: number };
+  /** Where the car starts: it's put on the nearest road, facing along it (downhill, if asked). */
+  start: { about?: string; lat: number; lon: number; facing?: 'downhill' | 'uphill' };
   /** Oldest first. Where areas overlap, the older's data wins, so adding an area never changes what's there. */
   areas: Area[];
 }
@@ -142,7 +143,43 @@ for (const area of sources.areas) {
 }
 const lidar = addLidar(map, mergeRasters(dsms), mergeRasters(dtms));
 
+// Turn the car round if it's facing the wrong way up the hill.
+if (sources.start.facing && map.terrain) {
+  const terrain = new Terrain(map.terrain, map.pxPerMetre);
+  const { x, y, heading } = map.spawn;
+  const ahead = 15 * map.pxPerMetre;
+  const rise = terrain.at(x + Math.cos(heading) * ahead, y + Math.sin(heading) * ahead) - terrain.at(x - Math.cos(heading) * ahead, y - Math.sin(heading) * ahead);
+  if ((sources.start.facing === 'downhill') === rise > 0) map.spawn.heading = +(Math.atan2(-Math.sin(heading), -Math.cos(heading))).toFixed(3);
+}
+// And into the left-hand lane: Britain drives on the left (a quarter of a two-way road's width off the middle).
+{
+  const { x, y, heading } = map.spawn;
+  const road = nearestRoad(map, x, y);
+  const lane = road && !road.oneway ? road.width * 0.25 : 0;
+  map.spawn.x = Math.round(x + Math.sin(heading) * lane);
+  map.spawn.y = Math.round(y - Math.cos(heading) * lane);
+}
+
 writeFileSync(`${SOURCES}/areas.json`, `${JSON.stringify(sources, null, 2)}\n`);
+/** The road whose line passes nearest (x, y). */
+function nearestRoad(m: typeof map, x: number, y: number) {
+  let best: (typeof m.roads)[number] | undefined;
+  let bestD = Infinity;
+  for (const r of m.roads) {
+    for (let i = 0; i + 3 < r.pts.length; i += 2) {
+      const [ax, ay, bx, by] = [r.pts[i], r.pts[i + 1], r.pts[i + 2], r.pts[i + 3]];
+      const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2));
+      const d = Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y);
+      if (d < bestD) {
+        bestD = d;
+        best = r;
+      }
+    }
+  }
+  return best;
+}
+
 const json = JSON.stringify(map);
 writeFileSync('src/map/bristol.json', json);
 console.log(`Areas: ${sources.areas.map((a) => `${a.name} (fetched ${a.fetched}, LIDAR shift ${a.lidarShift?.join(', ')} m)`).join('; ')}`);

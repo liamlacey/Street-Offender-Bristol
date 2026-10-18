@@ -49,7 +49,9 @@ The `cathedral` area's is −0.5 m east, 0 m south.
 
 The map's origin is the north-west corner of all the areas together, so adding
 an area to the north or west moves every coordinate, but nothing on the ground.
-The car starts at `start` in `areas.json`, on the nearest road.
+The car starts at `start` in `areas.json`: on the nearest road, in its left-hand
+lane, facing along it (downhill or uphill, if `facing` says). It's on College Green,
+just up from its crossing, facing down towards the city centre, away from the hill.
 
 ## The rules
 

@@ -12,11 +12,11 @@ export class Terrain {
   readonly cols: number;
   readonly rows: number;
 
-  constructor(
-    data: TerrainData | undefined,
-    /** Map px per metre. */
-    readonly px: number,
-  ) {
+  /** Map px per metre. */
+  readonly px: number;
+
+  constructor(data: TerrainData | undefined, px: number) {
+    this.px = px;
     this.cell = data?.cell ?? 64;
     this.cols = data?.cols ?? 1;
     this.rows = data?.rows ?? 1;
