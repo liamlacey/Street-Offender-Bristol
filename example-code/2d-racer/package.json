@@ -1,0 +1,30 @@
+{
+  "name": "2d-racer-web-game",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liamlacey/2D-racer-web-game.git"
+  },
+  "bugs": {
+    "url": "https://github.com/liamlacey/2D-racer-web-game/issues"
+  },
+  "homepage": "https://github.com/liamlacey/2D-racer-web-game#readme",
+  "dependencies": {
+    "phaser": "^4.2.1"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  },
+  "private": true,
+  "type": "module"
+}
