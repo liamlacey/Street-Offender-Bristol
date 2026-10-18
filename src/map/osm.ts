@@ -93,6 +93,160 @@ export interface Road {
   surface?: Paving;
   /** Stretches (distances along it, start, end, start, end, ...) with lane markings: not across junctions. */
   marks?: number[];
+  /** Lanes painted along its sides: bus lanes, cycle lanes, parking bays. */
+  lanes?: Lane[];
+}
+
+/**
+ * A lane painted along one side of a road (left, 1, or right, -1, as the way
+ * runs; the traffic in it goes the way the way runs on the left, against it on
+ * the right, as in Britain): a bus lane (red), a cycle lane (its line dashed,
+ * or solid where cars mustn't cross it), bike symbols in the traffic lane
+ * (shared), or parking bays along the kerb.
+ */
+export interface Lane {
+  side: 1 | -1;
+  kind: 'bus' | 'cycle' | 'shared' | 'parking';
+  /** How wide, px. */
+  width: number;
+  /** A cycle lane's line is solid (mandatory) rather than dashed (advisory). */
+  solid?: boolean;
+  /** Bikes ride in it too (a bus lane they share). */
+  bikes?: boolean;
+  /** Parking bays: which way round the cars park, and whether it's for loading only. */
+  bays?: 'parallel' | 'perpendicular' | 'diagonal';
+  loading?: boolean;
+}
+
+/**
+ * Something painted on the road or pavement at a point: give way lines, a
+ * stop line, a mini-roundabout, an arrow in a lane, a cycle box at lights,
+ * a bus stop's box, or tactile paving at a crossing.
+ */
+export interface PaintMark {
+  kind: 'giveway' | 'stop' | 'mini' | 'arrow' | 'asl' | 'busstop' | 'tactile';
+  /** Its middle. */
+  x: number;
+  y: number;
+  /** Which way the traffic it's for is heading (tactile paving: which way is out from the road), radians. */
+  angle: number;
+  /** How wide it is across the way (a bus stop's box, how long; tactile paving, how long along the kerb; a mini-roundabout, across), px. */
+  width: number;
+  /** An arrow's turns, as OSM's `turn:lanes` has them (`left;through`). */
+  turns?: string;
+  /** Tactile paving at a crossing with lights: red (buff at the rest). */
+  red?: boolean;
+}
+
+/** A bus lane's and a cycle lane's width, px. */
+const BUS_LANE = 3.2 * PX_PER_METRE;
+const CYCLE_LANE = 1.5 * PX_PER_METRE;
+
+/**
+ * The lanes painted along a road's sides, from OSM's `lanes:psv`, `lanes:bus`
+ * (`:forward`, `:backward`), `cycleway`, `cycleway:left/right/both` (and
+ * `:lane`), and `parking:lane:*` or `parking:*` tags.
+ */
+export function roadLanes(t: Tags, oneway: boolean, width: number): Lane[] | undefined {
+  const lanes: Lane[] = [];
+  const count = (k: string) => parseInt(t[k] ?? '', 10) || 0;
+  const total = Math.max(1, parseInt(t.lanes ?? '', 10) || (oneway ? 1 : 2));
+  const laneWidth = Math.min(BUS_LANE, width / total);
+  // Bus lanes: at the kerb, on the side the traffic's going their way.
+  let forward = count('lanes:psv:forward') || count('lanes:bus:forward');
+  let backward = count('lanes:psv:backward') || count('lanes:bus:backward');
+  const either = count('lanes:psv') || count('lanes:bus');
+  if (!forward && !backward && either) {
+    if (oneway) forward = either;
+    // Two of them on a two-way road: one each way. (Just one, it's not said which way.)
+    else if (either >= 2) forward = backward = 1;
+  }
+  const half = oneway ? width : width / 2;
+  if (forward) lanes.push({ side: 1, kind: 'bus', width: Math.round(Math.min(half, forward * laneWidth)) });
+  if (backward) lanes.push({ side: -1, kind: 'bus', width: Math.round(Math.min(half, backward * laneWidth)) });
+  // Cycle lanes, and bike symbols where bikes share a lane.
+  const sides: [1 | -1, string | undefined, string | undefined][] = [
+    [1, t['cycleway:left'] ?? t['cycleway:both'] ?? t.cycleway, t['cycleway:left:lane'] ?? t['cycleway:both:lane'] ?? t['cycleway:lane']],
+    [-1, t['cycleway:right'] ?? t['cycleway:both'] ?? (oneway ? undefined : t.cycleway), t['cycleway:right:lane'] ?? t['cycleway:both:lane'] ?? t['cycleway:lane']],
+  ];
+  for (const [side, kind, line] of sides) {
+    if (kind === 'lane' && line !== 'pictogram') lanes.push({ side, kind: 'cycle', width: CYCLE_LANE, ...(line === 'exclusive' ? { solid: true } : {}) });
+    else if (kind === 'lane' || kind === 'shared_lane') lanes.push({ side, kind: 'shared', width: CYCLE_LANE });
+    else if (kind === 'share_busway') {
+      const bus = lanes.find((l) => l.kind === 'bus' && l.side === side);
+      if (bus) bus.bikes = true;
+      else lanes.push({ side, kind: 'bus', width: Math.round(Math.min(half, laneWidth)), bikes: true });
+    }
+  }
+  // Parking bays along the kerb (not lay-bys off the road, or on the pavement).
+  for (const [side, name] of [[1, 'left'], [-1, 'right']] as const) {
+    const old = t[`parking:lane:${name}`] ?? t['parking:lane:both'];
+    const fresh = t[`parking:${name}`] ?? t['parking:both'];
+    const bays = old && ['parallel', 'perpendicular', 'diagonal'].includes(old) ? old : fresh === 'lane' ? (t[`parking:${name}:orientation`] ?? t['parking:both:orientation'] ?? 'parallel') : undefined;
+    if (!bays || !['parallel', 'perpendicular', 'diagonal'].includes(bays)) continue;
+    const where = t[`parking:lane:${name}:${bays}`] ?? t[`parking:lane:both:${bays}`];
+    if (where === 'street_side' || where === 'on_kerb' || where === 'shoulder') continue;
+    const loading = (t[`parking:${name}:restriction`] ?? t['parking:both:restriction']) === 'loading_only';
+    const depth = bays === 'parallel' ? 2 : bays === 'diagonal' ? 4.5 : 5;
+    lanes.push({ side, kind: 'parking', width: Math.round(Math.min(half, depth * PX_PER_METRE)), bays: bays as Lane['bays'], ...(loading ? { loading } : {}) });
+  }
+  return lanes.length ? lanes : undefined;
+}
+
+/**
+ * The arrows painted in each lane coming up to a junction, from OSM's
+ * `turn:lanes` (`:forward`, `:backward`): lanes listed left to right as the
+ * driver sees them; on a two-way road, the traffic going the way's way keeps
+ * to its left half. Each set's painted 15 m before the way's end (or in its
+ * middle, if it's short), and again 35 m before if there's room.
+ */
+export function laneArrows(t: Tags, oneway: boolean, width: number, pts: Pts): PaintMark[] {
+  const out: PaintMark[] = [];
+  const length = polylineLength(pts);
+  const sets: [string | undefined, 1 | -1][] = oneway ? [[t['turn:lanes'] ?? t['turn:lanes:forward'], 1]] : [[t['turn:lanes:forward'], 1], [t['turn:lanes:backward'], -1]];
+  for (const [turns, way] of sets) {
+    if (!turns) continue;
+    const lanes = turns.split('|');
+    const across = oneway ? width : width / 2;
+    const laneWidth = across / lanes.length;
+    const befores = length < 30 * PX_PER_METRE ? [length / 2] : length < 60 * PX_PER_METRE ? [15 * PX_PER_METRE] : [15 * PX_PER_METRE, 35 * PX_PER_METRE];
+    for (const before of befores) {
+      const along = way === 1 ? length - before : before;
+      const [x, y, ux, uy] = alongPolyline(pts, along);
+      // The traffic's heading, and its left as it goes (y down): its lanes run from there.
+      const [hx, hy] = [ux * way, uy * way];
+      const [lx, ly] = [hy, -hx];
+      const leftEdge = oneway ? width / 2 : width / 2;
+      lanes.forEach((turn, i) => {
+        if (!turn || turn === 'none') return;
+        const off = leftEdge - (i + 0.5) * laneWidth;
+        out.push({ kind: 'arrow', x: round(x + lx * off), y: round(y + ly * off), angle: +Math.atan2(hy, hx).toFixed(3), width: round(laneWidth), turns: turn });
+      });
+    }
+  }
+  return out;
+}
+
+function polylineLength(pts: Pts): number {
+  let d = 0;
+  for (let i = 2; i < pts.length; i += 2) d += Math.hypot(pts[i] - pts[i - 2], pts[i + 1] - pts[i - 1]);
+  return d;
+}
+
+/** The point `along` px along a polyline, and the way it's heading there. */
+function alongPolyline(pts: Pts, along: number): [number, number, number, number] {
+  let run = 0;
+  for (let i = 0; i + 3 < pts.length; i += 2) {
+    const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
+    const len = Math.hypot(bx - ax, by - ay);
+    if (!len) continue;
+    if (run + len >= along || i + 4 >= pts.length) {
+      const t = Math.max(0, Math.min(1, (along - run) / len));
+      return [ax + (bx - ax) * t, ay + (by - ay) * t, (bx - ax) / len, (by - ay) / len];
+    }
+    run += len;
+  }
+  return [pts[0], pts[1], 1, 0];
 }
 
 /** How far apart a bridge deck's measured heights are, px (2 m). */
@@ -204,6 +358,8 @@ export interface GameMap {
   terrain?: TerrainData;
   /** Where the kerb's dropped (lowered or flush, OSM's `kerb=*` on a node): x, y, ... */
   dropped?: number[];
+  /** What's painted at points on the roads and pavements (see PaintMark). */
+  paint?: PaintMark[];
 }
 
 /**
@@ -857,6 +1013,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
   const trees: number[] = [];
   const props: Prop[] = [];
   const crossings: Crossing[] = [];
+  const paint: PaintMark[] = [];
 
   const addArea = (kind: AreaKind, rings: Pts[], tags: Tags) => {
     const clipped = rings.map((r) => clipRing(r, cx0, cy0, cx1, cy1)).filter((r) => r.length >= 6);
@@ -1033,6 +1190,8 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     }
     // Clipping the line loses the distances the markings are measured along, so only roads wholly beyond the edge are dropped.
     if (!pts.some((v, i) => i % 2 === 0 && inside(v, pts[i + 1], pad))) continue;
+    const lanes = vehicle ? roadLanes(t, oneway, width) : undefined;
+    if (vehicle) paint.push(...laneArrows(t, oneway, width, pts));
     roadIndexOfWay.set(way.id, roads.length);
     roads.push({
       kind,
@@ -1045,6 +1204,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       ...(pavement ? { pavement } : {}),
       ...(marks ? { marks } : {}),
       ...(surface ? { surface } : {}),
+      ...(lanes ? { lanes } : {}),
     });
   }
 
@@ -1083,6 +1243,14 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     return arms;
   };
   const dropped: number[] = [];
+  // Where the bus stops' signs and platforms are, beside the road.
+  const stopsBeside: [number, number][] = [];
+  // And where there's tactile paving (at crossings, and the dropped kerbs either side of them).
+  const tactile: [number, number][] = [];
+  for (const n of data.nodes.values()) {
+    if (n.tags.highway === 'bus_stop' || n.tags.public_transport === 'platform') stopsBeside.push([proj.x(n.lon), proj.y(n.lat)]);
+    if (n.tags.tactile_paving === 'yes' || n.tags.tactile_paving === 'partial') tactile.push([proj.x(n.lon), proj.y(n.lat)]);
+  }
   // Which nodes are on buildings' outlines, and each road's ways through each node, for gates.
   const onBuilding = new Set<number>();
   for (const way of data.ways.values()) if ((way.tags.building && way.tags.building !== 'no') || way.tags['building:part']) for (const id of way.nodes) onBuilding.add(id);
@@ -1094,6 +1262,59 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       else waysOfNode.set(id, [{ way, index, kind }]);
     });
   }
+  /** A road through a node, and which way along it: the way it says, or else towards the nearer junction. */
+  const approach = (id: number, direction?: string) => {
+    const on = waysOfNode.get(id)?.find((w) => VEHICLE_ROADS.has(w.kind)) ?? waysOfNode.get(id)?.[0];
+    if (!on) return null;
+    const nodes = on.way.nodes;
+    const a = xy(nodes[Math.max(0, on.index - 1)]);
+    const b = xy(nodes[Math.min(nodes.length - 1, on.index + 1)]);
+    if (!a || !b) return null;
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (!len) return null;
+    let way: 1 | -1 = 1;
+    if (direction === 'backward') way = -1;
+    else if (direction !== 'forward') {
+      // Nearest junction: count nodes each way.
+      const junction = (id: number) => (roadNodes.get(id) ?? 0) > 1;
+      let ahead = Infinity;
+      let behind = Infinity;
+      for (let k = on.index + 1; k < nodes.length; k++) if (junction(nodes[k])) { ahead = k - on.index; break; }
+      for (let k = on.index - 1; k >= 0; k--) if (junction(nodes[k])) { behind = on.index - k; break; }
+      if (behind < ahead) way = -1;
+    }
+    const oneway = on.way.tags.oneway === 'yes' || on.way.tags.oneway === '1' || on.way.tags.junction === 'roundabout';
+    const [ux, uy] = [((b[0] - a[0]) / len) * way, ((b[1] - a[1]) / len) * way];
+    return { ux, uy, oneway, width: roadWidth(on.kind, on.way.tags) * PX_PER_METRE, on };
+  };
+  /** Where a line across the lanes coming into a junction goes: across the left half (all of it, one-way), at the node. */
+  const acrossLanes = (id: number, x: number, y: number, direction?: string) => {
+    const a = approach(id, direction);
+    if (!a) return null;
+    const across = a.oneway ? a.width : a.width / 2;
+    // The traffic's left (y down): its half of the road.
+    const off = a.oneway ? 0 : a.width / 4;
+    return { x: round(x + a.uy * off), y: round(y - a.ux * off), angle: +Math.atan2(a.uy, a.ux).toFixed(3), width: round(across) };
+  };
+  /** A bus stop's yellow box along the kerb: on the side its platform (or sign) is, else the left, one-way. */
+  const busStopBox = (id: number, x: number, y: number) => {
+    const a = approach(id, 'forward');
+    if (!a) return null;
+    // Left of the way as it runs (y down).
+    const [lx, ly] = [a.uy, -a.ux];
+    let side = a.oneway ? 1 : 0;
+    let best = 30 * PX_PER_METRE;
+    for (const p of stopsBeside) {
+      const d = Math.hypot(p[0] - x, p[1] - y);
+      if (d < best && d > 1) {
+        best = d;
+        side = (p[0] - x) * lx + (p[1] - y) * ly > 0 ? 1 : -1;
+      }
+    }
+    if (!side) return null;
+    const off = a.width / 2 - 1.3 * PX_PER_METRE;
+    return { x: round(x + lx * off * side), y: round(y + ly * off * side), angle: +Math.atan2(a.uy * side, a.ux * side).toFixed(3), width: 22 * PX_PER_METRE };
+  };
   /** A line across the way through a node, as wide as the way: where a gate or barrier is. */
   const gateAcross = (id: number, x: number, y: number): Pts | null => {
     const on = waysOfNode.get(id)?.[0];
@@ -1113,6 +1334,15 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     const y = proj.y(node.lat);
     if (!inside(x, y)) continue;
     if (DROPPED_KERB.has(t.kerb)) dropped.push(round(x), round(y));
+    if (t.highway === 'give_way' || t.highway === 'stop' || t.cycleway === 'asl') {
+      const at = acrossLanes(node.id, x, y, t.direction);
+      if (at) paint.push({ kind: t.highway === 'give_way' ? 'giveway' : t.highway === 'stop' ? 'stop' : 'asl', ...at });
+    }
+    if (t.highway === 'mini_roundabout') paint.push({ kind: 'mini', x: round(x), y: round(y), angle: 0, width: 4 * PX_PER_METRE });
+    if (t.public_transport === 'stop_position' && (t.bus === 'yes' || !t.tram)) {
+      const box = busStopBox(node.id, x, y);
+      if (box) paint.push({ kind: 'busstop', ...box });
+    }
     if (t.natural === 'tree') {
       const crown = metres(t.diameter_crown);
       const r = Math.max(2.2, Math.min(crown ? crown / 2 : 3.2 + ((node.id % 7) / 7) * 1.6, 7));
@@ -1178,6 +1408,16 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     });
     if (best >= 0) c.controller = best;
   }
+  // Tactile paving at the kerbs either side of a crossing that has it (tagged on it, or its kerbs): red where there are lights.
+  for (const c of crossings) {
+    if (!tactile.some(([x, y]) => Math.hypot(x - c.x, y - c.y) < c.width / 2 + 4 * PX_PER_METRE)) continue;
+    for (const side of [-1, 1]) {
+      // Out from the road's middle, across it.
+      const [ox, oy] = [-Math.sin(c.angle) * side, Math.cos(c.angle) * side];
+      const out = c.width / 2 + 0.8 * PX_PER_METRE;
+      paint.push({ kind: 'tactile', x: round(c.x + ox * out), y: round(c.y + oy * out), angle: +Math.atan2(oy, ox).toFixed(3), width: round(2.4 * PX_PER_METRE), ...(c.kind === 'lights' ? { red: true } : {}) });
+    }
+  }
 
   // Draw small areas over big ones of the same kind.
   areas.sort((a, b) => AREA_ORDER[a.kind] - AREA_ORDER[b.kind] || Math.abs(ringArea(b.rings[0])) - Math.abs(ringArea(a.rings[0])));
@@ -1201,6 +1441,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     signals,
     controllers,
     ...(dropped.length ? { dropped } : {}),
+    ...(paint.length ? { paint } : {}),
   };
 }
 

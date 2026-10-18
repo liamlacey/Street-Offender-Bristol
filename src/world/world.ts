@@ -104,6 +104,7 @@ export interface ChunkIndex {
   crossings: number[];
   signals: number[];
   trees: number[];
+  paint: number[];
 }
 
 export interface FixedProp extends Prop {
@@ -251,7 +252,7 @@ function indexChunks(map: GameMap): Map<string, ChunkIndex> {
         const key = chunkKey(cx, cy);
         let c = chunks.get(key);
         if (!c) {
-          c = { areas: [], roads: [], lines: [], buildings: [], crossings: [], signals: [], trees: [] };
+          c = { areas: [], roads: [], lines: [], buildings: [], crossings: [], signals: [], trees: [], paint: [] };
           chunks.set(key, c);
         }
         c[list].push(i);
@@ -267,6 +268,11 @@ function indexChunks(map: GameMap): Map<string, ChunkIndex> {
     const pad = r.width / 2 + 24;
     const [x0, y0, x1, y1] = bounds(r.pts);
     add('roads', i, x0 - pad, y0 - pad, x1 + pad, y1 + pad);
+  });
+  (map.paint ?? []).forEach((p, i) => {
+    // Arrows and boxes run a few metres along their way.
+    const reach = p.width + 6 * 8;
+    add('paint', i, p.x - reach, p.y - reach, p.x + reach, p.y + reach);
   });
   map.lines.forEach((l, i) => {
     const [x0, y0, x1, y1] = bounds(l.pts);
@@ -369,4 +375,27 @@ export function buildingSeed(b: Building): number {
   h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
   h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/** A line running alongside another, `d` px to its left (as it runs; right if negative), keeping its corners square-ish. */
+export function offsetLine(pts: Pts, d: number): Pts {
+  const n = pts.length / 2;
+  const out: number[] = [];
+  const unit = (i: number): [number, number] => {
+    const dx = pts[i * 2 + 2] - pts[i * 2];
+    const dy = pts[i * 2 + 3] - pts[i * 2 + 1];
+    const len = Math.hypot(dx, dy) || 1;
+    return [dx / len, dy / len];
+  };
+  for (let i = 0; i < n; i++) {
+    const [ax, ay] = unit(Math.max(0, i - 1));
+    const [bx, by] = unit(Math.min(n - 2, i));
+    // Left of the way as it runs, with y down: (uy, -ux); at a corner, the two sides' normals averaged, pushed out so the strip keeps its width (within reason).
+    let [nx, ny] = [ay + by, -(ax + bx)];
+    const len = Math.hypot(nx, ny) || 1;
+    [nx, ny] = [nx / len, ny / len];
+    const k = Math.min(2, 1 / Math.max(0.5, nx * ay - ny * ax));
+    out.push(pts[i * 2] + nx * d * k, pts[i * 2 + 1] + ny * d * k);
+  }
+  return out;
 }

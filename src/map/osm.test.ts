@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PX_PER_METRE, Projection, buildMap, clipLine, clipRing, joinRings, metres, parseOsm, pavementSides, ringArea, roadWidth, sidewalkAlong } from './osm';
+import { PX_PER_METRE, Projection, buildMap, clipLine, clipRing, joinRings, laneArrows, metres, parseOsm, pavementSides, ringArea, roadLanes, roadWidth, sidewalkAlong } from './osm';
 
 /** A tiny map: a street with a junction, a building with a part on it, a pond, a park inside a multipolygon, a tree and a bench. */
 const XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -150,5 +150,36 @@ describe('pavements', () => {
     expect(sidewalkAlong(road, 64, 1, [[200, -100, 200, 100]])).toBe(false);
     // Nor is one along only a little of it.
     expect(sidewalkAlong(road, 64, 1, [[0, -44, 80, -44]])).toBe(false);
+  });
+});
+
+describe('road markings', () => {
+  it('puts bus lanes at the kerb on the side their traffic keeps to', () => {
+    // One-way: on the left. Two-way, going the way's way: on its left; against it, on its right.
+    expect(roadLanes({ 'lanes:psv': '1', lanes: '2' }, true, 64)).toEqual([{ side: 1, kind: 'bus', width: 26 }]);
+    expect(roadLanes({ 'lanes:psv:backward': '1' }, false, 80)!.map((l) => l.side)).toEqual([-1]);
+    // Just "one bus lane" on a two-way road doesn't say which side: none drawn.
+    expect(roadLanes({ 'lanes:psv': '1' }, false, 80)).toBeUndefined();
+  });
+
+  it('reads cycle lanes, dashed or solid, and bikes sharing a bus lane or the road', () => {
+    const lanes = roadLanes({ 'cycleway:left': 'lane', 'cycleway:left:lane': 'exclusive', 'cycleway:right': 'share_busway', 'lanes:psv:backward': '1' }, false, 80)!;
+    expect(lanes.find((l) => l.kind === 'cycle')).toMatchObject({ side: 1, solid: true });
+    expect(lanes.find((l) => l.kind === 'bus')).toMatchObject({ side: -1, bikes: true });
+    expect(roadLanes({ cycleway: 'shared_lane' }, false, 64)!.map((l) => l.kind)).toEqual(['shared', 'shared']);
+  });
+
+  it('reads parking bays along the kerb, but not lay-bys off the road', () => {
+    expect(roadLanes({ 'parking:lane:left': 'parallel', 'parking:left:restriction': 'loading_only' }, false, 64)).toEqual([{ side: 1, kind: 'parking', width: 16, bays: 'parallel', loading: true }]);
+    expect(roadLanes({ 'parking:lane:right': 'perpendicular', 'parking:lane:right:perpendicular': 'street_side' }, false, 64)).toBeUndefined();
+  });
+
+  it("paints each lane's arrow before the junction, left to right as the driver sees them", () => {
+    // A one-way road 100 m long running east, two lanes: through on the left (north), right on the right.
+    const arrows = laneArrows({ 'turn:lanes': 'through|right' }, true, 64, [0, 0, 800, 0]);
+    const near = arrows.filter((a) => a.x === 800 - 15 * PX_PER_METRE);
+    expect(near.map((a) => a.turns)).toEqual(['through', 'right']);
+    expect(near[0].y).toBeLessThan(near[1].y);
+    expect(near[0].angle).toBeCloseTo(0);
   });
 });

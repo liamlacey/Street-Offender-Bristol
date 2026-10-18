@@ -78,6 +78,42 @@ roads 6 m or wider (not service roads or tracks), stopping 9 m short of each jun
 surface (`surface=*`) is sorted into tarmac, paving, setts (cobbles), concrete,
 gravel, decking or grass, and drawn as that and driven on as that.
 
+**Road markings** (`osm.ts` reads them, `src/world/paint.ts` paints them). As in
+Britain, the traffic on a two-way road keeps to the left half (as the way runs:
+the left side's traffic goes the way's way, the right side's against it).
+- **Bus lanes** (`lanes:psv`, `lanes:bus`, and their `:forward`/`:backward`): red,
+  at the kerb on their traffic's side (one-way: the left), a lane wide (3.2 m at
+  most), a thick white line along them, BUS LANE at the start; a single bus lane on a
+  two-way road that doesn't say which way isn't drawn. Bikes painted in them where
+  they share them (`cycleway*=share_busway`).
+- **Cycle lanes** (`cycleway`, `cycleway:left/right/both` `=lane`): 1.5 m at the
+  kerb, a dashed line (`:lane=advisory`) or solid one (`exclusive`), a bike every
+  40 m; `shared_lane` (and `:lane=pictogram`) gets just the bikes, in the traffic's
+  lane near the kerb.
+- **Parking bays** (`parking:lane:*=parallel/perpendicular/diagonal`, or
+  `parking:*=lane` with `:orientation`; not `street_side`, `on_kerb` or `shoulder`):
+  along the kerb, 8 m in from the road's ends; parallel bays 2 m deep with a line
+  every 6 m, end-on ones 5 m deep a line every 2.5 m; LOADING ONLY where
+  `parking:*:restriction=loading_only`.
+- **Lane arrows** (`turn:lanes`, `:forward`, `:backward`): in each lane, left to right
+  as the driver sees them, 15 m before the way's end (and 35 m, if it's over 60 m
+  long; its middle, if it's under 30 m).
+- **Give way** (`highway=give_way`): two dashed lines across the lanes coming in
+  (the way `direction` says, or towards the nearer junction), and a triangle 7 m
+  before them; **stop** (`highway=stop`): a solid line and STOP; a **mini-roundabout**
+  (`highway=mini_roundabout`): a white circle 4 m across.
+- **Cycle boxes** (`cycleway=asl`): green, 4.5 m deep, behind a line across the lanes
+  coming in, with a bike in them.
+- **Bus stops** (`public_transport=stop_position`): a yellow box 22 m long along the
+  kerb on the side of the stop's sign or platform within 30 m (or the left, one-way),
+  BUS STOP in it.
+- **Tactile paving** (`tactile_paving=yes/partial`, on a crossing or a kerb within
+  4 m of one): a 2.4 × 1.2 m slab of blister paving at each kerb, red at a crossing
+  with lights, buff at the rest.
+
+Words are painted long (stretched 2.5 times along the way), read as you come up to
+them, the first word nearest.
+
 **The ground** (`natural`, `landuse`, `leisure`, `amenity`, `area:highway`, …,
 closed ways and multipolygons): grass, parks, gardens, woods, pitches, play areas,
 flowerbeds, squares and plazas, car parks, building sites, water (the harbour:

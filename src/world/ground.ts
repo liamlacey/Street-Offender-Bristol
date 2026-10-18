@@ -11,8 +11,9 @@
 
 import type { AreaKind, GameMap, Pts, Road } from '../map/osm';
 import { type Paving, VEHICLE_ROADS, ringArea } from '../map/osm';
+import { drawLaneFills, drawLanes, drawPaint } from './paint';
 import { Surface, surfacePaint } from './surface';
-import { type ChunkIndex, lineLength, pointAlong, shadowOffset, subPolyline } from './world';
+import { type ChunkIndex, lineLength, offsetLine, pointAlong, shadowOffset, subPolyline } from './world';
 
 type Ctx = CanvasRenderingContext2D;
 type Fill = string | CanvasPattern;
@@ -140,9 +141,13 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
   for (const r of vehicle) stroke(ctx, r.pts, r.surface && r.surface !== 'asphalt' ? palette.paving[r.surface] : palette.asphalt, r.width);
 
   if (!palette.surface) {
+    // Bus lanes' red first, then the lines and words over everything.
+    drawLaneFills(ctx, vehicle);
     drawMarkings(ctx, vehicle, palette.marking);
     for (const i of index.crossings) drawCrossing(ctx, map, map.crossings[i], palette.marking);
     for (const i of index.signals) drawStopLine(ctx, map.signals[i], palette.marking);
+    drawLanes(ctx, vehicle);
+    drawPaint(ctx, map, index);
   }
 
   // Traffic islands, kerbed.
@@ -410,29 +415,6 @@ function line(ctx: Ctx, ax: number, ay: number, bx: number, by: number): void {
   ctx.moveTo(ax, ay);
   ctx.lineTo(bx, by);
   ctx.stroke();
-}
-
-/** A line running alongside another, `d` px to its left (as it runs; right if negative), keeping its corners square-ish. */
-export function offsetLine(pts: Pts, d: number): Pts {
-  const n = pts.length / 2;
-  const out: number[] = [];
-  const unit = (i: number): [number, number] => {
-    const dx = pts[i * 2 + 2] - pts[i * 2];
-    const dy = pts[i * 2 + 3] - pts[i * 2 + 1];
-    const len = Math.hypot(dx, dy) || 1;
-    return [dx / len, dy / len];
-  };
-  for (let i = 0; i < n; i++) {
-    const [ax, ay] = unit(Math.max(0, i - 1));
-    const [bx, by] = unit(Math.min(n - 2, i));
-    // Left of the way as it runs, with y down: (uy, -ux); at a corner, the two sides' normals averaged, pushed out so the strip keeps its width (within reason).
-    let [nx, ny] = [ay + by, -(ax + bx)];
-    const len = Math.hypot(nx, ny) || 1;
-    [nx, ny] = [nx / len, ny / len];
-    const k = Math.min(2, 1 / Math.max(0.5, nx * ay - ny * ax));
-    out.push(pts[i * 2] + nx * d * k, pts[i * 2 + 1] + ny * d * k);
-  }
-  return out;
 }
 
 function stroke(ctx: Ctx, pts: Pts, fill: Fill, width: number): void {

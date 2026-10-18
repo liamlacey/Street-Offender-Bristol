@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { offsetLine } from './ground';
+import { offsetLine } from './world';
 
 describe('offsetLine', () => {
   it('runs alongside a line, to its left as it runs (north of one running east, y down)', () => {
