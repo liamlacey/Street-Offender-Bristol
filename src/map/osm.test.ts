@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PX_PER_METRE, Projection, buildMap, clipLine, clipRing, joinRings, areaKind, cutSpans, roadKind, laneArrows, lanesAcross, metres, parseOsm, pavementSides, ringArea, roadLanes, roadWidth, sidewalkAlong } from './osm';
+import type { Road } from './osm';
 
 /** A tiny map: a street with a junction, a building with a part on it, a pond, a park inside a multipolygon, a tree and a bench. */
 const XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -263,5 +264,23 @@ describe('petrol stations, however they are mapped', () => {
 
   it("leaves a canopy that's nothing to do with a petrol station alone", () => {
     expect(station(build(base(canopy(''))))).toEqual({ canopies: 0, pumps: 0, forecourts: 0 });
+  });
+});
+
+describe('roadActivity', () => {
+  it("counts the shops, cafés and offices along a road, per 100 m of it", async () => {
+    const { isBusiness, roadActivity } = await import('./osm');
+    const roads = [
+      { kind: 'street', width: 48, pts: [0, 0, 1600, 0] },
+      { kind: 'footway', width: 16, pts: [0, 100, 1600, 100] },
+    ] as Road[];
+    // Four beside the street (200 m long), one too far off.
+    roadActivity(roads, [[100, 30], [400, -200], [800, 60], [1200, -40], [800, 600]]);
+    expect(roads[0].activity).toBe(2);
+    expect(roads[1].activity).toBeUndefined();
+    expect(isBusiness({ shop: 'bakery' })).toBe(true);
+    expect(isBusiness({ amenity: 'pub' })).toBe(true);
+    expect(isBusiness({ shop: 'vacant' })).toBe(false);
+    expect(isBusiness({ amenity: 'bench' })).toBe(false);
   });
 });

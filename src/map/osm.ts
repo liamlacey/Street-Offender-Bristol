@@ -110,6 +110,8 @@ export interface Road {
   lanes?: Lane[];
   /** Where they're painted (distances along it, start, end, ...): clear of junctions, crossings and sharp bends. */
   laneSpans?: number[];
+  /** How busy it is: the shops, cafés, bars, offices and the like within ACTIVITY_REACH of it, per 100 m of it (more traffic, and more parked). */
+  activity?: number;
   /** Steps: how many there are up the flight (OSM's `step_count`, or from how far it rises, measured by the LIDAR). */
   steps?: number;
 }
@@ -2027,6 +2029,19 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     if (best) station(best, null);
   }
 
+  // How busy each road is: what's along it to go to.
+  const businesses: [number, number][] = [];
+  for (const n of data.nodes.values()) if (isBusiness(n.tags)) businesses.push([proj.x(n.lon), proj.y(n.lat)]);
+  for (const way of data.ways.values()) {
+    if (!isBusiness(way.tags)) continue;
+    const pts = pointsOf(way.nodes);
+    if (!pts) continue;
+    let [sx, sy] = [0, 0];
+    for (let k = 0; k < pts.length; k += 2) [sx, sy] = [sx + pts[k], sy + pts[k + 1]];
+    businesses.push([(sx * 2) / pts.length, (sy * 2) / pts.length]);
+  }
+  roadActivity(roads, businesses);
+
   // Draw small areas over big ones of the same kind.
   areas.sort((a, b) => AREA_ORDER[a.kind] - AREA_ORDER[b.kind] || Math.abs(ringArea(b.rings[0])) - Math.abs(ringArea(a.rings[0])));
   // Taller buildings drawn last.
@@ -2111,4 +2126,56 @@ function materialColour(material: string | undefined): string | undefined {
 function stepCount(t: Tags): number | undefined {
   const n = parseInt(t.step_count ?? '', 10);
   return n >= 1 && n <= 300 ? n : undefined;
+}
+
+/** Places people go to (and so drive to, and park at): shops, cafés, bars, offices, hotels and the like. */
+const BUSY_AMENITIES = new Set([
+  'restaurant', 'cafe', 'bar', 'pub', 'fast_food', 'nightclub', 'ice_cream', 'food_court', 'biergarten',
+  'bank', 'pharmacy', 'post_office', 'bureau_de_change', 'cinema', 'theatre', 'arts_centre', 'events_venue', 'casino',
+  'library', 'doctors', 'dentist', 'clinic', 'hospital', 'veterinary', 'college', 'university', 'school', 'marketplace',
+  'car_rental', 'car_wash', 'fuel', 'community_centre', 'conference_centre', 'courthouse', 'townhall',
+]);
+const BUSY_TOURISM = new Set(['hotel', 'hostel', 'guest_house', 'apartment', 'museum', 'gallery', 'attraction', 'aquarium']);
+
+export function isBusiness(t: Tags): boolean {
+  if (t.shop && t.shop !== 'vacant' && t.shop !== 'no') return true;
+  if (t.amenity && BUSY_AMENITIES.has(t.amenity)) return true;
+  if (t.office || t.craft) return true;
+  if (t.tourism && BUSY_TOURISM.has(t.tourism)) return true;
+  return t.leisure === 'fitness_centre' || t.leisure === 'sports_centre' || t.leisure === 'bowling_alley';
+}
+
+/** Businesses this close to a road are on it, px. */
+const ACTIVITY_REACH = 30 * PX_PER_METRE;
+
+/** Sets each road's `activity`: the businesses within ACTIVITY_REACH, per 100 m of road (a short road counted as 50 m). */
+export function roadActivity(roads: Road[], businesses: [number, number][]): void {
+  for (const r of roads) {
+    delete r.activity;
+    if (!VEHICLE_ROADS.has(r.kind) || r.pts.length < 4) continue;
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let k = 0; k < r.pts.length; k += 2) [x0, y0, x1, y1] = [Math.min(x0, r.pts[k]), Math.min(y0, r.pts[k + 1]), Math.max(x1, r.pts[k]), Math.max(y1, r.pts[k + 1])];
+    const reach = ACTIVITY_REACH + r.width / 2;
+    let count = 0;
+    for (const [x, y] of businesses) {
+      if (x < x0 - reach || x > x1 + reach || y < y0 - reach || y > y1 + reach) continue;
+      if (distanceToLine(x, y, r.pts) <= reach) count++;
+    }
+    if (!count) continue;
+    let length = 0;
+    for (let k = 0; k + 3 < r.pts.length; k += 2) length += Math.hypot(r.pts[k + 2] - r.pts[k], r.pts[k + 3] - r.pts[k + 1]);
+    r.activity = Math.round((count / Math.max(length, 50 * PX_PER_METRE)) * 100 * PX_PER_METRE * 10) / 10;
+  }
+}
+
+/** How far a point is from a polyline. */
+function distanceToLine(x: number, y: number, pts: Pts): number {
+  let best = Infinity;
+  for (let k = 0; k + 3 < pts.length; k += 2) {
+    const [ax, ay, bx, by] = [pts[k], pts[k + 1], pts[k + 2], pts[k + 3]];
+    const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
+    const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2)) : 0;
+    best = Math.min(best, Math.hypot(x - ax - (bx - ax) * t, y - ay - (by - ay) * t));
+  }
+  return best;
 }

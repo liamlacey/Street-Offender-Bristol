@@ -333,6 +333,62 @@ filling and smoothing never mix the two, or the road would dip as it came to the
 bridge (Park Street's did, by 2 m). Then the roads onto measured decks are brought
 to meet them (above).
 
+## Traffic
+
+**How busy each road is** (`activity`, worked out when the map's built): the places
+people go to within 30 m of it (beyond its kerb), per 100 m of road (a road shorter
+than 50 m counted as 50 m): shops (`shop=*`, not vacant), cafés, restaurants, pubs,
+bars, takeaways, banks, chemists, cinemas, theatres, surgeries, colleges and the like
+(`amenity=*`, listed in `BUSY_AMENITIES` in `osm.ts`), offices (`office=*`), workshops
+(`craft=*`), hotels and museums (`tourism=*`), gyms; as points or outlines (their
+middle). Park Street, with 30 to 47, is the busiest.
+
+**The roads it drives on** (`src/world/traffic.ts`): trunk to residential streets, not
+service roads (car parks, driveways, yards), tracks or paths. Each road is cut where
+it meets another into edges, each with its lanes (`lanes:forward/backward`, or one each
+way; a one-way road 7.5 m or wider, two), on the left of the way they go, inside any
+bus, cycle or parking lane painted along that side. Lanes stop short of a junction
+(where three or more edges meet) by half the widest road there plus 1.2 m; a smooth
+curve takes each lane on to the next across it. One-way streets are only driven one
+way.
+
+**Driving, by the law:**
+- Speed (as driven, each driver within 12% of it): trunk 13 m/s, primary 10,
+  secondary 9.5, tertiary 9, streets 8 (central Bristol's mostly 20 mph); slower
+  for turns (no more sideways pull than 2.4 m/s²). Pulls away at 2.2 m/s², brakes at
+  3 (up to 9 in an emergency).
+- Keeps 2 m plus 1.3 s behind whatever's in its way ahead (another vehicle, a parked
+  car knocked out into the road, you), looking ahead 14 m plus 3 s of travel (at
+  most 70 m). Never drives into you on purpose; held up by you for 2.5 s, it honks.
+- Stops at the stop line on red, and red and amber; on amber, if it can stop
+  comfortably. A knocked-down light is ignored.
+- Gives way at the end of a road onto a more major one (trunk > primary > secondary >
+  tertiary > street), or where a give way line's painted (`highway=give_way`):
+  waits until nothing's coming to the junction within 30 m, or in it.
+- At each junction it turns onto another road (never back the way it came unless the
+  road ends), mostly the more major roads, mostly straight on; left from the kerb lane,
+  right from the lane nearest the middle; indicating 30 m before.
+- Two waiting for each other: the one already in the junction goes, then the one on
+  the more major road.
+
+**What drives:** small cars, hatchbacks, saloons, estates, SUVs, vans (18, 26, 14, 8,
+15, 14%) and, on secondary roads and bigger, lorries (5%); in the colours of Britain's
+cars (grey, black, white, blue, silver, red the most), vans mostly white. Each lane
+carries trunk 2.2, primary 2, secondary 1.6, tertiary 1.3, streets 0.6 vehicles per
+100 m, times 1 + activity ÷ 15 (at most 3 times). Up to 40 at once, within the view
+plus 30 m; new ones out of sight, and they go 40 m beyond that.
+
+**Parked cars:** in the car parks' bays (65% of them taken) and in the parking lanes'
+bays (55%, plus 1.2% per point of the street's activity, at most 92%; loading bays
+25%), not at bus stops (the bays aren't painted there either). Parallel bays face the
+way the traffic on that side goes; end-on ones either way round. No lorries.
+
+**Knocked about:** your car hits a vehicle as the heavier or lighter thing it is (a
+small car 0.8 of yours, a van 1.5, a lorry 4): it slides to a stop (skidding sideways
+more than rolling), bumping into the walls, posts and other vehicles (and knocking
+them about too), waits 1.6 s, then drives gently back into its lane (reversing first if
+it's pointing the wrong way) and carries on. A parked car stays where it ends up.
+
 ## Damage
 
 What's on the map can be knocked down or broken by driving into it, except the
@@ -431,5 +487,8 @@ pieces, and the surface grid that says what's underfoot), `GroundLayer.ts`
 (painting pieces as they come into view, shading the hills), `terrain.ts`,
 `perspective.ts` and `TerrainSheet.ts` (the hills, and the old games'
 perspective: higher than the car is nearer the camera, so drawn pushed out from
-the middle of the view), `buildingLook.ts` and `Buildings.ts` (the buildings).
+the middle of the view), `buildingLook.ts` and `Buildings.ts` (the buildings),
+`traffic.ts` (the traffic and the parked cars; tested in `traffic.test.ts`) and
+`parking.ts` (where the bays are, painted and parked in); the traffic's drawn by
+`src/scenes/TrafficLayer.ts` and `vehicleArt.ts`.
 The car feels the gradient in `src/car/CarPhysics.ts`.

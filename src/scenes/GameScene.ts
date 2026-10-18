@@ -2,6 +2,7 @@ import * as Phaser from 'phaser';
 import { CarAudio } from '../audio/CarAudio';
 import {
   CAR_LENGTH,
+  CAR_WIDTH,
   type CarInput,
   DEFAULT_TUNING,
   type CarState,
@@ -17,8 +18,10 @@ import { type GameMap, type Road, VEHICLE_ROADS } from '../map/osm';
 import {
   CircleGrid,
   type ContactPoint,
+  CAR_BUMP,
   SegmentGrid,
   collideBodyWithStatic,
+  collideBodyWithWalls,
   collideCarWithBody,
   collideCarWithStatic,
   collideCarWithWalls,
@@ -43,6 +46,8 @@ import { WallLayer } from '../world/WallLayer';
 import { type Debris, impactSpeed } from '../world/damage';
 import { HudScene, RESET_EVENT, STREET_EVENT } from './HudScene';
 import { SkidMarks } from './SkidMarks';
+import { TrafficLayer } from './TrafficLayer';
+import { Traffic } from '../world/traffic';
 
 /** Physics runs at a fixed rate so handling feels the same at any frame rate. */
 const PHYSICS_DT = 1 / 120;
@@ -116,6 +121,8 @@ export class GameScene extends Phaser.Scene {
   private hopPeak = 0;
   private hopLeft = 0;
   private wallLayer!: WallLayer;
+  private traffic!: Traffic;
+  private trafficLayer!: TrafficLayer;
   private loose: { body: LooseProp; image: Phaser.GameObjects.Image }[] = [];
   private looseByChunk = new Map<string, number[]>();
   private effects!: CarEffects;
@@ -187,6 +194,13 @@ export class GameScene extends Phaser.Scene {
     this.addProps();
     this.addTrees();
     this.addLights();
+    this.traffic = new Traffic(map);
+    this.trafficLayer = new TrafficLayer(this, this.traffic, (x, y, level) => this.surfaceHeight(x, y, level), {
+      ground: DEPTH.car - 0.05,
+      onDeck: DEPTH.onDeck,
+      below: DEPTH.deckBelow - 0.05,
+      beside: DEPTH.car - 0.05,
+    });
 
     const { spawn } = map;
     this.car = createCar(spawn.x, spawn.y, spawn.heading);
@@ -349,6 +363,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.updateSinking(dt);
     this.updateLoose();
+    this.updateTraffic(dt);
     this.hopLeft = Math.max(0, this.hopLeft - dt);
     this.drawCar();
     // No tyre marks on the bridges (they'd be laid on the ground below).
@@ -368,6 +383,7 @@ export class GameScene extends Phaser.Scene {
     this.updateProps(view);
     this.updateLights(view);
     this.wallLayer.update(view, this.perspective);
+    this.trafficLayer.update(view, this.perspective, this.level, this.time.now / 1000);
     this.updateStreet(dt);
     const speed = Math.hypot(this.car.vx, this.car.vy);
     this.audio?.update({
@@ -442,6 +458,19 @@ export class GameScene extends Phaser.Scene {
     if (wall > 0) this.hit(wall);
     const post = collideCarWithStatic(car, this.posts[this.level], undefined, this.contact);
     if (post > 0) this.hit(post);
+    // The traffic, and the parked cars: knocked about (and it stops a moment).
+    for (const v of this.traffic.near(car.x, car.y, CAR_LENGTH + 80)) {
+      if (v.level !== this.level) continue;
+      const bump = collideCarWithBody(car, v, CAR_BUMP);
+      if (bump <= 0) continue;
+      const fresh = v.mode === 'drive';
+      this.traffic.knock(v, bump);
+      this.contact.x = (car.x + v.x) / 2;
+      this.contact.y = (car.y + v.y) / 2;
+      this.hit(bump);
+      // A good knock: a long blast of its horn, once it's stopped.
+      if (fresh && bump > 120) this.time.delayedCall(700, () => this.audio?.horn(this.hearing(v.x, v.y), true));
+    }
     // Up onto a bridge at its end, or down off it.
     const level = this.decks.levelAt(this.level, car.x, car.y);
     if (level !== this.level) {
@@ -473,6 +502,35 @@ export class GameScene extends Phaser.Scene {
       this.audio?.splash(Math.hypot(car.vx, car.vy));
       this.effects.splashAt(car.x, car.y, 12);
     }
+  }
+
+  /** The traffic drives on; what's been knocked about hits the walls and posts; and anyone held up by you honks. */
+  private updateTraffic(dt: number): void {
+    const view = this.cameras.main.worldView;
+    const { controllers, signals } = this.world.map;
+    const time = this.time.now / 1000;
+    const car = this.car;
+    this.traffic.update(
+      dt,
+      { x: car.x, y: car.y, heading: car.heading, vx: car.vx, vy: car.vy, level: this.level, length: CAR_LENGTH, width: CAR_WIDTH },
+      { x0: view.left, y0: view.top, x1: view.right, y1: view.bottom },
+      (i) => (this.signalHeads[i]?.gone ? 'green' : lightAt(controllers[signals[i].controller], signals[i].controller, signals[i].group, time)),
+    );
+    for (const v of this.traffic.loose()) {
+      collideBodyWithWalls(v, this.walls[v.level]);
+      collideBodyWithStatic(v, this.posts[v.level]);
+    }
+    for (const v of this.traffic.vehicles) {
+      if (v.annoyed > 2.5) {
+        this.audio?.horn(this.hearing(v.x, v.y), Math.random() < 0.3);
+        v.annoyed = -3 - Math.random() * 3;
+      }
+    }
+  }
+
+  /** How loud something at (x, y) is, by how far it is from the car: 1 close, 0 out of earshot. */
+  private hearing(x: number, y: number): number {
+    return Math.max(0, 1 - Math.hypot(x - this.car.x, y - this.car.y) / 600);
   }
 
   private hit(impulse: number): void {

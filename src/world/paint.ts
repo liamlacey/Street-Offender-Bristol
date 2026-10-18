@@ -6,8 +6,9 @@
  * Britain. Words are painted long along the way, read as you come up to them.
  */
 
-import { BUS_STOP_DEPTH, type GameMap, type Lane, type PaintMark, type Pts, type Road, pointInRing, ridgeAxis } from '../map/osm';
+import { BUS_STOP_DEPTH, type GameMap, type Lane, type PaintMark, type Pts, type Road } from '../map/osm';
 import { CUSHION_WIDTH, HUMP_LENGTH, cushionsAcross } from './humps';
+import { carParkBays, streetBays } from './parking';
 import { type ChunkIndex, lineLength, offsetLine, pointAlong, subPolyline } from './world';
 
 type Ctx = CanvasRenderingContext2D;
@@ -22,7 +23,6 @@ const TACTILE_BUFF = '#c9b487';
 
 /** How far apart the bikes painted along a cycle lane are, px (40 m), and how far in from a road's ends parking bays start. */
 const BIKES_EVERY = 40 * 8;
-const BAYS_FROM_END = 8 * 8;
 
 /** The bus lanes' red, under everything else painted on the road. */
 export function drawLaneFills(ctx: Ctx, roads: Road[]): void {
@@ -37,9 +37,6 @@ export function drawLaneFills(ctx: Ctx, roads: Road[]): void {
 }
 
 /** A car park's bays: how wide, how deep, and the aisle between rows, px. */
-const BAY_WIDTH = 2.5 * 8;
-const BAY_DEPTH = 5 * 8;
-const BAY_AISLE = 6 * 8;
 
 /**
  * The bays in the car parks: along both sides of each aisle mapped through one
@@ -66,14 +63,7 @@ export function drawCarParks(ctx: Ctx, map: GameMap, index: ChunkIndex): void {
       ctx.restore();
     }
     if (a.kind !== 'parking') continue;
-    const ring = a.rings[0];
-    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
-    for (let k = 0; k < ring.length; k += 2) [x0, y0, x1, y1] = [Math.min(x0, ring[k]), Math.min(y0, ring[k + 1]), Math.max(x1, ring[k]), Math.max(y1, ring[k + 1])];
-    const inside = (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1 && pointInRing(x, y, ring);
-    const aisles = map.roads.filter((r) => r.aisle && r.pts.some((v, k) => k % 2 === 0 && inside(v, r.pts[k + 1])));
-    // The roads through it (its aisles and any other): no bay's painted out onto one.
-    const through = map.roads.filter((r) => r.kind !== 'footway' && r.kind !== 'steps' && r.pts.some((v, k) => k % 2 === 0 && v > x0 - 80 && v < x1 + 80 && r.pts[k + 1] > y0 - 80 && r.pts[k + 1] < y1 + 80));
-    const onRoad = (x: number, y: number, own: Road) => through.some((r) => r !== own && distanceTo(x, y, r.pts) < r.width / 2);
+    const { lines } = carParkBays(map, a);
     ctx.save();
     ctx.beginPath();
     for (const r of a.rings) {
@@ -86,52 +76,9 @@ export function drawCarParks(ctx: Ctx, map: GameMap, index: ChunkIndex): void {
     ctx.lineWidth = 1;
     ctx.lineCap = 'butt';
     ctx.beginPath();
-    if (aisles.length) {
-      for (const r of aisles) {
-        const p = r.pts;
-        for (let k = 0; k + 3 < p.length; k += 2) {
-          const [ax, ay, bx, by] = [p[k], p[k + 1], p[k + 2], p[k + 3]];
-          const len = Math.hypot(bx - ax, by - ay);
-          if (len < BAY_WIDTH) continue;
-          const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
-          const [nx, ny] = [-uy, ux];
-          for (let d = BAY_WIDTH / 2; d <= len - BAY_WIDTH / 2; d += BAY_WIDTH) {
-            const [px, py] = [ax + ux * d, ay + uy * d];
-            for (const side of [-1, 1]) {
-              const [sx, sy] = [px + nx * side * (r.width / 2), py + ny * side * (r.width / 2)];
-              const [ex, ey] = [sx + nx * side * BAY_DEPTH, sy + ny * side * BAY_DEPTH];
-              // Only bays that are in the car park (not out over its edge, or a building), and not out on another road.
-              if (!inside(ex, ey) || !inside(sx, sy)) continue;
-              if (onRoad(ex, ey, r) || onRoad((sx + ex) / 2, (sy + ey) / 2, r)) continue;
-              ctx.moveTo(sx, sy);
-              ctx.lineTo(ex, ey);
-            }
-          }
-        }
-      }
-    } else {
-      const { ux, uy } = ridgeAxis(ring);
-      const [nx, ny] = [-uy, ux];
-      let [lo, hi, ulo, uhi] = [Infinity, -Infinity, Infinity, -Infinity];
-      for (let k = 0; k < ring.length; k += 2) {
-        const [n, u] = [ring[k] * nx + ring[k + 1] * ny, ring[k] * ux + ring[k + 1] * uy];
-        [lo, hi, ulo, uhi] = [Math.min(lo, n), Math.max(hi, n), Math.min(ulo, u), Math.max(uhi, u)];
-      }
-      const at = (u: number, n: number): [number, number] => [ux * u + nx * n, uy * u + ny * n];
-      // Rows of bays across the car park: two back to back, then an aisle; a single row if that's all there's room for.
-      for (let o = lo + 8; o + BAY_DEPTH <= hi - 8; o += 2 * BAY_DEPTH + BAY_AISLE) {
-        const rows = o + 2 * BAY_DEPTH <= hi - 8 ? 2 : 1;
-        for (let u = ulo + BAY_WIDTH; u < uhi; u += BAY_WIDTH) {
-          const [mx, my] = at(u, o + (rows * BAY_DEPTH) / 2);
-          if (through.some((r) => distanceTo(mx, my, r.pts) < r.width / 2 + 4)) continue;
-          ctx.moveTo(...at(u, o));
-          ctx.lineTo(...at(u, o + rows * BAY_DEPTH));
-        }
-        if (rows === 2) {
-          ctx.moveTo(...at(ulo, o + BAY_DEPTH));
-          ctx.lineTo(...at(uhi, o + BAY_DEPTH));
-        }
-      }
+    for (let k = 0; k + 3 < lines.length; k += 4) {
+      ctx.moveTo(lines[k], lines[k + 1]);
+      ctx.lineTo(lines[k + 2], lines[k + 3]);
     }
     ctx.stroke();
     ctx.restore();
@@ -237,7 +184,7 @@ export function drawLanes(ctx: Ctx, roads: Road[], paint: PaintMark[] = []): voi
           for (const d of along(lane, 6 * 8, BIKES_EVERY, 3 * 8)) bike(ctx, ...laneAt(r, lane, d, 1.6 * 8), WHITE);
           break;
         case 'parking':
-          for (const p of pieces) bays(ctx, r, lane, p.from, p.to);
+          for (const p of pieces) bays(ctx, r, lane, p.from, p.to, stops);
           break;
       }
     }
@@ -246,32 +193,24 @@ export function drawLanes(ctx: Ctx, roads: Road[], paint: PaintMark[] = []): voi
 }
 
 /** Parking bays along the kerb between `from` and `to` px along the road: their edge and the lines between them. */
-function bays(ctx: Ctx, r: Road, lane: Lane, from: number, to: number): void {
-  const length = lineLength(r.pts);
-  const start = Math.max(from, BAYS_FROM_END);
-  const end = Math.min(to, length - BAYS_FROM_END);
-  if (end - start < 6 * 8) return;
-  const kerb = r.width / 2;
+function bays(ctx: Ctx, r: Road, lane: Lane, from: number, to: number, stops: PaintMark[]): void {
+  const { lines, edge, start, end } = streetBays(r, lane, from, to);
+  // Not at a bus stop.
+  const clear = (x: number, y: number) => !stops.some((m) => Math.hypot(m.x - x, m.y - y) < m.width / 2 + 2 * 8);
+  for (let k = lines.length - 4; k >= 0; k -= 4) if (!clear(lines[k], lines[k + 1])) lines.splice(k, 4);
+  if (!lines.length) return;
   const depth = lane.width;
   ctx.strokeStyle = WHITE;
   ctx.lineWidth = 1;
-  const across = (d: number, slant: number) => {
-    const [x, y, tx, ty] = pointAlong(r.pts, d);
-    const [nx, ny] = [ty * lane.side, -tx * lane.side];
-    const t = slant * lane.side;
-    ctx.beginPath();
-    ctx.moveTo(x + nx * kerb, y + ny * kerb);
-    ctx.lineTo(x + nx * (kerb - depth) + tx * t, y + ny * (kerb - depth) + ty * t);
-    ctx.stroke();
-  };
-  if (lane.bays === 'parallel') {
-    // The bays' outer edge, and a line every 6 m.
-    stroke(ctx, offsetLine(subPolyline(r.pts, start, end), lane.side * (kerb - depth)), WHITE, 1);
-    for (let d = start; d <= end; d += 6 * 8) across(d, 0);
-  } else {
-    // End on, or slanted: a line every 2.5 m.
-    for (let d = start; d <= end; d += 2.5 * 8) across(d, lane.bays === 'diagonal' ? depth * 0.8 : 0);
+  // Parallel bays' outer edge; the lines across.
+  if (edge) stroke(ctx, offsetLine(edge, lane.side * (r.width / 2 - depth)), WHITE, 1);
+  ctx.beginPath();
+  for (let k = 0; k + 3 < lines.length; k += 4) {
+    ctx.moveTo(lines[k], lines[k + 1]);
+    ctx.lineTo(lines[k + 2], lines[k + 3]);
   }
+  ctx.stroke();
+  const length = lineLength(r.pts);
   if (lane.loading) {
     for (const d of every(end - start, 60 * 8, 6 * 8)) {
       // laneAt measures the way the lane's traffic goes.
@@ -535,16 +474,6 @@ function every(length: number, step: number, first: number): number[] {
   return out;
 }
 
-function distanceTo(x: number, y: number, pts: Pts): number {
-  let best = Infinity;
-  for (let i = 0; i + 3 < pts.length; i += 2) {
-    const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
-    const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
-    const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2)) : 0;
-    best = Math.min(best, Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y));
-  }
-  return best;
-}
 
 function stroke(ctx: Ctx, pts: Pts, colour: string, width: number): void {
   if (pts.length < 4) return;

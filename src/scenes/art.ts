@@ -55,7 +55,7 @@ export const TREE_RADIUS = 32;
 
 type Ctx = CanvasRenderingContext2D;
 
-function canvasTexture(scene: Phaser.Scene, key: string, w: number, h: number, draw: (ctx: Ctx) => void): void {
+export function canvasTexture(scene: Phaser.Scene, key: string, w: number, h: number, draw: (ctx: Ctx) => void): void {
   if (scene.textures.exists(key)) return;
   const texture = scene.textures.createCanvas(key, Math.ceil(w * ART_SCALE), Math.ceil(h * ART_SCALE))!;
   const ctx = texture.context;
@@ -69,7 +69,7 @@ function seeded(seed: number): () => number {
   return () => (s = (s * 16807) % 2147483647) / 2147483647;
 }
 
-function roundRect(ctx: Ctx, x: number, y: number, w: number, h: number, r: number, fill: string): void {
+export function roundRect(ctx: Ctx, x: number, y: number, w: number, h: number, r: number, fill: string): void {
   // By hand: CanvasRenderingContext2D.roundRect is too new for older iPhones.
   const k = Math.min(r, w / 2, h / 2);
   ctx.fillStyle = fill;

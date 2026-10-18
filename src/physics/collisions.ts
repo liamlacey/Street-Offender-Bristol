@@ -360,6 +360,34 @@ export function collideBodyWithStatic(body: Body, grid: CircleGrid, restitution 
   }
 }
 
+/** Bounces a loose object (all of a long one's circles) off walls. */
+export function collideBodyWithWalls(body: Body, grid: SegmentGrid, restitution = 0.4): number {
+  let strongest = 0;
+  for (const along of bodyHull(body)) {
+    const cx = body.x + Math.cos(body.angle) * along;
+    const cy = body.y + Math.sin(body.angle) * along;
+    for (const s of grid.near(cx, cy, body.r + 8)) {
+      const [px, py] = nearestOnSegment(cx, cy, s);
+      const dx = cx - px;
+      const dy = cy - py;
+      const d = Math.hypot(dx, dy);
+      const min = body.r + s.r;
+      if (d >= min || d < 1e-6) continue;
+      const nx = dx / d;
+      const ny = dy / d;
+      body.x += nx * (min - d);
+      body.y += ny * (min - d);
+      const vn = body.vx * nx + body.vy * ny;
+      if (vn < 0) {
+        body.vx -= (1 + restitution) * vn * nx;
+        body.vy -= (1 + restitution) * vn * ny;
+        strongest = Math.max(strongest, -vn);
+      }
+    }
+  }
+  return strongest;
+}
+
 /** Moves a loose object and slows it with ground friction. */
 export function stepBody(body: Body, dt: number, damping = body.damping ?? 2.5): void {
   body.x += body.vx * dt;

@@ -151,6 +151,30 @@ export class CarAudio {
     src.stop(at + length + 0.05);
   }
 
+  /** Another car's horn, honked at you: two flat notes together, held; `volume` 0 to 1 (by how near it is). */
+  horn(volume: number, long = false): void {
+    if (volume < 0.03) return;
+    const t = this.ctx.currentTime;
+    const length = long ? 0.7 : 0.28;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.06 * volume, t + 0.02);
+    gain.gain.setValueAtTime(0.06 * volume, t + length - 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + length);
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 1800;
+    filter.connect(gain).connect(this.out);
+    for (const f of [392, 494]) {
+      const osc = this.ctx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.value = f;
+      osc.connect(filter);
+      osc.start(t);
+      osc.stop(t + length + 0.05);
+    }
+  }
+
   /** The hollow knock of a bench or bin sent flying. */
   knock(): void {
     this.tone(260, this.ctx.currentTime, 0.09, 0.18, 'triangle');
