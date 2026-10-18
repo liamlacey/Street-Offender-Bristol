@@ -150,14 +150,16 @@ export class GameScene extends Phaser.Scene {
       groundAt: (x, y) => this.groundAt(x, y),
       addDebris: (d, level) => this.addDebris(d, level),
       knockedDown: (post) => this.knockedDown(post),
-      treeFell: (index, x, y, angle) => {
+      treeFell: (index, x, y, h, angle) => {
         const t = this.trees[index];
         const map = this.world.map;
-        // It's lying down now: its shadow's gone from the ground.
-        map.trees[index * 4 + 2] = 0;
-        this.ground.repaint(t.x, t.y, map.trees[index * 4 + 3] + 64);
-        Object.assign(t, { x, y, h: 2 * 8 });
-        t.image.setRotation(angle);
+        // It's going over: its shadow's gone from the ground.
+        if (map.trees[index * 4 + 2] > 0) {
+          map.trees[index * 4 + 2] = 0;
+          this.ground.repaint(t.x, t.y, map.trees[index * 4 + 3] + 64);
+        }
+        Object.assign(t, { x, y, h });
+        if (angle !== undefined) t.image.setRotation(angle);
       },
       treeHeight: (index) => this.trees[index].h,
       audio: () => this.audio,
@@ -318,11 +320,12 @@ export class GameScene extends Phaser.Scene {
     // A bridge is drawn over the car when it's underneath, and under it when it's on top.
     this.deckLayer.update(view, this.perspective, this.level === 1 ? DEPTH.deckBelow : DEPTH.deckAbove);
     this.buildings.update(view, this.perspective, this.car.x, this.car.y);
+    // Before the trees: it moves the ones coming down.
+    this.wreckage.update(view, this.perspective);
     this.updateTrees(view);
     this.updateProps(view);
     this.updateLights(view);
     this.wallLayer.update(view, this.perspective);
-    this.wreckage.update(view, this.perspective);
     this.updateStreet(dt);
     const speed = Math.hypot(this.car.vx, this.car.vy);
     this.audio?.update({
