@@ -163,7 +163,7 @@ bounces off.
 
 | Thing (from OSM) | Material | Strength | What happens |
 | --- | --- | --- | --- |
-| Tree | wood | 140 + 12 × height in m (180 to 420) | Splits at the foot and falls the way it was hit (and away from the side it was hit on): a stump, the trunk lying along the ground (solid), the crown at its end; no shadow any more |
+| Tree | wood | 140 + 12 × height in m (180 to 420) | Splits at the foot and falls the way it was hit (and away from the side it was hit on): a stump, the trunk lying along the ground (solid), the crown at its end, leaves flying and clumps of them and broken branches strewn round it (more the bigger the tree); no shadow any more |
 | Street lamp, Belisha beacon, traffic light | metal with electrics | 150, 110, 170 | Bends over at the foot and lies the way it was hit (a heavy pole: shoved, not thrown); goes out (a traffic light's head lies loose) and sparks and fizzes for 5 s |
 | Bollard | metal | 210 | Knocked flat, shoved along |
 | Post box | iron | 300 | Knocked off its foot, a heavy lump |

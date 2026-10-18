@@ -112,7 +112,8 @@ export class Wreckage {
     const z = this.hooks.groundAt(post.x, post.y);
     if (post.thing === 'tree') {
       // It splits at the foot and goes over the way it was hit: a stump, and the trunk lying in the way.
-      const fall = fallenTree(post.x, post.y, this.hooks.treeHeight(post.index), car.vx, car.vy, car.x, car.y);
+      const height = this.hooks.treeHeight(post.index);
+      const fall = fallenTree(post.x, post.y, height, car.vx, car.vy, car.x, car.y);
       this.walls[0].add({ ...fall.trunk, level: 0 } as Wall);
       // The stump's low enough to drive over: it's just drawn.
       this.addWreck(TEX.stump, post.x, post.y, z, 0, 1);
@@ -120,6 +121,13 @@ export class Wreckage {
       const image = this.addWreck(TEX.trunk, (fall.trunk.ax + fall.trunk.bx) / 2, (fall.trunk.ay + fall.trunk.by) / 2, z, fall.angle, 1);
       image.setDisplaySize(length, 7);
       this.hooks.treeFell(post.index, fall.crownX, fall.crownY, fall.angle);
+      // Its crown hits the ground: leaves flying, and clumps of them and broken branches strewn about it, more the bigger it is.
+      const metres = height / 8;
+      const spread = Math.min(length * 1.2, 90);
+      const [vx, vy] = [car.vx * 0.3, car.vy * 0.3];
+      for (const d of debris('foliage', Math.round(Math.min(16, 4 + metres)), fall.crownX, fall.crownY, vx, vy, rand, spread)) this.hooks.addDebris(d, 0);
+      for (const d of debris('twig', Math.round(Math.min(8, 2 + metres / 2)), fall.crownX, fall.crownY, vx, vy, rand, spread)) this.hooks.addDebris(d, 0);
+      this.effects.burst('plant', fall.crownX, fall.crownY, 30);
     } else if (post.thing !== 'fountain' && post.thing !== 'stump') {
       for (const d of fallen(post.thing, post.x, post.y, car.vx, car.vy, rand)) this.hooks.addDebris(d, level);
       if (tough.material === 'electric') this.sparking.push({ x: post.x, y: post.y, until: this.scene.time.now / 1000 + SPARKING });
