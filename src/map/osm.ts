@@ -95,6 +95,8 @@ export interface Road {
   marks?: number[];
   /** Lanes painted along its sides: bus lanes, cycle lanes, parking bays. */
   lanes?: Lane[];
+  /** Where they're painted (distances along it, start, end, ...): clear of junctions, crossings and sharp bends. */
+  laneSpans?: number[];
 }
 
 /**
@@ -116,6 +118,38 @@ export interface Lane {
   /** Parking bays: which way round the cars park, and whether it's for loading only. */
   bays?: 'parallel' | 'perpendicular' | 'diagonal';
   loading?: boolean;
+  /** It carries on from the same lane on the road before (so its name isn't painted again at its start). */
+  continues?: boolean;
+}
+
+/** How far clear of a junction, a crossing and a sharp bend lanes are painted, px. */
+const LANE_CLEAR_JUNCTION = 6 * PX_PER_METRE;
+const LANE_CLEAR_CROSSING = 3 * PX_PER_METRE;
+const LANE_CLEAR_BEND = 3 * PX_PER_METRE;
+/** A bend sharper than this (radians) breaks the lanes painted along a road. */
+const SHARP_BEND = 0.7;
+
+/** Stretches of lane shorter than this aren't painted, px: they'd just be stubs between junctions. */
+const LANE_SHORTEST = 10 * PX_PER_METRE;
+
+/** Takes stretches out of a list of them (start, end, ...), keeping what's left that's long enough to paint. */
+export function cutSpans(spans: number[], cuts: [number, number][]): number[] {
+  let out = spans;
+  for (const [a, b] of cuts) {
+    const next: number[] = [];
+    for (let k = 0; k + 1 < out.length; k += 2) {
+      const [s, e] = [out[k], out[k + 1]];
+      if (b <= s || a >= e) next.push(s, e);
+      else {
+        if (a > s) next.push(s, a);
+        if (b < e) next.push(b, e);
+      }
+    }
+    out = next;
+  }
+  const kept: number[] = [];
+  for (let k = 0; k + 1 < out.length; k += 2) if (out[k + 1] - out[k] >= LANE_SHORTEST) kept.push(round(out[k]), round(out[k + 1]));
+  return kept;
 }
 
 /**
@@ -228,6 +262,21 @@ export function laneArrows(t: Tags, oneway: boolean, width: number, pts: Pts): P
     }
   }
   return out;
+}
+
+/** Where along a polyline a point's nearest, and how far from it it is. */
+function nearestAlongPolyline(pts: Pts, x: number, y: number): { along: number; distance: number } {
+  let best = { along: 0, distance: Infinity };
+  let run = 0;
+  for (let i = 0; i + 3 < pts.length; i += 2) {
+    const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
+    const len = Math.hypot(bx - ax, by - ay);
+    const t = len ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / (len * len))) : 0;
+    const d = Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y);
+    if (d < best.distance) best = { along: run + t * len, distance: d };
+    run += len;
+  }
+  return best;
 }
 
 function polylineLength(pts: Pts): number {
@@ -1077,6 +1126,10 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
   }
 
   const roadNodes = new Map<number, number>();
+  /** How many ways out of each node along the roads: three or more is a junction (two's just where a street's mapped in pieces). */
+  const branches = new Map<number, number>();
+  /** Each road's way's nodes, by its index in `roads`. */
+  const nodesOfRoad: number[][] = [];
   const roadWays: { way: OsmWay; kind: RoadKind }[] = [];
 
   for (const way of data.ways.values()) {
@@ -1093,7 +1146,11 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     const road = roadKind(t);
     if (road) {
       roadWays.push({ way, kind: road });
-      if (VEHICLE_ROADS.has(road)) for (const id of way.nodes) roadNodes.set(id, (roadNodes.get(id) ?? 0) + 1);
+      if (VEHICLE_ROADS.has(road)) {
+        for (const id of way.nodes) roadNodes.set(id, (roadNodes.get(id) ?? 0) + 1);
+        // Each way through a node is two ways out of it; one ending there, one.
+        way.nodes.forEach((id, k) => branches.set(id, (branches.get(id) ?? 0) + (k === 0 || k === way.nodes.length - 1 ? 1 : 2)));
+      }
       continue;
     }
 
@@ -1194,8 +1251,25 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     // Clipping the line loses the distances the markings are measured along, so only roads wholly beyond the edge are dropped.
     if (!pts.some((v, i) => i % 2 === 0 && inside(v, pts[i + 1], pad))) continue;
     const lanes = vehicle ? roadLanes(t, oneway, width) : undefined;
+    let laneSpans: number[] | undefined;
+    if (lanes) {
+      // Clear of junctions along it (and at its ends), and of sharp bends.
+      const cuts: [number, number][] = [];
+      let run = 0;
+      for (let k = 0; k < way.nodes.length; k++) {
+        if (k) run += Math.hypot(pts[k * 2] - pts[k * 2 - 2], pts[k * 2 + 1] - pts[k * 2 - 1]);
+        if ((branches.get(way.nodes[k]) ?? 0) >= 3) cuts.push([run - LANE_CLEAR_JUNCTION, run + LANE_CLEAR_JUNCTION]);
+        else if (k > 0 && k < way.nodes.length - 1) {
+          const [ax, ay, bx, by, cx, cy] = pts.slice(k * 2 - 2, k * 2 + 4);
+          const turn = Math.abs(Math.atan2((bx - ax) * (cy - by) - (by - ay) * (cx - bx), (bx - ax) * (cx - bx) + (by - ay) * (cy - by)));
+          if (turn > SHARP_BEND) cuts.push([run - LANE_CLEAR_BEND, run + LANE_CLEAR_BEND]);
+        }
+      }
+      laneSpans = cutSpans([0, run], cuts);
+    }
     if (vehicle) paint.push(...laneArrows(t, oneway, width, pts));
     roadIndexOfWay.set(way.id, roads.length);
+    nodesOfRoad.push(way.nodes);
     roads.push({
       kind,
       ...(t.name ? { name: t.name } : {}),
@@ -1207,9 +1281,23 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       ...(pavement ? { pavement } : {}),
       ...(marks ? { marks } : {}),
       ...(surface ? { surface } : {}),
-      ...(lanes ? { lanes } : {}),
+      ...(lanes && laneSpans?.length ? { lanes, laneSpans } : {}),
     });
   }
+  // A lane that carries on from the same lane on the road before it: its name's painted only where it starts.
+  // (On the left, its traffic comes in at the way's first node; on the right, at its last.)
+  const laneEnds = new Map<string, number>();
+  roads.forEach((r, i) => {
+    const nodes = nodesOfRoad[i];
+    for (const l of r.lanes ?? []) laneEnds.set(`${l.kind}:${l.side === 1 ? nodes[nodes.length - 1] : nodes[0]}`, i);
+  });
+  roads.forEach((r, i) => {
+    const nodes = nodesOfRoad[i];
+    for (const l of r.lanes ?? []) {
+      const before = laneEnds.get(`${l.kind}:${l.side === 1 ? nodes[0] : nodes[nodes.length - 1]}`);
+      if (before !== undefined && before !== i) l.continues = true;
+    }
+  });
 
   // Nodes: trees, street furniture, crossings and traffic lights.
   const roadsOfNode = new Map<number, { way: OsmWay; index: number; kind: RoadKind }[]>();
@@ -1467,6 +1555,36 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       }
     });
     if (best >= 0) c.controller = best;
+  }
+  // Lanes end at the traffic lights' stop lines: nothing painted from there into the junction.
+  for (const sig of signals) {
+    const [x0, y0, x1, y1] = sig.stop;
+    const [mx, my] = [(x0 + x1) / 2, (y0 + y1) / 2];
+    const [hx, hy] = [Math.cos(sig.angle), Math.sin(sig.angle)];
+    for (const r of roads) {
+      if (!r.laneSpans) continue;
+      const near = nearestAlongPolyline(r.pts, mx, my);
+      if (near.distance > r.width / 2 + 2 * PX_PER_METRE) continue;
+      // Which way along the road the traffic stopping here is heading.
+      const [, , tx, ty] = alongPolyline(r.pts, near.along);
+      const ahead = tx * hx + ty * hy >= 0 ? 1 : -1;
+      const into = 20 * PX_PER_METRE;
+      r.laneSpans = cutSpans(r.laneSpans, [ahead === 1 ? [near.along - PX_PER_METRE, near.along + into] : [near.along - into, near.along + PX_PER_METRE]]);
+      if (!r.laneSpans.length) {
+        delete r.lanes;
+        delete r.laneSpans;
+      }
+    }
+  }
+  // No lanes painted over a zebra or a crossing with lights.
+  for (const c of crossings) {
+    const r = c.road === undefined || c.at === undefined || c.kind === 'plain' ? undefined : roads[c.road];
+    if (!r?.laneSpans) continue;
+    r.laneSpans = cutSpans(r.laneSpans, [[c.at! - LANE_CLEAR_CROSSING, c.at! + LANE_CLEAR_CROSSING]]);
+    if (!r.laneSpans.length) {
+      delete r.lanes;
+      delete r.laneSpans;
+    }
   }
   // Tactile paving at the kerbs either side of a crossing that has it (tagged on it, or its kerbs): red where there are lights.
   for (const c of crossings) {

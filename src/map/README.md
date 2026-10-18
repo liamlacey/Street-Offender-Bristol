@@ -95,6 +95,13 @@ the left side's traffic goes the way's way, the right side's against it).
   along the kerb, 8 m in from the road's ends; parallel bays 2 m deep with a line
   every 6 m, end-on ones 5 m deep a line every 2.5 m; LOADING ONLY where
   `parking:*:restriction=loading_only`.
+- Bus lanes, cycle lanes and parking bays are painted only along stretches clear of
+  junctions (6 m either side of a node where three or more ways out of it meet: not
+  where a street's just mapped in pieces), crossings with stripes or lights (3 m
+  either side), and bends sharper than 40° (3 m either side); they end at a traffic
+  light's stop line; stretches left under 10 m aren't painted. A lane's name is
+  painted 6 m into its first stretch, unless it carries on from the same lane on the
+  road before.
 - **Lane arrows** (`turn:lanes`, `:forward`, `:backward`): in each lane, left to right
   as the driver sees them, 15 m before the way's end (and 35 m, if it's over 60 m
   long; its middle, if it's under 30 m).

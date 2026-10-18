@@ -29,10 +29,25 @@ export function drawLaneFills(ctx: Ctx, roads: Road[]): void {
   for (const r of roads) {
     for (const lane of r.lanes ?? []) {
       if (lane.kind !== 'bus') continue;
-      stroke(ctx, offsetLine(r.pts, lane.side * (r.width / 2 - lane.width / 2)), BUS_RED, lane.width);
+      for (const piece of spans(r)) stroke(ctx, offsetLine(piece.pts, lane.side * (r.width / 2 - lane.width / 2)), BUS_RED, lane.width);
     }
   }
   ctx.lineCap = 'round';
+}
+
+/** The stretches of a road its lanes are painted along (clear of junctions, crossings and sharp bends): where they start and end along it, and their line. */
+function spans(r: Road): { from: number; to: number; pts: Pts }[] {
+  const s = r.laneSpans ?? [];
+  const out: { from: number; to: number; pts: Pts }[] = [];
+  for (let k = 0; k + 1 < s.length; k += 2) out.push({ from: s[k], to: s[k + 1], pts: subPolyline(r.pts, s[k], s[k + 1]) });
+  return out;
+}
+
+/** Whether a distance along a road (as its way runs) is on one of its lanes' stretches, `margin` px in from their ends. */
+function onSpan(r: Road, d: number, margin: number): boolean {
+  const s = r.laneSpans ?? [];
+  for (let k = 0; k + 1 < s.length; k += 2) if (d >= s[k] + margin && d <= s[k + 1] - margin) return true;
+  return false;
 }
 
 /** The lanes' lines, words and bikes, and the parking bays (no words over a bus stop's box, among `paint`). */
@@ -43,30 +58,37 @@ export function drawLanes(ctx: Ctx, roads: Road[], paint: PaintMark[] = []): voi
   for (const r of roads) {
     if (!r.lanes) continue;
     const length = lineLength(r.pts);
+    const pieces = spans(r);
+    // Distances along, the way the lane's traffic goes, that are on its stretches: for its bikes and words.
+    const along = (lane: Lane, first: number, step: number, margin: number) =>
+      every(length, step, first).filter((d) => onSpan(r, lane.side === 1 ? d : length - d, margin));
     for (const lane of r.lanes) {
       const inner = r.width / 2 - lane.width;
       switch (lane.kind) {
         case 'bus': {
-          // A thick solid line along its edge; BUS LANE at its start; a bike in it every so often, if bikes share it.
-          stroke(ctx, offsetLine(r.pts, lane.side * inner), WHITE, 2.4);
-          const [x, y, angle] = laneAt(r, lane, Math.min(10 * 8, length / 2), lane.width / 2);
-          if (clear(x, y)) words(ctx, ['BUS', 'LANE'], x, y, angle, WHITE, lane.width);
-          if (lane.bikes) for (const d of every(length, BIKES_EVERY, 30 * 8)) bike(ctx, ...laneAt(r, lane, d, lane.width / 2), WHITE);
+          // A thick solid line along its edge; BUS LANE where it starts; a bike in it every so often, if bikes share it.
+          for (const p of pieces) stroke(ctx, offsetLine(p.pts, lane.side * inner), WHITE, 2.4);
+          if (!lane.continues && pieces.length) {
+            const first = lane.side === 1 ? pieces[0].from : length - pieces[pieces.length - 1].to;
+            const [x, y, angle] = laneAt(r, lane, first + 6 * 8, lane.width / 2);
+            if (onSpan(r, lane.side === 1 ? first + 6 * 8 : length - first - 6 * 8, 4 * 8) && clear(x, y)) words(ctx, ['BUS', 'LANE'], x, y, angle, WHITE, lane.width);
+          }
+          if (lane.bikes) for (const d of along(lane, 30 * 8, BIKES_EVERY, 3 * 8)) bike(ctx, ...laneAt(r, lane, d, lane.width / 2), WHITE);
           break;
         }
         case 'cycle':
           // Its line: solid where cars mustn't cross it, dashed where they may; a bike every 40 m.
           ctx.setLineDash(lane.solid ? [] : [12, 6]);
-          stroke(ctx, offsetLine(r.pts, lane.side * inner), WHITE, 1.4);
+          for (const p of pieces) stroke(ctx, offsetLine(p.pts, lane.side * inner), WHITE, 1.4);
           ctx.setLineDash([]);
-          for (const d of every(length, BIKES_EVERY, 6 * 8)) bike(ctx, ...laneAt(r, lane, d, lane.width / 2), WHITE);
+          for (const d of along(lane, 6 * 8, BIKES_EVERY, 3 * 8)) bike(ctx, ...laneAt(r, lane, d, lane.width / 2), WHITE);
           break;
         case 'shared':
           // Just the bikes, near the kerb in the traffic's lane.
-          for (const d of every(length, BIKES_EVERY, 6 * 8)) bike(ctx, ...laneAt(r, lane, d, 1.6 * 8), WHITE);
+          for (const d of along(lane, 6 * 8, BIKES_EVERY, 3 * 8)) bike(ctx, ...laneAt(r, lane, d, 1.6 * 8), WHITE);
           break;
         case 'parking':
-          bays(ctx, r, lane, length);
+          for (const p of pieces) bays(ctx, r, lane, p.from, p.to);
           break;
       }
     }
@@ -74,11 +96,12 @@ export function drawLanes(ctx: Ctx, roads: Road[], paint: PaintMark[] = []): voi
   ctx.lineCap = 'round';
 }
 
-/** Parking bays along the kerb: their edge and the lines between them. */
-function bays(ctx: Ctx, r: Road, lane: Lane, length: number): void {
-  if (length < BAYS_FROM_END * 2 + 6 * 8) return;
-  const start = BAYS_FROM_END;
-  const end = length - BAYS_FROM_END;
+/** Parking bays along the kerb between `from` and `to` px along the road: their edge and the lines between them. */
+function bays(ctx: Ctx, r: Road, lane: Lane, from: number, to: number): void {
+  const length = lineLength(r.pts);
+  const start = Math.max(from, BAYS_FROM_END);
+  const end = Math.min(to, length - BAYS_FROM_END);
+  if (end - start < 6 * 8) return;
   const kerb = r.width / 2;
   const depth = lane.width;
   ctx.strokeStyle = WHITE;
@@ -100,7 +123,13 @@ function bays(ctx: Ctx, r: Road, lane: Lane, length: number): void {
     // End on, or slanted: a line every 2.5 m.
     for (let d = start; d <= end; d += 2.5 * 8) across(d, lane.bays === 'diagonal' ? depth * 0.8 : 0);
   }
-  if (lane.loading) for (const d of every(end - start, 60 * 8, 6 * 8)) words(ctx, ['LOADING', 'ONLY'], ...laneAt(r, lane, start + d, depth / 2), WHITE, depth);
+  if (lane.loading) {
+    for (const d of every(end - start, 60 * 8, 6 * 8)) {
+      // laneAt measures the way the lane's traffic goes.
+      const at = lane.side === 1 ? start + d : length - (start + d);
+      words(ctx, ['LOADING', 'ONLY'], ...laneAt(r, lane, at, depth / 2), WHITE, depth);
+    }
+  }
 }
 
 /** The give way and stop lines, arrows, cycle boxes, bus stops, mini-roundabouts and tactile paving in a piece of the map. */
