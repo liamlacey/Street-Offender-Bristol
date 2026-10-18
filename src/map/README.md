@@ -148,6 +148,37 @@ ground):
 readings round each point), gaps filled from their neighbours, and smoothed twice.
 Stored as decimetres above the lowest point. (Bridges aren't in it: they're decks above it.)
 
+## Damage
+
+What's on the map can be knocked down or broken by driving into it, except the
+buildings, bridges and big structures (fountains), and what's broken stays
+broken, where it fell, in the way, until the game is restarted. The rules are
+in `src/world/damage.ts` (pure, tested); `src/scenes/Wreckage.ts` applies them.
+
+Whether something gives way depends on how fast the car is going *into* it
+(its speed towards it, in px/s) times the vehicle's weight (a car is 1; vans
+and buses to come), against the thing's strength; breaking through takes some
+of the car's speed away (its "absorb"). Below its strength, it's a wall the car
+bounces off.
+
+| Thing (from OSM) | Material | Strength | What happens |
+| --- | --- | --- | --- |
+| Tree | wood | 140 + 12 × height in m (180 to 420) | Splits at the foot and falls the way it was hit (and away from the side it was hit on): a stump, the trunk lying along the ground (solid), the crown at its end; no shadow any more |
+| Street lamp, Belisha beacon, traffic light | metal with electrics | 150, 110, 170 | Bends over at the foot and lies the way it was hit (a heavy pole: shoved, not thrown); goes out (a traffic light's head lies loose) and sparks and fizzes for 5 s |
+| Bollard | metal | 210 | Knocked flat, shoved along |
+| Post box | iron | 300 | Knocked off its foot, a heavy lump |
+| Phone box | glass | 170 | Goes over, glass everywhere |
+| Bench | timber, in parts | 150 | Below: shoved. Above: smashed into planks, scattered the way the car was going |
+| Garden wall (`barrier=wall`, …) | stone | 200 | Crumbles: a gap 2 m wide (up to 4 m, the harder it's hit) in rubble and bricks; the rest stands |
+| Hedge | plant | 80 | Torn through (a 3 m gap, up to 6 m), leaves everywhere |
+| Fence | timber | 70 | Broken through (2.5 m, up to 5 m) into planks |
+| Railings | metal | 130 | Broken through (2.5 m, up to 5 m), bent bars |
+
+The pieces are loose things like the rest (with their own weights), pushed by
+the car and stopping on their own; walls and trunks left standing or lying
+are solid. They're all part of the world's walls, posts and loose things, so
+they're in the way of traffic and people too, when there are some.
+
 ## The files
 
 - `osm.ts`: reads OSM's XML and makes the map (`buildMap`): projection, roads,

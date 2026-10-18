@@ -32,8 +32,17 @@ describe('buildWorld', () => {
   it('walls in every solid building and the edge of the map', () => {
     const solid = map.buildings.filter((b) => b.solid);
     expect(world.walls[0].length).toBeGreaterThan(solid.length * 3);
-    expect(world.walls[0]).toContainEqual({ ax: 0, ay: 0, bx: map.width, by: 0, r: 0 });
-    expect(world.walls[1]).toContainEqual({ ax: 0, ay: 0, bx: map.width, by: 0, r: 0 });
+    expect(world.walls[0]).toContainEqual({ ax: 0, ay: 0, bx: map.width, by: 0, r: 0, level: 0 });
+    expect(world.walls[1]).toContainEqual({ ax: 0, ay: 0, bx: map.width, by: 0, r: 0, level: 0 });
+  });
+
+  it('knows what each post and wall is, so it can be knocked down as what it is', () => {
+    const things = new Set(world.posts[0].map((p) => p.thing));
+    for (const t of ['tree', 'lamp', 'signal', 'bollard'] as const) expect(things.has(t)).toBe(true);
+    const kinds = new Set(world.walls[0].map((w) => w.kind).filter(Boolean));
+    expect(kinds.has('wall')).toBe(true);
+    // A building's walls have no kind: they don't break.
+    expect(world.walls[0].filter((w) => !w.kind).length).toBeGreaterThan(1000);
   });
 
   it('makes benches and bins loose, and lamp posts and trees fixed', () => {

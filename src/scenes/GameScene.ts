@@ -32,9 +32,12 @@ import { Perspective } from '../world/perspective';
 import { Terrain } from '../world/terrain';
 import { SURFACE_KIND, Surface, type SurfaceGrid } from '../world/surface';
 import { type Light, lightAt } from '../world/lights';
-import { CHUNK, type LooseProp, type World, beacons, buildWorld, chunkKey } from '../world/world';
+import { CHUNK, type LooseProp, type Post, type World, beacons, buildWorld, chunkKey } from '../world/world';
 import { ART_SCALE, TEX, TREE_KINDS, TREE_RADIUS, createArt } from './art';
 import { CarEffects } from './CarEffects';
+import { Wreckage } from './Wreckage';
+import { WallLayer } from '../world/WallLayer';
+import { type Debris, impactSpeed } from '../world/damage';
 import { HudScene, RESET_EVENT, STREET_EVENT } from './HudScene';
 import { SkidMarks } from './SkidMarks';
 
@@ -46,6 +49,8 @@ const DEPTH = {
   ground: 0,
   skids: 1,
   props: 2,
+  /** Garden walls, hedges, fences and railings. */
+  walls: 2.2,
   /** A bridge's deck, with the car on it. */
   deckBelow: 2.5,
   carShadow: 3,
@@ -66,6 +71,8 @@ const BEACON_HEIGHT = 2.6 * 8;
 /** The view's shorter side, in map px, when the car's stopped (it pulls back as you speed up, as in the old games). */
 const VIEW_AT_REST = 430;
 const PULL_BACK = 0.38;
+/** How many loose things (benches, bins, and the bits of what's been broken) before the smallest bits stop being kept. */
+const MAX_LOOSE = 1500;
 
 /**
  * Driving round Bristol: the map from OpenStreetMap, the car, the camera
@@ -79,7 +86,7 @@ export class GameScene extends Phaser.Scene {
   private terrain!: Terrain;
   private readonly perspective = new Perspective();
   /** The street furniture that never moves, and the height of the ground under each, px. */
-  private props: { x: number; y: number; z: number; image: Phaser.GameObjects.Image }[] = [];
+  private props: { x: number; y: number; z: number; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
   /** What you hit on each level: the ground's, and the bridges' decks'. */
   private walls!: [SegmentGrid, SegmentGrid];
   private posts!: [CircleGrid, CircleGrid];
@@ -92,9 +99,11 @@ export class GameScene extends Phaser.Scene {
   private carShadow!: Phaser.GameObjects.Image;
   private trees: { x: number; y: number; z: number; h: number; image: Phaser.GameObjects.Image }[] = [];
   /** Each traffic light's head, up its pole, with what it's showing. */
-  private signalHeads: { x: number; y: number; z: number; controller: number; group: number; light: Light; image: Phaser.GameObjects.Image }[] = [];
+  private signalHeads: { x: number; y: number; z: number; controller: number; group: number; light: Light; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
   /** The Belisha beacons' globes, flashing. */
-  private beacons: { x: number; y: number; z: number; image: Phaser.GameObjects.Image }[] = [];
+  private beacons: { x: number; y: number; z: number; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
+  private wreckage!: Wreckage;
+  private wallLayer!: WallLayer;
   private loose: { body: LooseProp; image: Phaser.GameObjects.Image }[] = [];
   private looseByChunk = new Map<string, number[]>();
   private effects!: CarEffects;
@@ -122,7 +131,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    const map = mapData as unknown as GameMap;
+    // Its own copy of the trees: knocking one down changes it.
+    const map = { ...(mapData as unknown as GameMap), trees: [...(mapData as unknown as GameMap).trees] };
     this.world = buildWorld(map);
     this.surfaces = paintSurfaces(this.world);
     createArt(this);
@@ -135,6 +145,24 @@ export class GameScene extends Phaser.Scene {
     this.buildings = new Buildings(this, this.world, this.terrain, DEPTH.buildings);
     this.decks = new Decks(map.roads, (x, y) => this.groundAt(x, y));
     this.deckLayer = new DeckLayer(this, this.decks);
+    this.wallLayer = new WallLayer(this, this.walls, (x, y, level) => this.surfaceHeight(x, y, level), DEPTH.walls);
+    this.wreckage = new Wreckage(this, this.walls, this.posts, this.effects, {
+      groundAt: (x, y) => this.groundAt(x, y),
+      addDebris: (d, level) => this.addDebris(d, level),
+      knockedDown: (post) => this.knockedDown(post),
+      treeFell: (index, x, y, angle) => {
+        const t = this.trees[index];
+        const map = this.world.map;
+        // It's lying down now: its shadow's gone from the ground.
+        map.trees[index * 4 + 2] = 0;
+        this.ground.repaint(t.x, t.y, map.trees[index * 4 + 3] + 64);
+        Object.assign(t, { x, y, h: 2 * 8 });
+        t.image.setRotation(angle);
+      },
+      treeHeight: (index) => this.trees[index].h,
+      audio: () => this.audio,
+      weight: () => 1,
+    }, DEPTH.props - 0.1);
     this.addProps();
     this.addTrees();
     this.addLights();
@@ -233,7 +261,7 @@ export class GameScene extends Phaser.Scene {
     const { controllers } = this.world.map;
     const near = (x: number, y: number) => x > view.left - 120 && x < view.right + 120 && y > view.top - 120 && y < view.bottom + 120;
     for (const l of this.signalHeads) {
-      const show = near(l.x, l.y);
+      const show = !l.gone && near(l.x, l.y);
       if (l.image.visible !== show) l.image.setVisible(show);
       if (!show) continue;
       const light = lightAt(controllers[l.controller], l.controller, l.group, time);
@@ -246,7 +274,7 @@ export class GameScene extends Phaser.Scene {
     }
     const on = time % 1 < 0.5;
     for (const b of this.beacons) {
-      const show = near(b.x, b.y);
+      const show = !b.gone && near(b.x, b.y);
       if (b.image.visible !== show) b.image.setVisible(show);
       if (!show) continue;
       b.image.setTexture(TEX.beacon(on));
@@ -293,6 +321,8 @@ export class GameScene extends Phaser.Scene {
     this.updateTrees(view);
     this.updateProps(view);
     this.updateLights(view);
+    this.wallLayer.update(view, this.perspective);
+    this.wreckage.update(view, this.perspective);
     this.updateStreet(dt);
     const speed = Math.hypot(this.car.vx, this.car.vy);
     this.audio?.update({
@@ -340,6 +370,8 @@ export class GameScene extends Phaser.Scene {
     const [sx, sy] = on ? this.decks.slope(on.deck, on.along) : this.terrain.slope(car.x, car.y);
     stepCar(car, this.input_, dt, SURFACE_GRIP[SURFACE_KIND[this.surface]], DEFAULT_TUNING, { x: sx, y: sy });
 
+    // Whatever the car's going into hard enough gives way first; then it bounces off what's left.
+    this.wreckage.hit(car, this.level);
     const wall = collideCarWithWalls(car, this.walls[this.level], undefined, this.contact);
     if (wall > 0) this.hit(wall);
     const post = collideCarWithStatic(car, this.posts[this.level], undefined, this.contact);
@@ -352,8 +384,13 @@ export class GameScene extends Phaser.Scene {
       this.effects.reset();
     }
     for (const i of this.nearbyLoose(car.x, car.y)) {
-      const { body } = this.loose[i];
-      if (body.level !== this.level) continue;
+      const { body, image } = this.loose[i];
+      if (body.level !== this.level || body.gone) continue;
+      // Hit hard enough, a bench smashes to pieces.
+      if (this.wreckage.smash(body, car, impactSpeed(car, body.x, body.y, body.r + (body.length ?? 0) / 2))) {
+        image.destroy();
+        continue;
+      }
       const knock = collideCarWithBody(car, body);
       if (knock > 0) {
         body.moved = true;
@@ -397,7 +434,7 @@ export class GameScene extends Phaser.Scene {
   private updateLoose(): void {
     const dt = 1 / 60;
     for (const { body } of this.loose) {
-      if (!body.moved) continue;
+      if (!body.moved || body.gone) continue;
       stepBody(body, dt, 3);
       collideBodyWithStatic(body, this.posts[body.level]);
       for (const s of this.walls[body.level].near(body.x, body.y, body.r + 8)) {
@@ -501,6 +538,50 @@ export class GameScene extends Phaser.Scene {
     return on ? this.decks.height(on.deck, on.along) : this.groundAt(x, y);
   }
 
+  /** The height of what's underfoot at (x, y) on a level, px: the ground, or a bridge's deck. */
+  private surfaceHeight(x: number, y: number, level: number): number {
+    const deck = level === 1 ? this.decks.over(x, y) : null;
+    return deck ? this.decks.height(deck.deck, deck.along) : this.groundAt(x, y);
+  }
+
+  /** A piece of something broken, flying off loose: it ends up in the way. */
+  private addDebris(d: Debris, level: number): void {
+    // Enough is enough: past this, the smallest bits are left out.
+    if (this.loose.length > MAX_LOOSE && (d.kind === 'rubble' || d.kind === 'brick')) return;
+    const body: LooseProp = { ...d, level, moved: true };
+    const image = this.add
+      .image(d.x, d.y, TEX.debris(d.kind))
+      .setScale(1 / ART_SCALE)
+      .setRotation(d.angle)
+      .setDepth(level === 1 ? DEPTH.onDeck : DEPTH.props);
+    this.loose.push({ body, image });
+    const key = chunkKey(Math.floor(d.x / CHUNK), Math.floor(d.y / CHUNK));
+    const list = this.looseByChunk.get(key);
+    if (list) list.push(this.loose.length - 1);
+    else this.looseByChunk.set(key, [this.loose.length - 1]);
+  }
+
+  /** What showed a knocked-down post goes: a lamp, a traffic light's head, a beacon (a tree's crown falls instead). */
+  private knockedDown(post: Post): void {
+    switch (post.thing) {
+      case 'signal':
+        this.signalHeads[post.index].gone = true;
+        this.signalHeads[post.index].image.setVisible(false);
+        break;
+      case 'beacon':
+        this.beacons[post.index].gone = true;
+        this.beacons[post.index].image.setVisible(false);
+        break;
+      case 'tree':
+      case 'stump':
+      case 'fountain':
+        break;
+      default:
+        this.props[post.index].gone = true;
+        this.props[post.index].image.setVisible(false);
+    }
+  }
+
   /** The ground's height at (x, y), px. */
   private groundAt(x: number, y: number): number {
     return this.terrain.at(x, y) * this.terrain.px;
@@ -535,13 +616,14 @@ export class GameScene extends Phaser.Scene {
     const p = this.perspective;
     const pad = 120;
     for (const t of this.props) {
-      const show = t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
+      const show = !t.gone && t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
       if (t.image.visible !== show) t.image.setVisible(show);
       if (!show) continue;
       const s = p.lift(t.z);
       t.image.setPosition(p.x(t.x, s), p.y(t.y, s));
     }
     for (const { body, image } of this.loose) {
+      if (body.gone) continue;
       const show = body.x > view.left - pad && body.x < view.right + pad && body.y > view.top - pad && body.y < view.bottom + pad;
       if (image.visible !== show) image.setVisible(show);
       if (!show) continue;

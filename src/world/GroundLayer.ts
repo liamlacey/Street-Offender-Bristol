@@ -34,6 +34,7 @@ export class GroundLayer {
   private readonly palette: Palette;
   private readonly scratch: CanvasRenderingContext2D;
   private frame = 0;
+  private painted = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -89,7 +90,8 @@ export class GroundLayer {
   }
 
   private draw(i: number, j: number): TerrainSheet {
-    const key = `ground:${i},${j}`;
+    // A new name each time it's painted: a texture made under an old one's name can come out as the old one.
+    const key = `ground:${i},${j}:${this.painted++}`;
     // A pixel more all round, overlapping the next piece, so no seam shows between them.
     const size = CHUNK + BLEED * 2;
     const texture = this.scene.textures.createCanvas(key, size, size)!;
@@ -139,6 +141,20 @@ export class GroundLayer {
       this.shade.width = this.shade.height = n;
     }
     return this.shade;
+  }
+
+  /** Paints again, straight away, the pieces of ground within `reach` px of (x, y) that are in use: something on them has changed. */
+  repaint(x: number, y: number, reach: number): void {
+    for (let i = Math.floor((x - reach) / CHUNK); i <= Math.floor((x + reach) / CHUNK); i++) {
+      for (let j = Math.floor((y - reach) / CHUNK); j <= Math.floor((y + reach) / CHUNK); j++) {
+        const piece = this.pieces.get(chunkKey(i, j));
+        if (!piece) continue;
+        const used = piece.used;
+        this.forget(chunkKey(i, j));
+        this.draw(i, j);
+        this.pieces.get(chunkKey(i, j))!.used = used;
+      }
+    }
   }
 
   private forget(chunk: string): void {

@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 import { CAR_LENGTH, CAR_WIDTH, type CarInput, type CarState, type SurfaceKind, forwardSpeed, lateralSpeed } from '../car/CarPhysics';
 import { TEX } from './art';
+import type { Material } from '../world/damage';
 import type { SkidMarks } from './SkidMarks';
 
 /** Wheel positions in the car's frame: x forward, y to the right. */
@@ -27,6 +28,11 @@ export class CarEffects {
   private readonly turf: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly spray: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly sparks: Phaser.GameObjects.Particles.ParticleEmitter;
+  /** What flies off things as they break. */
+  private readonly dust: Phaser.GameObjects.Particles.ParticleEmitter;
+  private readonly leaves: Phaser.GameObjects.Particles.ParticleEmitter;
+  private readonly splinters: Phaser.GameObjects.Particles.ParticleEmitter;
+  private readonly glass: Phaser.GameObjects.Particles.ParticleEmitter;
   private lastMark: ({ x: number; y: number } | null)[] = [null, null, null, null];
 
   constructor(
@@ -73,6 +79,61 @@ export class CarEffects {
         emitting: false,
       })
       .setDepth(depth + 0.1);
+    this.dust = scene.add
+      .particles(0, 0, TEX.puff, {
+        lifespan: { min: 900, max: 1800 },
+        speed: { min: 10, max: 60 },
+        scale: { start: 0.8, end: 2.6 },
+        alpha: { start: 0.55, end: 0 },
+        tint: [0xb3a690, 0x9a8f80, 0xc9bfae],
+        emitting: false,
+      })
+      .setDepth(depth + 0.2);
+    const bits = (tint: number[], lifespan: number, speed: number) =>
+      scene.add
+        .particles(0, 0, TEX.spark, {
+          lifespan: { min: lifespan * 0.5, max: lifespan },
+          speed: { min: speed * 0.3, max: speed },
+          scale: { start: 1.3, end: 0.5 },
+          rotate: { min: 0, max: 360 },
+          tint,
+          emitting: false,
+        })
+        .setDepth(depth + 0.2);
+    this.leaves = bits([0x3f7a2e, 0x5b9a3e, 0x2f5e24, 0x7ab655], 1400, 110);
+    this.splinters = bits([0x8f6038, 0x6b4527, 0xc79a62], 700, 180);
+    this.glass = bits([0xdff3fb, 0xb5d4e2, 0xffffff], 600, 200);
+  }
+
+  /** Bits of something breaking, flying off: dust, leaves, splinters, glass, sparks, by what it's made of. */
+  burst(material: Material, x: number, y: number, count: number): void {
+    switch (material) {
+      case 'stone':
+        this.dust.emitParticleAt(x, y, count);
+        break;
+      case 'plant':
+        this.leaves.emitParticleAt(x, y, count);
+        break;
+      case 'wood':
+        this.leaves.emitParticleAt(x, y, count);
+        this.splinters.emitParticleAt(x, y, Math.ceil(count / 2));
+        break;
+      case 'timber':
+        this.splinters.emitParticleAt(x, y, count);
+        break;
+      case 'glass':
+        this.glass.emitParticleAt(x, y, count);
+        this.sparks.emitParticleAt(x, y, Math.ceil(count / 3));
+        break;
+      case 'electric':
+      case 'metal':
+      case 'iron':
+        this.sparks.emitParticleAt(x, y, count);
+        break;
+      case 'plastic':
+        this.splinters.emitParticleAt(x, y, Math.ceil(count / 2));
+        break;
+    }
   }
 
   /** Call once a frame with the car and what's under it. */

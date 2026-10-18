@@ -19,6 +19,9 @@ export const TEX = {
   prop: (kind: string) => `prop-${kind}`,
   light: (state: string) => `light-${state}`,
   beacon: (on: boolean) => `beacon-${on ? 'on' : 'off'}`,
+  debris: (kind: string) => `debris-${kind}`,
+  stump: 'stump',
+  trunk: 'trunk',
 } as const;
 
 export const TREE_KINDS = 4;
@@ -229,6 +232,95 @@ export function createArt(scene: Phaser.Scene): void {
     circle(ctx, 4, 4, 2.8, '#33473a');
     circle(ctx, 4, 4, 1.5, '#111');
   });
+  // A dead traffic light: no lamp lit.
+  canvasTexture(scene, TEX.light('off'), 12, 16, (ctx) => {
+    circle(ctx, 6, 2.5, 2.2, '#2a2d31');
+    roundRect(ctx, 3, 2, 6, 13, 1.5, '#15171a');
+    for (const y of [5, 8.5, 12]) circle(ctx, 6, y, 1.6, '#262626');
+  });
+
+  // What's left when things are smashed, drawn lying as they're shown (long ones along x).
+  canvasTexture(scene, TEX.debris('plank'), 13, 3.2, (ctx) => {
+    roundRect(ctx, 0, 0.2, 13, 2.8, 0.6, '#6b4527');
+    ctx.fillStyle = '#8f6038';
+    ctx.fillRect(0.5, 0.6, 12, 1);
+  });
+  canvasTexture(scene, TEX.debris('rubble'), 6, 6, (ctx) => {
+    ctx.fillStyle = '#8a7f70';
+    ctx.beginPath();
+    ctx.moveTo(1, 2);
+    ctx.lineTo(4, 0.5);
+    ctx.lineTo(5.6, 3);
+    ctx.lineTo(4, 5.6);
+    ctx.lineTo(0.6, 4.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#b3a690';
+    ctx.fillRect(1.6, 1.8, 2, 1.4);
+  });
+  canvasTexture(scene, TEX.debris('brick'), 5, 3, (ctx) => {
+    roundRect(ctx, 0, 0, 5, 3, 0.5, '#8d4a36');
+    ctx.fillStyle = '#a9604a';
+    ctx.fillRect(0.6, 0.5, 3.6, 0.8);
+  });
+  canvasTexture(scene, TEX.debris('rail'), 18, 3, (ctx) => {
+    ctx.strokeStyle = '#3a3f45';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(0.5, 1);
+    ctx.quadraticCurveTo(9, 2.8, 17.5, 0.8);
+    ctx.stroke();
+  });
+  // Fallen poles: a lamp post with its lamp at the top end (to the right), and a short one.
+  canvasTexture(scene, TEX.debris('pole'), 44, 6, (ctx) => {
+    roundRect(ctx, 0, 2, 40, 2, 1, '#3d4248');
+    roundRect(ctx, 38, 0.5, 6, 5, 1.5, '#d9d2ae');
+    circle(ctx, 2, 3, 2, '#2d3035');
+  });
+  canvasTexture(scene, TEX.debris('shortpole'), 22, 4, (ctx) => {
+    roundRect(ctx, 0, 1, 22, 2, 1, '#2f3338');
+    ctx.fillStyle = '#e8e8e8';
+    for (const x of [4, 10, 16]) ctx.fillRect(x, 1, 2.5, 2);
+  });
+  canvasTexture(scene, TEX.debris('head'), 6, 12, (ctx) => {
+    roundRect(ctx, 0.5, 0, 5, 12, 1.2, '#15171a');
+    for (const y of [2.5, 6, 9.5]) circle(ctx, 3, y, 1.3, '#2a2a2a');
+  });
+  canvasTexture(scene, TEX.debris('bollard'), 6, 6, (ctx) => {
+    roundRect(ctx, 0, 1, 6, 4, 1.5, '#1f2225');
+    ctx.fillStyle = '#c8c8c8';
+    ctx.fillRect(4.2, 1, 0.8, 4);
+  });
+  canvasTexture(scene, TEX.debris('postbox'), 10, 8, (ctx) => {
+    roundRect(ctx, 0, 0.5, 10, 7, 3, '#9d1010');
+    roundRect(ctx, 1, 1.5, 7, 5, 2.5, '#d0201e');
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(6.5, 3.4, 2.4, 1);
+  });
+  canvasTexture(scene, TEX.debris('phonebox'), 18, 12, (ctx) => {
+    roundRect(ctx, 0, 0, 18, 12, 1.2, '#8f0f0f');
+    roundRect(ctx, 1.2, 1.2, 15.6, 9.6, 1, '#cf2320');
+    ctx.fillStyle = 'rgba(190,225,240,0.8)';
+    for (const x of [3, 7.5, 12]) ctx.fillRect(x, 3, 3, 6);
+  });
+  // A tree's stump, and its trunk lying on the ground (one 64 px long, stretched to each).
+  canvasTexture(scene, TEX.stump, 10, 10, (ctx) => {
+    circle(ctx, 5, 5, 4.5, '#5a3d24');
+    circle(ctx, 5, 5, 3.2, '#c79a62');
+    ctx.strokeStyle = '#8a6440';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.arc(5, 5, 1.8, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+  canvasTexture(scene, TEX.trunk, 64, 8, (ctx) => {
+    roundRect(ctx, 0, 0.5, 64, 7, 3, '#5a3d24');
+    ctx.fillStyle = '#76532f';
+    ctx.fillRect(2, 2, 60, 1.6);
+    ctx.fillStyle = '#c79a62';
+    ctx.fillRect(0, 1.5, 1.5, 5);
+  });
+
   canvasTexture(scene, TEX.prop('bikes'), 16, 8, (ctx) => {
     ctx.strokeStyle = '#7a7f86';
     ctx.lineWidth = 1;

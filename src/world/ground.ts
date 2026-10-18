@@ -153,20 +153,7 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
     for (const i of index.lines) {
       const l = map.lines[i];
       switch (l.kind) {
-        case 'wall':
-          stroke(ctx, l.pts, '#6f655a', 5);
-          stroke(ctx, l.pts, '#a39686', 3);
-          break;
-        case 'hedge':
-          stroke(ctx, l.pts, '#24461d', 11);
-          stroke(ctx, l.pts, '#3a6a2c', 7);
-          break;
-        case 'fence':
-          stroke(ctx, l.pts, '#3b3530', 1.6);
-          break;
-        case 'railing':
-          stroke(ctx, l.pts, '#2c2f33', 1.4);
-          break;
+        // Garden walls, hedges, fences and railings stand up off the ground, and can be knocked down: see WallLayer.
         case 'quay':
           stroke(ctx, l.pts, palette.quay, 4);
           break;
@@ -390,6 +377,8 @@ function drawShadows(ctx: Ctx, scratch: Ctx, map: GameMap, index: ChunkIndex, x0
   // Trees: a soft round shadow off to the side.
   for (const t of index.trees) {
     const [x, y, r, h] = [map.trees[t * 4], map.trees[t * 4 + 1], map.trees[t * 4 + 2], map.trees[t * 4 + 3]];
+    // One that's been knocked down (its crown's size set to 0) is lying flat: no shadow.
+    if (r <= 0) continue;
     const [sx, sy] = shadowOffset(h * 0.7);
     scratch.beginPath();
     scratch.arc(x + sx, y + sy, r * 0.95, 0, Math.PI * 2);

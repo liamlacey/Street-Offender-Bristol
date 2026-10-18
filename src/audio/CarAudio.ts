@@ -9,6 +9,7 @@
  */
 
 import type { SurfaceKind } from '../car/CarPhysics';
+import type { Material } from '../world/damage';
 
 export interface EngineState {
   /** px/s */
@@ -88,6 +89,66 @@ export class CarAudio {
     src.connect(filter).connect(this.envelope(t, volume, 0.45));
     src.start(t, Math.random());
     src.stop(t + 0.5);
+  }
+
+  /**
+   * Something breaking, by what it's made of: wood splitting, metal
+   * clanging and fizzing, glass shattering, stone crumbling, a hedge torn
+   * through, planks smashing. Louder the harder the hit.
+   */
+  shatter(material: Material, speed: number): void {
+    const t = this.ctx.currentTime;
+    const loud = 0.25 + clamp01(speed / 500) * 0.35;
+    switch (material) {
+      case 'wood':
+        // A deep crack, then the splintering.
+        this.noiseBurst(t, 'lowpass', 300, 0.6, loud, 0.5);
+        this.noiseBurst(t + 0.05, 'bandpass', 1400, 2, loud * 0.5, 0.35);
+        this.tone(55, t, 0.4, loud * 0.7, 'sine');
+        break;
+      case 'electric':
+      case 'metal':
+      case 'iron':
+        // A clang: a few tones that don't quite go together, ringing on.
+        for (const f of [220, 347, 581]) this.tone(f * (material === 'iron' ? 0.6 : 1), t, 0.6, loud * 0.25, 'triangle');
+        this.noiseBurst(t, 'highpass', 3000, 1, loud * 0.3, 0.2);
+        if (material === 'electric') this.noiseBurst(t + 0.1, 'bandpass', 5000, 4, loud * 0.25, 0.6);
+        break;
+      case 'glass':
+        this.noiseBurst(t, 'highpass', 4000, 1, loud * 0.8, 0.5);
+        for (const f of [2600, 3300, 4100]) this.tone(f, t + Math.random() * 0.1, 0.25, loud * 0.08, 'sine');
+        break;
+      case 'stone':
+        // A thump and a long rumble of falling rubble.
+        this.noiseBurst(t, 'lowpass', 400, 0.7, loud, 0.9);
+        this.tone(45, t, 0.3, loud * 0.8, 'sine');
+        break;
+      case 'plant':
+        this.noiseBurst(t, 'bandpass', 2200, 0.8, loud * 0.6, 0.45);
+        break;
+      case 'timber':
+      case 'plastic':
+        this.noiseBurst(t, 'bandpass', 900, 1.5, loud * 0.7, 0.25);
+        this.tone(180, t, 0.12, loud * 0.4, 'triangle');
+        break;
+    }
+  }
+
+  /** The fizz of a broken light's wires sparking. */
+  fizz(): void {
+    this.noiseBurst(this.ctx.currentTime, 'bandpass', 5500, 5, 0.06, 0.12);
+  }
+
+  private noiseBurst(at: number, type: BiquadFilterType, freq: number, q: number, volume: number, length: number): void {
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noise;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = type;
+    filter.frequency.value = freq;
+    filter.Q.value = q;
+    src.connect(filter).connect(this.envelope(at, volume, length));
+    src.start(at, Math.random());
+    src.stop(at + length + 0.05);
   }
 
   /** The hollow knock of a bench or bin sent flying. */

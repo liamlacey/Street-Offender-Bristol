@@ -9,6 +9,7 @@
 import type { Body, Circle, Segment } from '../physics/collisions';
 import type { Building, GameMap, LineKind, Prop, PropKind, Pts, Road } from '../map/osm';
 import { Decks } from './decks';
+import type { DebrisKind, ThingKind, WallKind } from './damage';
 
 /** Size of the pieces the ground is drawn in, and indexed by, px. */
 export const CHUNK = 512;
@@ -56,8 +57,23 @@ export function beacons(map: GameMap): { x: number; y: number }[] {
   return out;
 }
 
+/** Something standing in the way, and what it is: which tree, light, beacon or prop (by its index in its list). */
+export interface Post extends Circle {
+  thing: ThingKind;
+  index: number;
+}
+
+/** A wall: a building's (no kind: it won't break), or a garden wall, hedge, fence or railing (which will). */
+export interface Wall extends Segment {
+  kind?: WallKind;
+  level: number;
+}
+
 export interface LooseProp extends Body {
-  kind: PropKind;
+  /** A bench or bin, or a piece of something broken. */
+  kind: PropKind | DebrisKind;
+  /** Smashed to pieces: it's gone. */
+  gone?: boolean;
   /** 0 on the ground, 1 on a bridge. */
   level: number;
   /** Whether it's been knocked from where it stood. */
@@ -83,8 +99,8 @@ export interface FixedProp extends Prop {
 export interface World {
   map: GameMap;
   /** What you crash into on each level: [0] the ground, [1] the bridges' decks. */
-  walls: [Segment[], Segment[]];
-  posts: [Circle[], Circle[]];
+  walls: [Wall[], Wall[]];
+  posts: [Post[], Post[]];
   loose: LooseProp[];
   /** The props that are fixed or painted on (all but the loose ones). */
   fixed: FixedProp[];
@@ -156,46 +172,47 @@ export function buildWorld(map: GameMap): World {
   const onDeck = (x: number, y: number) => decks.over(x, y) !== null;
   const passages = map.roads.filter((r) => r.passage);
 
-  const ground: Segment[] = [];
-  const deck: Segment[] = [];
-  const addRing = (to: Segment[], ring: Pts, r: number, closed: boolean, cut = false) => {
+  const ground: Wall[] = [];
+  const deck: Wall[] = [];
+  const addRing = (to: Wall[], ring: Pts, r: number, closed: boolean, level: number, kind?: WallKind, cut = false) => {
     const n = ring.length;
     for (let i = 0; i + (closed ? 1 : 3) < n; i += 2) {
       const j = (i + 2) % n;
-      const s = { ax: ring[i], ay: ring[i + 1], bx: ring[j], by: ring[j + 1], r };
-      to.push(...(cut ? cutWall(s, passages) : [s]));
+      const s: Wall = { ax: ring[i], ay: ring[i + 1], bx: ring[j], by: ring[j + 1], r, level, ...(kind ? { kind } : {}) };
+      to.push(...(cut ? cutWall(s, passages).map((piece) => ({ ...piece, level })) : [s]));
     }
   };
   // Buildings, with their archways open, stand in the way on both levels.
-  const buildings: Segment[] = [];
-  for (const b of map.buildings) if (b.solid) for (const ring of b.rings) addRing(buildings, ring, 0, true, true);
+  const buildings: Wall[] = [];
+  for (const b of map.buildings) if (b.solid) for (const ring of b.rings) addRing(buildings, ring, 0, true, 0, undefined, true);
   // Garden walls, fences and railings: on a bridge if they run along one (its handrails), otherwise on the ground.
   for (const line of map.lines) {
     const r = LINE_THICKNESS[line.kind];
     if (r === undefined) continue;
     const mid = Math.floor(line.pts.length / 4) * 2;
-    addRing(onDeck(line.pts[mid], line.pts[mid + 1]) ? deck : ground, line.pts, r, false);
+    const level = onDeck(line.pts[mid], line.pts[mid + 1]) ? 1 : 0;
+    addRing(level ? deck : ground, line.pts, r, false, level, line.kind as WallKind);
   }
   // The edge of the map.
-  const edge: Segment[] = [];
-  addRing(edge, [0, 0, map.width, 0, map.width, map.height, 0, map.height], 0, true);
-  const walls: [Segment[], Segment[]] = [
+  const edge: Wall[] = [];
+  addRing(edge, [0, 0, map.width, 0, map.width, map.height, 0, map.height], 0, true, 0);
+  const walls: [Wall[], Wall[]] = [
     [...buildings, ...ground, ...edge],
-    [...buildings, ...deck, ...decks.parapets(), ...edge],
+    [...buildings, ...deck, ...decks.parapets().map((p) => ({ ...p, level: 1 })), ...edge],
   ];
 
   // Trees grow on the ground; anything else standing on a bridge is on the bridge.
-  const posts: [Circle[], Circle[]] = [[], []];
+  const posts: [Post[], Post[]] = [[], []];
   const levelOf = (x: number, y: number) => (onDeck(x, y) ? 1 : 0);
-  for (let i = 0; i < map.trees.length; i += 4) posts[0].push({ x: map.trees[i], y: map.trees[i + 1], r: TRUNK });
-  for (const s of map.signals) posts[levelOf(s.x, s.y)].push({ x: s.x, y: s.y, r: SIGNAL_POLE });
-  for (const b of beacons(map)) posts[levelOf(b.x, b.y)].push({ x: b.x, y: b.y, r: BEACON_POLE });
+  for (let i = 0; i < map.trees.length; i += 4) posts[0].push({ x: map.trees[i], y: map.trees[i + 1], r: TRUNK, thing: 'tree', index: i / 4 });
+  map.signals.forEach((s, index) => posts[levelOf(s.x, s.y)].push({ x: s.x, y: s.y, r: SIGNAL_POLE, thing: 'signal', index }));
+  beacons(map).forEach((b, index) => posts[levelOf(b.x, b.y)].push({ x: b.x, y: b.y, r: BEACON_POLE, thing: 'beacon', index }));
   const loose: LooseProp[] = [];
   const fixed: FixedProp[] = [];
   map.props.forEach((p, i) => {
     const level = levelOf(p.x, p.y);
     const post = POST_RADIUS[p.kind];
-    if (post !== undefined) posts[level].push({ x: p.x, y: p.y, r: post });
+    if (post !== undefined) posts[level].push({ x: p.x, y: p.y, r: post, thing: p.kind as ThingKind, index: fixed.length });
     // Traffic lights and bus stops are mapped on the road's centre line, not where they stand: left off for now.
     if (p.kind === 'signals' || p.kind === 'busstop') return;
     const l = LOOSE[p.kind];

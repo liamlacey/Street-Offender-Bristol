@@ -16,6 +16,8 @@ export interface Circle {
   x: number;
   y: number;
   r: number;
+  /** Knocked down or smashed: no longer in the way. */
+  gone?: boolean;
 }
 
 /** A loose object that can be knocked about, like a cone (or, with a length, a parked car). */
@@ -49,20 +51,32 @@ export class CircleGrid {
     readonly circles: Circle[],
     private readonly cellSize = 64,
   ) {
-    circles.forEach((c, i) => this.forCells(c.x, c.y, c.r, (key) => {
-      const cell = this.cells.get(key);
-      if (cell) cell.push(i);
-      else this.cells.set(key, [i]);
-    }));
+    circles.forEach((c, i) => this.index(c, i));
   }
 
-  /** Circles that might overlap a circle of radius `r` at (x, y). */
+  /** Puts another circle in (a stump, say). */
+  add(c: Circle): void {
+    this.circles.push(c);
+    this.index(c, this.circles.length - 1);
+  }
+
+  /** Circles that might overlap a circle of radius `r` at (x, y) (not those gone). */
   near(x: number, y: number, r: number): Circle[] {
     this.found.clear();
     this.forCells(x, y, r, (key) => {
       for (const i of this.cells.get(key) ?? []) this.found.add(i);
     });
-    return [...this.found].map((i) => this.circles[i]);
+    const out: Circle[] = [];
+    for (const i of this.found) if (!this.circles[i].gone) out.push(this.circles[i]);
+    return out;
+  }
+
+  private index(c: Circle, i: number): void {
+    this.forCells(c.x, c.y, c.r, (key) => {
+      const cell = this.cells.get(key);
+      if (cell) cell.push(i);
+      else this.cells.set(key, [i]);
+    });
   }
 
   private forCells(x: number, y: number, r: number, fn: (key: number) => void): void {
@@ -133,6 +147,8 @@ export interface Segment {
   bx: number;
   by: number;
   r: number;
+  /** Knocked down: no longer in the way. */
+  gone?: boolean;
 }
 
 /** Spatial hash of wall segments, so a query only checks the few nearby. */
@@ -145,21 +161,29 @@ export class SegmentGrid {
     readonly segments: Segment[],
     private readonly cellSize = 64,
   ) {
-    segments.forEach((seg, i) => {
-      // Every cell the segment's bounding box touches: walls are short, so that's only a few.
-      const s = this.cellSize;
-      for (let cx = Math.floor((Math.min(seg.ax, seg.bx) - seg.r) / s); cx <= Math.floor((Math.max(seg.ax, seg.bx) + seg.r) / s); cx++) {
-        for (let cy = Math.floor((Math.min(seg.ay, seg.by) - seg.r) / s); cy <= Math.floor((Math.max(seg.ay, seg.by) + seg.r) / s); cy++) {
-          const key = cellKey(cx, cy);
-          const cell = this.cells.get(key);
-          if (cell) cell.push(i);
-          else this.cells.set(key, [i]);
-        }
-      }
-    });
+    segments.forEach((seg, i) => this.index(seg, i));
   }
 
-  /** Segments that might be within `r` of (x, y). The array is reused by the next call. */
+  /** Puts another segment in (what's left of a wall, a fallen tree). */
+  add(seg: Segment): void {
+    this.segments.push(seg);
+    this.index(seg, this.segments.length - 1);
+  }
+
+  private index(seg: Segment, i: number): void {
+    // Every cell the segment's bounding box touches: walls are short, so that's only a few.
+    const s = this.cellSize;
+    for (let cx = Math.floor((Math.min(seg.ax, seg.bx) - seg.r) / s); cx <= Math.floor((Math.max(seg.ax, seg.bx) + seg.r) / s); cx++) {
+      for (let cy = Math.floor((Math.min(seg.ay, seg.by) - seg.r) / s); cy <= Math.floor((Math.max(seg.ay, seg.by) + seg.r) / s); cy++) {
+        const key = cellKey(cx, cy);
+        const cell = this.cells.get(key);
+        if (cell) cell.push(i);
+        else this.cells.set(key, [i]);
+      }
+    }
+  }
+
+  /** Segments that might be within `r` of (x, y) (not those gone). The array is reused by the next call. */
   near(x: number, y: number, r: number): Segment[] {
     this.found.clear();
     this.out.length = 0;
@@ -169,7 +193,7 @@ export class SegmentGrid {
         for (const i of this.cells.get(cellKey(cx, cy)) ?? []) {
           if (this.found.has(i)) continue;
           this.found.add(i);
-          this.out.push(this.segments[i]);
+          if (!this.segments[i].gone) this.out.push(this.segments[i]);
         }
       }
     }
