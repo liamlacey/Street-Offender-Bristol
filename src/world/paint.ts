@@ -201,10 +201,25 @@ function giveWay(ctx: Ctx, m: PaintMark): void {
   ctx.stroke();
 }
 
-/** A bus stop's bay along the kerb (on the traffic's left): surfaced red, edged in yellow on the road's side. */
+/**
+ * A bus stop's bay along the kerb (on the traffic's left, −x): surfaced red, edged in yellow on the
+ * road's side; or, where the road won't take one, just a yellow outline, open on the kerb's side.
+ */
 function busStop(ctx: Ctx, m: PaintMark): void {
   const half = m.width / 2;
   const d = BUS_STOP_DEPTH;
+  if (m.outline) {
+    ctx.strokeStyle = YELLOW;
+    ctx.lineWidth = 1.4;
+    ctx.lineJoin = 'miter';
+    ctx.beginPath();
+    ctx.moveTo(-d / 2, -half);
+    ctx.lineTo(d / 2, -half);
+    ctx.lineTo(d / 2, half);
+    ctx.lineTo(-d / 2, half);
+    ctx.stroke();
+    return;
+  }
   ctx.fillStyle = BUS_RED;
   ctx.fillRect(-d / 2, -half, d, m.width);
   ctx.setLineDash([10, 5]);

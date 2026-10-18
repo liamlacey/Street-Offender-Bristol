@@ -170,6 +170,8 @@ export interface PaintMark {
   turns?: string;
   /** Tactile paving at a crossing with lights: red (buff at the rest). */
   red?: boolean;
+  /** A bus stop's box where the road won't take a red bay (a bend, a junction): just its outline. */
+  outline?: boolean;
 }
 
 /** How deep a bus stop's box is, out from the kerb, px. */
@@ -1392,7 +1394,13 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
    * rectangle, only where the road's straight enough for one (22 m long, or as short as 12 m), with no
    * junction along it and room for it on its own side of the road; and not over one already there.
    */
-  const busStopBoxes: { x: number; y: number; angle: number; width: number }[] = [];
+  const busStopBoxes: { x: number; y: number; angle: number; width: number; outline?: boolean }[] = [];
+  /** Not over another stop's box (two stops mapped for one). */
+  const placeBox = (box: { x: number; y: number; angle: number; width: number; outline?: boolean }) => {
+    if (busStopBoxes.some((o) => Math.hypot(o.x - box.x, o.y - box.y) < (o.width + box.width) / 2 && Math.cos(o.angle - box.angle) > 0.7)) return null;
+    busStopBoxes.push(box);
+    return box;
+  };
   const busStopBox = (id: number, x: number, y: number) => {
     const a = approach(id, 'forward');
     if (!a) return null;
@@ -1409,10 +1417,15 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     }
     if (!side) return null;
     const depth = BUS_STOP_DEPTH;
-    if ((a.oneway ? a.width : a.width / 2) < depth) return null;
+    // Where the road won't take a red bay: just the box's outline, 12 m long, lined up with the road at the stop.
+    const outline = () => {
+      const off = (a.width / 2 - depth / 2) * side;
+      return placeBox({ x: round(x + lx * off), y: round(y + ly * off), angle: +Math.atan2(a.uy * side, a.ux * side).toFixed(3), width: 12 * PX_PER_METRE, outline: true });
+    };
+    if ((a.oneway ? a.width : a.width / 2) < depth) return outline();
     const nodes = a.on.way.nodes;
     const pts = pointsOf(nodes);
-    if (!pts) return null;
+    if (!pts) return outline();
     let at = 0;
     for (let k = 0; k < a.on.index; k++) at += Math.hypot(pts[k * 2 + 2] - pts[k * 2], pts[k * 2 + 3] - pts[k * 2 + 1]);
     const total = polylineLength(pts);
@@ -1456,12 +1469,9 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
         angle: +Math.atan2(uy * side, ux * side).toFixed(3),
         width: round(length),
       };
-      // Not over another stop's box (two stops mapped for one).
-      if (busStopBoxes.some((o) => Math.hypot(o.x - box.x, o.y - box.y) < (o.width + box.width) / 2 && Math.cos(o.angle - box.angle) > 0.7)) return null;
-      busStopBoxes.push(box);
-      return box;
+      return placeBox(box);
     }
-    return null;
+    return outline();
   };
   /** A line across the way through a node, as wide as the way: where a gate or barrier is. */
   const gateAcross = (id: number, x: number, y: number): Pts | null => {

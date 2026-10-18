@@ -116,8 +116,10 @@ the left side's traffic goes the way's way, the right side's against it).
   one-way), surfaced red with a dashed yellow edge, BUS STOP in big yellow letters.
   Only where the road allows: 22 m long, or 18, 15 or 12, whichever's the longest
   stretch round the stop where the road keeps within half a metre of a straight line,
-  has no junction, and is wide enough on that side; none on a bend. Two stops
-  mapped for one make one box, and no BUS LANE is painted over one.
+  has no junction, and is wide enough on that side. Where the road won't take a bay
+  (a bend, a junction, too narrow), the box is just a yellow outline, 12 m long,
+  lined up with the road at the stop and open on the kerb's side, BUS STOP in it.
+  Two stops mapped for one make one box, and no BUS LANE is painted over one.
 - **Tactile paving** (`tactile_paving=yes/partial`, on a crossing or a kerb within
   4 m of one): a 2.4 × 1.2 m slab of blister paving at each kerb, red at a crossing
   with lights, buff at the rest.
