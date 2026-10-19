@@ -39,7 +39,6 @@ export class TrafficLayer {
   update(view: Phaser.Geom.Rectangle, perspective: Perspective, level: number, time: number): void {
     const pad = 60;
     const seen = new Set<Vehicle>();
-    const blink = time % 0.8 < 0.45;
     for (const g of this.lamps) g.clear();
     const depth = (v: Vehicle) => (level === 0 ? (v.level === 0 ? this.depths.ground : this.depths.onDeck) : v.level === 0 ? this.depths.below : this.depths.beside);
     this.lamps[0].setDepth(depth({ level: 0 } as Vehicle) + 0.01);
@@ -69,7 +68,7 @@ export class TrafficLayer {
         // Taller, the further its shadow falls.
         const fall = v.kind === 'lorry' ? 1.8 : v.kind === 'van' || v.kind === 'suv' ? 1.3 : 1;
         s.shadow.setPosition(x + 2.5 * fall, y + 3.5 * fall).setRotation(v.angle).setDepth(d - 0.02);
-        this.drawLamps(this.lamps[v.level === 1 ? 1 : 0], v, x, y, blink);
+        this.drawLamps(this.lamps[v.level === 1 ? 1 : 0], v, x, y, time);
       }
     }
     // Gone, or out of sight.
@@ -83,7 +82,7 @@ export class TrafficLayer {
   }
 
   /** Brake lights (red, at the back corners) and an indicator (amber, front and back on the side it's turning). */
-  private drawLamps(g: Phaser.GameObjects.Graphics, v: Vehicle, x: number, y: number, blink: boolean): void {
+  private drawLamps(g: Phaser.GameObjects.Graphics, v: Vehicle, x: number, y: number, time: number): void {
     // Hazard lights: limping, broken down, or a parked car's alarm going off (flashing quicker).
     const hazards = v.limping || v.broken || v.alarm > 0;
     if (v.mode === 'parked' && !hazards) return;
@@ -96,7 +95,9 @@ export class TrafficLayer {
       g.fillStyle(0xff2a1f, 0.95);
       for (const k of [-1, 1]) g.fillCircle(x - cx * back + lx * side * k, y - cy * back + ly * side * k, 1.5);
     }
-    const flash = v.alarm > 0 ? (this.scene.time.now / 1000) % 0.5 < 0.25 : blink;
+    // Each its own indicators' timing (a little quicker or slower, and out of step with the rest); an alarm's flashing quicker.
+    const period = v.alarm > 0 ? 0.5 : 0.68 + ((v.id * 37) % 23) / 100;
+    const flash = ((time + ((v.id * 0.618) % 1) * period) % period) < period * 0.55;
     if ((v.turning || hazards) && flash) {
       g.fillStyle(0xffa424, 1);
       for (const k of hazards ? [1, -1] : [v.turning === -1 ? 1 : -1]) {
