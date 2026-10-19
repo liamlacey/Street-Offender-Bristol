@@ -5,7 +5,7 @@ import type { Perspective } from './perspective';
 import type { Wall } from './world';
 
 /** How tall each kind of wall stands, px, and its colours: its side, and its top. */
-const LOOK: Record<WallKind, { height: number; side: number; top: number; width: number; open?: boolean; square?: boolean }> = {
+const LOOK: Record<WallKind, { height: number; side: number; top: number; width: number; open?: boolean; square?: boolean; hidden?: boolean }> = {
   wall: { height: 1.6 * 8, side: 0x857a6b, top: 0xb3a690, width: 4 },
   hedge: { height: 1.8 * 8, side: 0x2c5323, top: 0x417c31, width: 9 },
   fence: { height: 1.5 * 8, side: 0x5b4630, top: 0x86694a, width: 2 },
@@ -16,6 +16,8 @@ const LOOK: Record<WallKind, { height: number; side: number; top: number; width:
   chain: { height: 0.5 * 8, side: 0x444444, top: 0x6a6a6a, width: 0.8, open: true },
   // A bus shelter: its glass back, and its roof, a flat rectangle with square corners.
   shelter: { height: 2.5 * 8, side: 0x9cb6c2, top: 0x3d434a, width: 12, square: true },
+  // A bridge's parapets are drawn with its deck.
+  parapet: { height: 1 * 8, side: 0x857a6b, top: 0xb9ae99, width: 3, hidden: true },
 };
 
 /**
@@ -43,6 +45,7 @@ export class WallLayer {
       for (const seg of grid.near(view.centerX, view.centerY, reach) as Wall[]) {
         if (!seg.kind) continue;
         const look = LOOK[seg.kind];
+        if (look.hidden) continue;
         const z = (seg as Wall & { z?: number }).z ?? ((seg as Wall & { z?: number }).z = this.base((seg.ax + seg.bx) / 2, (seg.ay + seg.by) / 2, seg.level));
         const s0 = perspective.lift(z);
         const s1 = perspective.lift(z + (seg.height ?? look.height));

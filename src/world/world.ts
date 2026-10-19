@@ -252,7 +252,7 @@ export function buildWorld(map: GameMap): World {
   addRing(edge, [0, 0, map.width, 0, map.width, map.height, 0, map.height], 0, true, 0);
   const walls: [Wall[], Wall[]] = [
     [...buildings, ...ground, ...edge],
-    [...buildings, ...deck, ...decks.parapets().map((p) => ({ ...p, level: 1 })), ...edge],
+    [...buildings, ...deck, ...decks.parapets().map((p) => ({ ...p, level: 1, kind: 'parapet' as const })), ...edge],
   ];
 
   // Trees grow on the ground; anything else standing on a bridge is on the bridge.

@@ -22,9 +22,12 @@ describe('what breaks', () => {
     expect(breaks(THINGS.postbox, 180)).toBe(false);
   });
 
-  it('never breaks a fountain or a stump', () => {
-    expect(breaks(THINGS.fountain, 1e6)).toBe(false);
+  it('never breaks a stump (it is driven over); a fountain, a statue and a crane only with a very big hit', () => {
     expect(breaks(THINGS.stump, 1e6)).toBe(false);
+    for (const thing of ['fountain', 'statue', 'crane'] as const) {
+      expect(breaks(THINGS[thing], 250)).toBe(false);
+      expect(breaks(THINGS[thing], 350)).toBe(true);
+    }
   });
 
   it('breaks things more easily with a heavier vehicle', () => {
@@ -119,12 +122,12 @@ describe('what\'s left', () => {
     expect(BREAKUP.glass).toBeUndefined();
   });
 
-  it('topples the new street furniture, with glass from what has a screen or a face, and leaves statues standing', () => {
+  it('topples the new street furniture, with glass from what has a screen or a face; statues come off their plinths in pieces', () => {
     expect(fallen('meter', 0, 0, 300, 0, () => 0.5).map((d) => d.kind)).toEqual(['meter']);
     expect(fallen('lifering', 0, 0, 300, 0, () => 0.5).map((d) => d.kind)).toEqual(['post', 'ring']);
     expect(shards('meter', 0, 0, 300, 0, () => 0.5).length).toBeGreaterThan(0);
     expect(shards('bikes', 0, 0, 300, 0, () => 0.5)).toHaveLength(0);
-    expect(breaks(STANDING.statue, 1e6, 10)).toBe(false);
+    expect(fallen('statue', 0, 0, 400, 0, () => 0.5).some((d) => d.kind === 'rubble')).toBe(true);
   });
 
   it('breaks a gate or a car park barrier all at once, the barrier far more easily', () => {

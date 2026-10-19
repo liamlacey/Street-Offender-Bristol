@@ -537,7 +537,7 @@ past 150 it's wrecked, left adrift (smoking), and its berth's free for another.
 ## Damage
 
 What's on the map can be knocked down or broken by driving into it, except the
-buildings, bridges and big structures (fountains), and what's broken stays
+buildings (and a bridge's deck itself), and what's broken stays
 broken, where it fell, in the way, until the game is restarted. The rules are
 in `src/world/damage.ts` (pure, tested); `src/scenes/Wreckage.ts` applies them.
 
@@ -570,7 +570,10 @@ bounces off.
 | Gate across a road or path (`barrier=gate`, `swing_gate`) | metal | 150 | Gives way all at once, into bent bars |
 | Car park barrier (`barrier=lift_gate`) | plastic | 60 | Its arm snaps off, in pieces |
 | Chain across a way (`barrier=chain`) | metal | 50 | Gives way |
-| Statue or sculpture (`artwork_type=statue/sculpture`, `historic=monument`, `memorial=statue`) | stone | never | On its plinth: a structure, like the fountains |
+| Statue or sculpture (`artwork_type=statue/sculpture`, `historic=monument`, `memorial=statue`) | stone | 290 | Knocked off its plinth: it goes over and lands in pieces (rubble, stone) |
+| Fountain (the big stone ones) | stone | 310 | Smashed: rubble and stone scattered the way the car went |
+| Harbour crane | iron | 330 | Goes over, its jib with it: girders and bent bars lying where it fell |
+| A bridge's parapet | stone | 260 | Knocked through (2.5 m, up to 5 m): the gap's gone from the deck, and beyond it the drop (into the water, or onto the road below). Where a pavement or cycleway is mapped as its own bridge alongside a road's, there's no parapet between them |
 | Bench | timber, in parts | 150 | Below: shoved. Above: smashed into planks, scattered the way the car was going |
 | Garden wall (`barrier=wall`, …) | stone | 200 | Crumbles: a gap 2 m wide (up to 4 m, the harder it's hit) in rubble and bricks; the rest stands |
 | Bus shelter | glass | 140 | Smashed through (a gap up to its whole length): glass strewn, bent bars |

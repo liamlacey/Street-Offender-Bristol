@@ -2,9 +2,10 @@
  * What happens when something's hit hard enough: what it's made of, how
  * strong it is (how fast a vehicle must be going into it, scaled by the
  * vehicle's weight), how much it slows the vehicle as it gives way, and what
- * it leaves behind. Everything except the buildings (and big structures like
- * fountains and statues) gives way in the end: trees split and fall, lamp posts and traffic
- * lights bend over and spark, walls crumble, benches smash, hedges are torn
+ * it leaves behind. Everything except the buildings gives way in the end: trees
+ * split and fall, lamp posts and traffic lights bend over and spark, statues
+ * come off their plinths, fountains and bridges' parapets are smashed, the
+ * harbour's cranes topple, walls crumble, benches smash, hedges are torn
  * through, their leaves and twigs strewn about. What's left stays where it fell, in the way. Pure, so it's tested.
  */
 
@@ -15,10 +16,10 @@ export type Material = 'wood' | 'electric' | 'metal' | 'iron' | 'glass' | 'stone
 
 /** Things that stand in one place until they're knocked down. */
 export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'mooring' | 'postbox' | 'phone' | 'meter' | 'pump' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'crane' | 'stump';
-/** What stands and can't be knocked over: big stone fountains, statues on their plinths, and what's left of a tree. */
-export type Structure = 'tree' | 'fountain' | 'statue' | 'crane' | 'stump';
-/** Walls, by what OSM calls them. */
-export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing' | 'gate' | 'liftgate' | 'chain' | 'shelter';
+/** What doesn't topple like the street furniture: a tree (it splits and falls its own way), and what's left of one (low enough to drive over). */
+export type Structure = 'tree' | 'stump';
+/** Walls, by what OSM calls them (and a bridge's parapets). */
+export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing' | 'gate' | 'liftgate' | 'chain' | 'shelter' | 'parapet';
 
 export interface Toughness {
   material: Material;
@@ -47,11 +48,11 @@ export const THINGS: Record<Exclude<ThingKind, 'tree'>, Toughness> = {
   lifering: { material: 'timber', strength: 110, absorb: 0.15 },
   // A row of bike stands: steel hoops set in the ground.
   bikes: { material: 'metal', strength: 140, absorb: 0.2 },
-  // A big stone fountain, and a statue on its plinth: structures, not things to knock over.
-  fountain: { material: 'stone', strength: Infinity, absorb: 0 },
-  statue: { material: 'stone', strength: Infinity, absorb: 0 },
-  // The harbour's cranes: iron, set in the quay.
-  crane: { material: 'iron', strength: Infinity, absorb: 0 },
+  // A big stone fountain, smashed to rubble; a statue knocked off its plinth: it takes a very big hit.
+  fountain: { material: 'stone', strength: 310, absorb: 0.6 },
+  statue: { material: 'stone', strength: 290, absorb: 0.55 },
+  // The harbour's cranes: iron, set in the quay: it takes a very big hit to bring one down.
+  crane: { material: 'iron', strength: 330, absorb: 0.75 },
   // What's left of a tree: it's not going anywhere.
   stump: { material: 'wood', strength: Infinity, absorb: 0 },
 };
@@ -67,6 +68,8 @@ export const WALLS: Record<WallKind, Toughness & { /** How much of it a hit at i
   chain: { material: 'metal', strength: 50, absorb: 0.05, gap: 20 * 8 },
   // A bus shelter: glass panes in a steel frame, smashed all at once.
   shelter: { material: 'glass', strength: 140, absorb: 0.25, gap: 20 * 8 },
+  // A bridge's stone parapet: knocked through, and there's nothing between you and the drop.
+  parapet: { material: 'stone', strength: 260, absorb: 0.45, gap: 2.5 * 8 },
 };
 
 /** A bench smashes if hit this hard; slower, it's just shoved. */
@@ -250,6 +253,12 @@ export function fallen(kind: Exclude<ThingKind, Structure>, x: number, y: number
       return [lying('post', 6, 0.2), lying('ring', 12, 0.6)];
     case 'bikes':
       return [lying('rail', 6, 0.3), lying('rail', 2, 0.4), lying('rail', 9, 0.35)];
+    case 'fountain':
+      return [lying('rubble', 0, 0.2), lying('rubble', 6, 0.3), lying('rubble', 12, 0.35), lying('brick', 4, 0.4), lying('brick', 9, 0.45), lying('rubble', -5, 0.15)];
+    case 'statue':
+      return [lying('rubble', 2, 0.15), lying('rubble', 9, 0.2), lying('brick', 14, 0.25), lying('rubble', 18, 0.3)];
+    case 'crane':
+      return [lying('rubble', 2, 0.05), lying('pole', 16, 0.05), lying('pole', 42, 0.05), lying('rail', 28, 0.08), lying('rail', 56, 0.08), lying('shortpole', 66, 0.1)];
   }
 }
 
@@ -342,6 +351,9 @@ export const TOPPLE: Record<Exclude<ThingKind, Structure>, { height: number; rea
   clock: { height: 3.5 * 8, reach: 26, pole: true },
   lifering: { height: 1.5 * 8, reach: 10, pole: true },
   bikes: { height: 0.8 * 8, reach: 4, pole: false },
+  fountain: { height: 1.2 * 8, reach: 6, pole: false },
+  statue: { height: 3 * 8, reach: 16, pole: false },
+  crane: { height: 9 * 8, reach: 40, pole: true },
 };
 
 /** The glass that breaks when something goes over: how many shards, and how far along the way it fell they land (where its lamp, lenses or panes hit the ground), px. */

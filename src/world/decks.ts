@@ -194,7 +194,11 @@ export class Decks {
         const nx = -(by - ay) / len;
         const ny = (bx - ax) / len;
         for (const side of [-1, 1]) {
-          walls.push({ ax: ax + nx * out * side, ay: ay + ny * out * side, bx: bx + nx * out * side, by: by + ny * out * side, r: PARAPET });
+          const w = { ax: ax + nx * out * side, ay: ay + ny * out * side, bx: bx + nx * out * side, by: by + ny * out * side, r: PARAPET };
+          // Not where it'd stand on another deck alongside (a cycleway or a pavement mapped as a bridge of its own, beside or within a road's): there's no edge there.
+          const [mx, my] = [(w.ax + w.bx) / 2, (w.ay + w.by) / 2];
+          if (this.decks.some((o) => o !== d && mx >= o.x0 && mx <= o.x1 && my >= o.y0 && my <= o.y1 && nearestAlong(o.road.pts, mx, my).distance <= o.half + PARAPET_OUT)) continue;
+          walls.push(w);
         }
       }
     }

@@ -24,6 +24,7 @@ import {
   logs,
   lyingTrunk,
   treeToughness,
+  type WallKind,
 } from '../world/damage';
 import type { Perspective } from '../world/perspective';
 import type { LooseProp, Post, Wall } from '../world/world';
@@ -80,6 +81,8 @@ export interface WreckageHooks {
   audio(): CarAudio | null;
   /** The vehicle's weight (a car's is 1). */
   weight(): number;
+  /** A wall's been knocked through, from one point to another (a bridge's parapet: the gap's cut out of its deck's picture). */
+  wallBroken?(kind: WallKind, from: [number, number], to: [number, number], level: number): void;
 }
 
 /**
@@ -228,7 +231,7 @@ export class Wreckage {
         move: (x, y, h) => this.hooks.treeFell(post.index, x, y, h),
         land: () => this.treeLanded(post.index, fall, z, height, radius, tough, vx, vy),
       });
-    } else if (post.thing !== 'fountain' && post.thing !== 'stump' && post.thing !== 'statue' && post.thing !== 'crane') {
+    } else if (post.thing !== 'stump') {
       // It snaps or bends at its foot and goes over the way it was hit; its pieces and glass land where it does.
       const thing = post.thing;
       const look = TOPPLE[thing];
@@ -273,7 +276,7 @@ export class Wreckage {
     // What it breaks into: a stone wall into rubble and bricks, a hedge into clumps of leaves and twigs, a fence into planks,
     // a railing or a gate into bent bars, a car park's barrier into bits of its arm.
     const pieces: [Parameters<typeof debris>[0], number][] =
-      kind === 'wall'
+      kind === 'wall' || kind === 'parapet'
         ? [['rubble', Math.round(gap / 5)], ['brick', Math.round(gap / 8)]]
         : kind === 'hedge'
           ? [['foliage', Math.round(gap / 4)], ['twig', Math.round(gap / 8)]]
@@ -285,6 +288,7 @@ export class Wreckage {
                 ? [['glass', 14], ['rail', 3]]
               : [['rail', Math.max(1, Math.round(gap / 16))]];
     for (const [piece, count] of pieces) for (const d of debris(piece, Math.min(count, 10), mx, my, car.vx, car.vy, rand, gap / 2)) this.hooks.addDebris(d, level);
+    this.hooks.wallBroken?.(kind, from, to, level);
     this.effects.burst(material, mx, my, kind === 'hedge' ? 30 : 18);
     this.hooks.audio()?.shatter(material, speed);
     giveWay(car, WALLS[kind]);

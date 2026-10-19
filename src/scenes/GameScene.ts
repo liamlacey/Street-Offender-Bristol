@@ -121,7 +121,7 @@ export class GameScene extends Phaser.Scene {
   /** The street furniture that never moves, and the height of the ground under each, px. */
   private props: { x: number; y: number; z: number; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
   /** What's up high on the fixed things: the cranes' jibs. */
-  private raised: { x: number; y: number; z: number; image: Phaser.GameObjects.Image }[] = [];
+  private raised: { x: number; y: number; z: number; image: Phaser.GameObjects.Image; prop: number; gone?: boolean }[] = [];
   /** What you hit on each level: the ground's, and the bridges' decks'. */
   private walls!: [SegmentGrid, SegmentGrid];
   private posts!: [CircleGrid, CircleGrid];
@@ -229,6 +229,9 @@ export class GameScene extends Phaser.Scene {
       },
       audio: () => this.audio,
       weight: () => 1,
+      wallBroken: (kind, from, to) => {
+        if (kind === 'parapet') this.deckLayer.breakParapet(from, to);
+      },
     }, DEPTH.props - 0.1, DEPTH.trees);
     this.addProps();
     this.addTrees();
@@ -318,7 +321,7 @@ export class GameScene extends Phaser.Scene {
           .setDepth(DEPTH.buildings + 0.5)
           .setVisible(false);
         jib.setDisplaySize(p.height * 1.25, 1.4 * 8);
-        this.raised.push({ x: p.x, y: p.y, z: z + p.height, image: jib });
+        this.raised.push({ x: p.x, y: p.y, z: z + p.height, image: jib, prop: this.props.length - 1 });
       }
     }
     this.world.loose.forEach((body, i) => {
@@ -932,11 +935,12 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'tree':
       case 'stump':
-      case 'fountain':
         break;
       default:
         this.props[post.index].gone = true;
         this.props[post.index].image.setVisible(false);
+        // A crane's jib comes down with it.
+        for (const r of this.raised) if (r.prop === post.index) r.gone = true;
     }
   }
 
