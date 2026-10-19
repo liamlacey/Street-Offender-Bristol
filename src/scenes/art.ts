@@ -23,6 +23,7 @@ export const TEX = {
   debris: (kind: string) => `debris-${kind}`,
   stump: 'stump',
   trunk: 'trunk',
+  bole: 'bole',
   pole: 'pole',
   jib: 'crane-jib',
 } as const;
@@ -494,6 +495,12 @@ export function createArt(scene: Phaser.Scene): void {
     ctx.beginPath();
     ctx.arc(5, 5, 1.8, 0, Math.PI * 2);
     ctx.stroke();
+  });
+  // A standing tree's trunk seen from above, where it goes up into the crown: bark, darker round its edge.
+  canvasTexture(scene, TEX.bole, 10, 10, (ctx) => {
+    circle(ctx, 5, 5, 4.6, '#3e2a19');
+    circle(ctx, 5, 5, 3.6, '#5a3d24');
+    circle(ctx, 4.2, 4.2, 1.6, 'rgba(140,105,70,0.45)');
   });
   canvasTexture(scene, TEX.trunk, 64, 8, (ctx) => {
     roundRect(ctx, 0, 0.5, 64, 7, 3, '#5a3d24');

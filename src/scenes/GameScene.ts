@@ -132,7 +132,23 @@ export class GameScene extends Phaser.Scene {
   private car!: CarState;
   private carSprite!: Phaser.GameObjects.Image;
   private carShadow!: Phaser.GameObjects.Image;
-  private trees: { x: number; y: number; z: number; h: number; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
+  /**
+   * The trees: each one's crown (where it is: it moves as the tree falls), and
+   * its trunk where it stands (seen through the crown when you're under it),
+   * how see-through its crown is.
+   */
+  private trees: {
+    x: number;
+    y: number;
+    z: number;
+    h: number;
+    image: Phaser.GameObjects.Image;
+    gone?: boolean;
+    foot: { x: number; y: number; r: number };
+    trunk: Phaser.GameObjects.Image;
+    bole: Phaser.GameObjects.Image;
+    alpha: number;
+  }[] = [];
   /** Each traffic light's head, up its pole, with what it's showing. */
   private signalHeads: { x: number; y: number; z: number; controller: number; group: number; light: Light; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
   /** The Belisha beacons' globes, flashing. */
@@ -393,7 +409,10 @@ export class GameScene extends Phaser.Scene {
         .setRotation(((i * 1.7) % 6.28) - 3.14)
         .setDepth(DEPTH.trees)
         .setVisible(false);
-      this.trees.push({ x: t[i], y: t[i + 1], z: this.groundAt(t[i], t[i + 1]), h: t[i + 3], image });
+      // Its trunk, up from its foot into the crown, under it.
+      const trunk = this.add.image(t[i], t[i + 1], TEX.trunk).setDepth(DEPTH.trees - 0.02).setVisible(false);
+      const bole = this.add.image(t[i], t[i + 1], TEX.bole).setScale(1 / ART_SCALE).setDepth(DEPTH.trees - 0.01).setVisible(false);
+      this.trees.push({ x: t[i], y: t[i + 1], z: this.groundAt(t[i], t[i + 1]), h: t[i + 3], image, foot: { x: t[i], y: t[i + 1], r: t[i + 2] }, trunk, bole, alpha: 1 });
     }
   }
 
@@ -428,7 +447,7 @@ export class GameScene extends Phaser.Scene {
     this.buildings.update(view, this.perspective, this.car.x, this.car.y);
     // Before the trees: it moves the ones coming down.
     this.wreckage.update(view, this.perspective);
-    this.updateTrees(view);
+    this.updateTrees(view, dt);
     this.updateProps(view);
     this.updateLights(view);
     this.wallLayer.update(view, this.perspective);
@@ -961,13 +980,41 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** The trees near the view, their crowns lifted towards the camera like the roofs. */
-  private updateTrees(view: Phaser.Geom.Rectangle): void {
+  private updateTrees(view: Phaser.Geom.Rectangle, dt: number): void {
     const p = this.perspective;
     const pad = 120;
-    for (const t of this.trees) {
+    const { x: cx, y: cy } = this.shown;
+    const crowns = this.world.map.trees;
+    for (const [i, t] of this.trees.entries()) {
       const show = !t.gone && t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
       if (t.image.visible !== show) t.image.setVisible(show);
+      // Its trunk, while it stands (once it's down, it's the stump and the trunk lying there instead).
+      const standing = crowns[i * 4 + 2] > 0;
+      const trunk = standing && t.foot.x > view.left - pad && t.foot.x < view.right + pad && t.foot.y > view.top - pad && t.foot.y < view.bottom + pad;
+      if (t.trunk.visible !== trunk) {
+        t.trunk.setVisible(trunk);
+        t.bole.setVisible(trunk);
+      }
+      if (trunk) {
+        // From its foot up to where it goes into the crown, leaning out from the middle of the view as the rest does.
+        const s0 = p.lift(t.z);
+        const s1 = p.lift(t.z + t.h * 0.6);
+        const [ax, ay, bx, by] = [p.x(t.foot.x, s0), p.y(t.foot.y, s0), p.x(t.foot.x, s1), p.y(t.foot.y, s1)];
+        const width = Math.min(7, 3 + t.h / 40);
+        t.trunk
+          .setPosition((ax + bx) / 2, (ay + by) / 2)
+          .setRotation(Math.atan2(by - ay, bx - ax))
+          .setDisplaySize(Math.max(0.5, Math.hypot(bx - ax, by - ay)), width);
+        t.bole.setPosition(bx, by).setDisplaySize(width * 1.3, width * 1.3);
+      }
       if (!show) continue;
+      // Under its crown (where it stands), the crown's see-through, so you can see the car and the trunk.
+      const under = standing && Math.hypot(cx - t.foot.x, cy - t.foot.y) < t.foot.r + CAR_LENGTH * 0.25;
+      const target = under ? 0.3 : 1;
+      if (t.alpha !== target) {
+        t.alpha += Math.sign(target - t.alpha) * Math.min(Math.abs(target - t.alpha), dt * 4);
+        t.image.setAlpha(t.alpha);
+      }
       // The crown's a little below the treetop.
       const s = p.lift(t.z + t.h * 0.85);
       t.image.setPosition(p.x(t.x, s), p.y(t.y, s));
