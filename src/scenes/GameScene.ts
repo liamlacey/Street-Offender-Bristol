@@ -93,6 +93,15 @@ const VIEW_AT_REST = 270;
 const VIEW_AT_SPEED = 620;
 const FULL_SPEED = 400;
 const PULL_EASE = 1.7;
+/**
+ * VIEW_AT_REST is for a phone (its screen's shorter side PHONE_SIDE css px or
+ * less): on a bigger screen, the camera's further back at rest, so it doesn't
+ * fill the screen with a few cars, by the screen's size (over a phone's) to the
+ * power SCREEN_EASE; never further back than REST_MOST of VIEW_AT_SPEED.
+ */
+const PHONE_SIDE = 390;
+const SCREEN_EASE = 0.4;
+const REST_MOST = 0.8;
 /** How long a hop off a speed hump lasts, seconds. */
 const HOP_TIME = 0.35;
 /** How many loose things (benches, bins, and the bits of what's been broken) before the smallest bits stop being kept. */
@@ -268,10 +277,10 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** The camera's zoom with the car stopped: the view's shorter side shows VIEW_AT_REST px of the map. */
+  /** The camera's zoom with the car stopped. */
   private restZoom(): number {
-    const { width, height } = this.scale;
-    return Math.min(width, height) / VIEW_AT_REST;
+    const side = Math.min(this.scale.width, this.scale.height);
+    return side / restView(side);
   }
 
   /** Lamp posts, bollards, benches, bins and the rest. */
@@ -824,7 +833,9 @@ export class GameScene extends Phaser.Scene {
     const car = this.car;
     const speed = Math.hypot(car.vx, car.vy);
     const t = Math.min(speed / FULL_SPEED, 1) ** PULL_EASE;
-    const target = Math.min(this.scale.width, this.scale.height) / (VIEW_AT_REST + (VIEW_AT_SPEED - VIEW_AT_REST) * t);
+    const side = Math.min(this.scale.width, this.scale.height);
+    const rest = restView(side);
+    const target = side / (rest + (VIEW_AT_SPEED - rest) * t);
     this.zoom += (target - this.zoom) * Math.min(1, dt * 1.5);
     cam.setZoom(this.zoom);
     const ahead = 0.45;
@@ -984,6 +995,11 @@ const shapes = new Map<string, Shape>();
 /** A kind of vehicle, for its damage. */
 /** How sturdy each kind of boat is (a car's 1): a dinghy's thin plastic, a narrowboat's steel, an old tug's heavy plate. */
 const BOAT_STIFFNESS: Record<Boat['kind'], number> = { dinghy: 0.7, cruiser: 1.1, yacht: 1.2, narrowboat: 2.4, barge: 3, ferry: 2, tug: 4 };
+
+/** How much of the map the view's shorter side (`side` css px) shows with the car stopped, px: VIEW_AT_REST on a phone, more on a bigger screen. */
+function restView(side: number): number {
+  return Math.min(VIEW_AT_SPEED * REST_MOST, VIEW_AT_REST * Math.max(1, side / PHONE_SIDE) ** SCREEN_EASE);
+}
 
 function vehicleShape(v: Vehicle): Shape {
   let shape = shapes.get(v.kind);
