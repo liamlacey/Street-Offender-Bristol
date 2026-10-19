@@ -521,6 +521,16 @@ church`, `amenity=theatre/arts_centre/fountain`).
 - **Knocked down**: a vehicle going into them faster than 1.2 m/s (slower, they're nudged
   aside) throws them the way it was going; faster than 6.7 m/s (15 mph) and they stay
   down; slower, they're up in 2.5 to 4.5 s and on their way.
+- **Stepping round each other**: walking, anyone within 2 m ahead and 0.8 m to the side
+  is stepped round (to the side away from them, up to 1.05 m off the middle of the walk,
+  easing over at 1.6 m/s; head on, each keeps to their left). Behind someone slower going
+  the same way (within 1.2 m), they slow to their pace, and step round if there's room.
+- **Benches and picnic tables** (`amenity=bench`, `leisure=picnic_table`, the loose
+  objects on the ground): people sit on them, 1 or 2 to a bench, 2 to 4 round a picnic
+  table (weight 0.9 each), for 20 s to 2 minutes; knocked off if it's shoved hard (over
+  3 m/s), up and on their way if it's moved or broken.
+- **Picnics**: at about a third of the park, garden and lawn spots (not under a tree), 2 to 5
+  sit in a ring on a blanket, facing in, for one to four minutes, then pack up and go.
 
 
 **Ships moored for good, mapped as buildings** (`building=ship` or `boat`: the Thekla, the

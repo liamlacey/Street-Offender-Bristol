@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import mapData from '../map/bristol.json';
 import type { GameMap } from '../map/osm';
 import { type Mover, People } from './people';
+import { buildWorld } from './world';
 
 const map = mapData as unknown as GameMap;
 const seeded = (seed: number) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -89,5 +90,64 @@ describe('people', () => {
     const bus: Mover = { x: sx, y: sy, angle: 0, length: 96, width: 20, vx: 0, vy: 0, id: 99, dwelling: true };
     for (let t = 0; t < 10; t += 1 / 30) people.update(1 / 30, view, still(-1e6, -1e6), [bus], () => 'red', () => true);
     for (const p of waiting) expect(p.gone || !people.people.includes(p)).toBe(true);
+  });
+
+  it('step round each other, walking head on along the pavement', () => {
+    const [x, y] = parkStreet;
+    let closest = Infinity;
+    for (let seed = 1; seed <= 8; seed++) {
+      const people = new People(map, { rand: seeded(seed) });
+      const view = viewAt(x, y);
+      people.populate(view, true);
+      // Two on the same walk, coming at each other, both down the middle of it.
+      const a = people.people.find((p) => p.mode === 'walk' && p.line >= 0 && people.walks[p.line].pts.length >= 4)!;
+      people.people.length = 0;
+      people.people.push(a);
+      const w = people.walks[a.line].pts;
+      const b = { ...a, id: 999, x: w[w.length - 2], y: w[w.length - 1], dir: -a.dir as 1 | -1, side: 0, avoid: 0 };
+      Object.assign(a, { x: w[0], y: w[1], dir: 1, next: 1, side: 0, avoid: 0, joining: false });
+      Object.assign(b, { next: w.length / 2 - 2, joining: false });
+      people.people.push(b);
+      const len = Math.hypot(w[w.length - 2] - w[0], w[w.length - 1] - w[1]);
+      if (len < 10 * 8 || w.length !== 4) continue;
+      for (let t = 0; t < len / 8; t += 1 / 30) {
+        people.update(1 / 30, { x0: -1e5, y0: -1e5, x1: -1e5 + 10, y1: -1e5 + 10 }, still(-1e6, -1e6), [], () => 'red', () => true);
+        if (a.mode === 'walk' && b.mode === 'walk' && a.line === b.line) closest = Math.min(closest, Math.hypot(a.x - b.x, a.y - b.y));
+      }
+    }
+    expect(closest).toBeGreaterThan(0.5 * 8);
+  });
+
+  it('sit on the benches, and are knocked off one shoved hard from under them', () => {
+    const world = buildWorld(map);
+    const benches = world.loose.filter((b) => b.kind === 'bench');
+    expect(benches.length).toBeGreaterThan(5);
+    const people = new People(map, { rand: seeded(4), seats: world.loose });
+    const bench = benches[0];
+    const view = { x0: bench.x + 400, y0: bench.y - 140, x1: bench.x + 1000, y1: bench.y + 140 };
+    (people as unknown as { sitDown(b: typeof bench): void }).sitDown(bench);
+    const sitting = people.people.filter((p) => p.seat === bench);
+    expect(sitting.length).toBeGreaterThan(0);
+    expect(sitting.every((p) => p.mode === 'sit' && Math.hypot(p.x - bench.x, p.y - bench.y) < 1 * 8)).toBe(true);
+    // A car shoves it hard.
+    [bench.vx, bench.vy] = [80, 0];
+    bench.x += 8;
+    people.update(1 / 30, view, still(-1e6, -1e6), [], () => 'red', () => true);
+    expect(sitting.every((p) => p.mode === 'down')).toBe(true);
+  });
+
+  it('have picnics on the grass in the parks', () => {
+    let picnics = 0;
+    for (let seed = 1; seed <= 5 && !picnics; seed++) {
+      const people = new People(map, { rand: seeded(seed) });
+      // The biggest park (Brandon Hill).
+      const park = map.areas.filter((a) => a.kind === 'park').sort((a, b) => b.rings[0].length - a.rings[0].length)[0].rings[0];
+      let [cx, cy] = [0, 0];
+      for (let i = 0; i < park.length; i += 2) [cx, cy] = [cx + park[i], cy + park[i + 1]];
+      people.populate(viewAt((cx * 2) / park.length, (cy * 2) / park.length), true);
+      picnics += people.picnics.length;
+      for (const c of people.picnics) expect(people.people.filter((p) => p.picnic === c && p.mode === 'sit').length).toBeGreaterThanOrEqual(2);
+    }
+    expect(picnics).toBeGreaterThan(0);
   });
 });

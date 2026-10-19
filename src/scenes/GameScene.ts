@@ -267,7 +267,7 @@ export class GameScene extends Phaser.Scene {
     this.addLights();
     this.traffic = new Traffic(map);
     this.boats = new Boats(map);
-    this.people = new People(map);
+    this.people = new People(map, { seats: this.world.loose });
     this.peopleLayer = new PeopleLayer(this, this.people, (x, y) => this.groundAt(x, y), DEPTH.props + 0.05);
     this.ripples = new WaterRipples(this, this.surfaces, (x, y) => this.groundAt(x, y), DEPTH.ripples);
     this.boatLayer = new BoatLayer(this, this.boats, (x, y) => this.groundAt(x, y), DEPTH.boats);

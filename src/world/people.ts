@@ -37,7 +37,29 @@ const SCARED: [number, number] = [4, 7];
 /** A person's size: their radius, px, for hits. */
 const R = 0.3 * M;
 
-export type Mode = 'walk' | 'stand' | 'wander' | 'kerb' | 'cross' | 'queue' | 'board' | 'flee' | 'dive' | 'down';
+export type Mode = 'walk' | 'stand' | 'wander' | 'kerb' | 'cross' | 'queue' | 'board' | 'flee' | 'dive' | 'down' | 'sit';
+
+/** A bench or picnic table (as the world has it: it can be knocked about, or smashed). */
+export interface Seat {
+  kind: string;
+  x: number;
+  y: number;
+  angle: number;
+  vx: number;
+  vy: number;
+  gone?: boolean;
+  level: number;
+}
+
+/** A picnic on the grass: its blanket (where, which way, which pattern), and how many are sitting round it. */
+export interface Picnic {
+  x: number;
+  y: number;
+  angle: number;
+  pattern: number;
+  /** Packed up and gone (or left behind, and now out of sight). */
+  gone: boolean;
+}
 
 export interface Person {
   id: number;
@@ -79,6 +101,12 @@ export interface Person {
   gone: boolean;
   /** Getting onto their walk: to (tx, ty) on it first. */
   joining: boolean;
+  /** How far they've stepped aside to get round someone, px. */
+  avoid: number;
+  /** Sitting: on a seat (where on it: along, across, and where the seat was when they sat), or at a picnic. */
+  seat: Seat | null;
+  seatAt: [number, number, number, number];
+  picnic: Picnic | null;
 }
 
 /** A vehicle as the people see it: where, which way, how big, how fast; a bus's stop. */
@@ -119,6 +147,8 @@ interface Spot {
   /** How many are there, for its size, against the pavements' 1 per 10 m. */
   weight: number;
   group: boolean;
+  /** On the grass: a picnic, perhaps. */
+  grass?: boolean;
 }
 
 /** Where a crossing's kerbs are (either side of the road, on the pavement), and how it works. */
@@ -136,6 +166,10 @@ interface CrossingPoint {
 export const LOOKS = 48;
 
 const GRID = 128;
+/** How many sit at a bench or picnic table, for how busy it is round it. */
+const SEAT_WEIGHT = 0.9;
+/** Cells for finding who's close, px. */
+const NEAR_CELL = 4 * M;
 const key = (x: number, y: number) => `${Math.floor(x / GRID)},${Math.floor(y / GRID)}`;
 
 export class People {
@@ -156,14 +190,27 @@ export class People {
   private readonly roadGrid = new Map<string, number[]>();
   private nextId = 1;
   private readonly rand: () => number;
+  /** Who's where (by 4 m cells), each frame. */
+  private readonly close = new Map<string, Person[]>();
   /** People hit since the scene last looked: who, and how hard (px/s). */
   readonly hits: { person: Person; speed: number }[] = [];
 
+  /** The benches and picnic tables people sit at, and the picnics on the grass. */
+  private readonly seats: Seat[];
+  private readonly seatGrid = new Map<string, number[]>();
+  readonly picnics: Picnic[] = [];
+
   constructor(
     private readonly map: GameMap,
-    options: { rand?: () => number } = {},
+    options: { rand?: () => number; seats?: Seat[] } = {},
   ) {
     this.rand = options.rand ?? Math.random;
+    this.seats = (options.seats ?? []).filter((b) => (b.kind === 'bench' || b.kind === 'picnic') && b.level === 0);
+    this.seats.forEach((b, i) => {
+      const list = this.seatGrid.get(key(b.x, b.y)) ?? [];
+      list.push(i);
+      this.seatGrid.set(key(b.x, b.y), list);
+    });
     this.buildWalks();
     this.buildSpots();
     this.buildCrossings();
@@ -272,7 +319,7 @@ export class People {
         const [x, y] = [x0 + this.rand() * (x1 - x0), y0 + this.rand() * (y1 - y0)];
         if (!pointInRing(x, y, ring)) continue;
         // A square's busier than a lawn.
-        this.addSpot({ x, y, angle: this.rand() * Math.PI * 2, weight: a.kind === 'plaza' ? 1.6 : 0.8, group: this.rand() < 0.55 });
+        this.addSpot({ x, y, angle: this.rand() * Math.PI * 2, weight: a.kind === 'plaza' ? 1.6 : 0.8, group: this.rand() < 0.55, grass: a.kind === 'park' || a.kind === 'grass' || a.kind === 'garden' });
         k++;
       }
     }
@@ -432,6 +479,10 @@ export class People {
       area: -1,
       gone: false,
       joining: false,
+      avoid: 0,
+      seat: null,
+      seatAt: [0, 0, 0, 0],
+      picnic: null,
     };
     this.people.push(p);
     return p;
@@ -464,6 +515,7 @@ export class People {
       for (let y = Math.floor(y0 / GRID); y <= Math.floor(y1 / GRID); y++) {
         for (const [k] of this.along.get(`${x},${y}`) ?? []) w += this.walks[k].busy;
         for (const s of this.spotGrid.get(`${x},${y}`) ?? []) w += this.spots[s].weight;
+        w += (this.seatGrid.get(`${x},${y}`)?.length ?? 0) * SEAT_WEIGHT;
       }
     }
     return w;
@@ -476,6 +528,13 @@ export class People {
       const p = this.people[i];
       if (p.x < view.x0 - FAR || p.x > view.x1 + FAR || p.y < view.y0 - FAR || p.y > view.y1 + FAR || p.gone) this.people.splice(i, 1);
     }
+    // Picnics: gone once no one's at them and they're out of sight (or far off).
+    for (let i = this.picnics.length - 1; i >= 0; i--) {
+      const c = this.picnics[i];
+      const far = c.x < view.x0 - FAR || c.x > view.x1 + FAR || c.y < view.y0 - FAR || c.y > view.y1 + FAR;
+      const outOfSight = c.x < view.x0 - 3 * M || c.x > view.x1 + 3 * M || c.y < view.y0 - 3 * M || c.y > view.y1 + 3 * M;
+      if (far || c.gone || (outOfSight && !this.people.some((p) => p.picnic === c))) this.picnics.splice(i, 1);
+    }
     const want = Math.min(MOST, this.weightNear(x0, y0, x1, y1) * PER_WEIGHT);
     const seen = (x: number, y: number) => !all && x > view.x0 - 2 * M && x < view.x1 + 2 * M && y > view.y0 - 2 * M && y < view.y1 + 2 * M;
     for (let tries = 0; tries < (all ? 400 : 6) && this.people.length < want; tries++) {
@@ -485,10 +544,15 @@ export class People {
       // A spot, or a walk, by how busy each is.
       const spots = this.spotGrid.get(cell) ?? [];
       const walks = this.along.get(cell) ?? [];
+      const seats = (this.seatGrid.get(cell) ?? []).filter((k) => !this.seats[k].gone && !seen(this.seats[k].x, this.seats[k].y) && !this.people.some((q) => q.seat === this.seats[k]));
       const sw = spots.reduce((s, k) => s + this.spots[k].weight, 0);
       const ww = walks.reduce((s, [k]) => s + this.walks[k].busy, 0);
-      if (sw + ww <= 0) continue;
-      if (this.rand() * (sw + ww) < sw) {
+      const cw = seats.length * SEAT_WEIGHT;
+      if (sw + ww + cw <= 0) continue;
+      const pick = this.rand() * (sw + ww + cw);
+      if (pick >= sw + ww) {
+        this.sitDown(this.seats[seats[Math.floor(this.rand() * seats.length)]]);
+      } else if (pick < sw) {
         let r = this.rand() * sw;
         const k = spots.find((s) => (r -= this.spots[s].weight) <= 0) ?? spots[0];
         this.atSpot(this.spots[k]);
@@ -516,6 +580,21 @@ export class People {
 
   /** Someone (or a group) at a spot, standing about; in a park or square, some wander off about it. */
   private atSpot(s: Spot): void {
+    // On the grass in a park: a picnic, now and then: a blanket, and two to five sitting round it.
+    if (s.grass && this.rand() < 0.35 && !this.underTree(s.x, s.y)) {
+      const picnic: Picnic = { x: s.x, y: s.y, angle: this.rand() * Math.PI, pattern: Math.floor(this.rand() * 4), gone: false };
+      this.picnics.push(picnic);
+      const n = 2 + Math.floor(this.rand() * 4);
+      const time = 60 + this.rand() * 180;
+      for (let k = 0; k < n; k++) {
+        const a = picnic.angle + (k / n) * Math.PI * 2;
+        const p = this.make(s.x + Math.cos(a) * 1.1 * M, s.y + Math.sin(a) * 0.9 * M, 'sit');
+        p.picnic = picnic;
+        p.angle = a + Math.PI;
+        p.timer = time + this.rand() * 10;
+      }
+      return;
+    }
     const area = this.areas.findIndex((ring) => pointInRing(s.x, s.y, ring));
     if (area >= 0 && !s.group && this.rand() < 0.6) {
       const p = this.make(s.x, s.y, 'wander');
@@ -532,6 +611,69 @@ export class People {
       p.angle = n > 1 ? a + Math.PI : s.angle + (this.rand() - 0.5) * 0.6;
       p.timer = 30 + this.rand() * 120;
     }
+  }
+
+  /** Whether a point's under a tree's crown (no picnics there: it'd be hidden, and it's shady). */
+  private underTree(x: number, y: number): boolean {
+    const t = this.map.trees;
+    for (let i = 0; i < t.length; i += 4) if (Math.abs(t[i] - x) < 60 && Math.abs(t[i + 1] - y) < 60 && Math.hypot(t[i] - x, t[i + 1] - y) < t[i + 2] + 1.5 * M) return true;
+    return false;
+  }
+
+  /** One or two sitting on a bench (facing one way off it), or two to four round a picnic table. */
+  private sitDown(seat: Seat): void {
+    const bench = seat.kind === 'bench';
+    // A bench faces one way: the same each time for the same bench.
+    const facing = (Math.floor(seat.x * 7 + seat.y * 13) & 1) === 0 ? 1 : -1;
+    const places: [number, number][] = bench
+      ? [[-0.45 * M, 0.35 * M * facing], [0.45 * M, 0.35 * M * facing]]
+      : [[-0.5 * M, 0.75 * M], [0.5 * M, 0.75 * M], [-0.5 * M, -0.75 * M], [0.5 * M, -0.75 * M]];
+    const n = bench ? (this.rand() < 0.6 ? 1 : 2) : 2 + Math.floor(this.rand() * 3);
+    const time = 20 + this.rand() * 100;
+    for (const [u, v] of places.sort(() => this.rand() - 0.5).slice(0, n)) {
+      const p = this.make(seat.x, seat.y, 'sit');
+      p.seat = seat;
+      p.seatAt = [u, v, seat.x, seat.y];
+      p.timer = time + this.rand() * 20;
+      this.onSeat(p);
+    }
+  }
+
+  /** Where they sit on their seat, as it is now, facing out from it (a bench) or in across it (a picnic table). */
+  private onSeat(p: Person): void {
+    const s = p.seat!;
+    const [u, v] = p.seatAt;
+    const [ux, uy] = [Math.cos(s.angle), Math.sin(s.angle)];
+    p.x = s.x + ux * u - uy * v;
+    p.y = s.y + uy * u + ux * v;
+    const out = s.kind === 'bench' ? Math.sign(v) : -Math.sign(v);
+    p.angle = s.angle + (Math.PI / 2) * out;
+    p.speed = 0;
+  }
+
+  /** Sitting: a while, then up and off (a picnic packs up together). Their seat knocked from under them: knocked down; smashed or shoved away: up. */
+  private sit(p: Person, dt: number): void {
+    p.timer -= dt;
+    const s = p.seat;
+    if (s) {
+      const moved = Math.hypot(s.x - p.seatAt[2], s.y - p.seatAt[3]);
+      if (s.gone || moved > 0.4 * M) {
+        p.seat = null;
+        if (Math.hypot(s.vx, s.vy) > 3 * M) this.knock(p, s, Math.hypot(s.vx, s.vy));
+        else this.rejoin(p);
+        return;
+      }
+      this.onSeat(p);
+    }
+    if (p.timer > 0) return;
+    if (p.picnic) {
+      // Packing up: the blanket goes with the last of them.
+      const c = p.picnic;
+      p.picnic = null;
+      if (!this.people.some((q) => q.picnic === c)) c.gone = true;
+    }
+    p.seat = null;
+    this.rejoin(p);
   }
 
   // --- Each frame ---
@@ -554,6 +696,15 @@ export class People {
       if ((pspeed > 11 * M && d < 7 * M) || onPavement) this.scare(p, player.x, player.y);
       if ((p.mode as Mode) !== 'dive') this.dodge(p, player, pspeed);
     }
+    // Who's where, for stepping round each other.
+    this.close.clear();
+    for (const p of this.people) {
+      if (p.mode === 'board' || p.mode === 'flee' || p.mode === 'dive') continue;
+      const k = `${Math.floor(p.x / NEAR_CELL)},${Math.floor(p.y / NEAR_CELL)}`;
+      const list = this.close.get(k);
+      if (list) list.push(p);
+      else this.close.set(k, [p]);
+    }
     for (const p of this.people) {
       switch (p.mode) {
         case 'walk':
@@ -561,6 +712,9 @@ export class People {
           break;
         case 'wander':
           this.wander(p, dt);
+          break;
+        case 'sit':
+          this.sit(p, dt);
           break;
         case 'stand':
           p.timer -= dt;
@@ -602,12 +756,20 @@ export class People {
       return;
     }
     const n = w.length / 2;
-    let [tx, ty] = [w[p.next * 2], w[p.next * 2 + 1]];
-    // Keeping to one side of the line.
+    const [tx, ty] = [w[p.next * 2], w[p.next * 2 + 1]];
     const [px, py] = [w[(p.next - p.dir) * 2] ?? tx, w[(p.next - p.dir) * 2 + 1] ?? ty];
     const len = Math.hypot(tx - px, ty - py) || 1;
-    const [ox, oy] = [(-(ty - py) / len) * p.side, ((tx - px) / len) * p.side];
-    if (this.goTo(p, tx + ox, ty + oy, p.pace, dt, 0.6 * M)) {
+    const [ux, uy] = [(tx - px) / len, (ty - py) / len];
+    // Stepping round anyone in the way (and slowing behind someone slower): see `make way`.
+    const [shift, slow] = this.makeWay(p, ux, uy);
+    p.avoid += Math.max(-1.6 * M * dt, Math.min(1.6 * M * dt, shift - p.avoid));
+    // Steering for a point a couple of metres on along the line (or its next corner), to one side of it.
+    const along = (p.x - px) * ux + (p.y - py) * uy;
+    const ahead = Math.min(len, along + 2 * M);
+    const off = Math.max(-1.05 * M, Math.min(1.05 * M, p.side + p.avoid));
+    const [sx, sy] = [px + ux * ahead - uy * off, py + uy * ahead + ux * off];
+    this.goTo(p, sx, sy, Math.min(p.pace, slow), dt, 0.05 * M);
+    if (len - along < 0.6 * M) {
       p.next += p.dir;
       if (p.next < 0 || p.next >= n) this.endOfWalk(p);
     }
@@ -627,6 +789,40 @@ export class People {
         }
       }
     }
+  }
+
+  /**
+   * Anyone in the way, walking along (ux, uy): how far to step to the side to
+   * get round them (to the side away from them; head on, each keeps to their
+   * left), px, and how fast to go (no faster than someone close in front going
+   * the same way).
+   */
+  private makeWay(p: Person, ux: number, uy: number): [number, number] {
+    let shift = 0;
+    let slow = Infinity;
+    const cx = Math.floor(p.x / NEAR_CELL);
+    const cy = Math.floor(p.y / NEAR_CELL);
+    for (let i = -1; i <= 1; i++) {
+      for (let j = -1; j <= 1; j++) {
+        for (const q of this.close.get(`${cx + i},${cy + j}`) ?? []) {
+          if (q === p) continue;
+          const [rx, ry] = [q.x - p.x, q.y - p.y];
+          const ahead = rx * ux + ry * uy;
+          if (ahead <= 0 || ahead > 2 * M) continue;
+          const across = -rx * uy + ry * ux;
+          if (Math.abs(across) > 0.8 * M) continue;
+          const sameWay = q.speed > 2 && Math.cos(q.angle) * ux + Math.sin(q.angle) * uy > 0.7;
+          // Close behind someone going the same way: keep pace with them (or pass, if there's room and they're slow).
+          if (sameWay && ahead < 1.2 * M && q.speed < p.pace * 0.85) slow = Math.min(slow, q.speed);
+          if (sameWay && q.speed >= p.pace * 0.85) continue;
+          // Round them: away from the side they're on (dead ahead, to the left, as Britons do).
+          const side = Math.abs(across) < 0.1 * M ? -1 : -Math.sign(across);
+          const need = (0.85 * M - Math.abs(across)) * side;
+          if (Math.abs(need) > Math.abs(shift)) shift = need;
+        }
+      }
+    }
+    return [shift, slow];
   }
 
   /** At the end of a walk: on along another that starts (or ends) near here, or back. */
@@ -796,6 +992,8 @@ export class People {
     if (p.mode !== 'flee') p.was = p.mode;
     p.mode = 'flee';
     p.stop = -1;
+    p.seat = null;
+    p.picnic = null;
     p.timer = SCARED[0] + this.rand() * (SCARED[1] - SCARED[0]);
     p.angle = Math.atan2(p.y - y, p.x - x) + (this.rand() - 0.5) * 0.8;
   }
@@ -855,6 +1053,8 @@ export class People {
     if (p.mode !== 'down' && p.mode !== 'flee' && p.mode !== 'dive') p.was = p.mode;
     p.mode = 'down';
     p.stop = -1;
+    p.seat = null;
+    p.picnic = null;
     const spin = (this.rand() - 0.5) * 0.6;
     p.vx = v.vx * 1.1 + (this.rand() - 0.5) * 1.5 * M;
     p.vy = v.vy * 1.1 + (this.rand() - 0.5) * 1.5 * M;
