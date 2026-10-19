@@ -519,6 +519,21 @@ alongside along a smooth curve, out ahead and away from the side it's moored on.
 Its wake (two spreading lines of foam and churned water, 5 s long) is drawn behind
 it, and every boat rocks a little on the water.
 
+**Knocked about:** the boats are solid, like the traffic (a long hull is a row of
+circles, as many as it takes to leave no gaps). Your car (on the ground, not up on
+a bridge), a car knocked into one, or another boat adrift: the hit knocks it adrift
+if it shifts it 3 px/s or more (weights against your car: dinghy 0.15, yacht 4,
+cruiser 4.5, narrowboat and ferry 11, barge 23, tug 90). Adrift, it slows on the
+water slowly along its length and quicker sideways (drag 0.25 and 0.7 a second;
+spin 1), bouncing off the edge of the water (the water areas less the pontoons and
+piers, a metre a cell) and knocking into other boats. Still for 1.6 s, it motors back
+to its berth or stop (or on to where it was going): straight in alongside if it's
+within 25 m with only water between, otherwise a way's found round. It's dented and
+scratched like the cars (dents.ts), how badly by its kind: dinghy 0.7, cruiser 1.1,
+yacht 1.2, ferry 2, narrowboat 2.4, barge 3, tug 4; but nothing comes off it, and it
+splashes when hit hard. Past 75 on any side it limps along at half speed, smoking;
+past 150 it's wrecked, left adrift (smoking), and its berth's free for another.
+
 ## Damage
 
 What's on the map can be knocked down or broken by driving into it, except the

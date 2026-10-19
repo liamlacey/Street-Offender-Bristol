@@ -11,13 +11,23 @@
  * pulled straight wherever there's room), and the boat steers along it, slowing
  * for the turns, keeping to starboard when another's coming, and slowing behind
  * one ahead. Casting off and coming alongside are a smooth curve out from (or
- * in to) the berth. Pure, so it's tested; the scene draws it (BoatLayer.ts).
+ * in to) the berth.
+ *
+ * They're solid, like the traffic: hit one (or knock a car into one) and it's
+ * knocked adrift, drifting (a long way, on the water) and bumping off the
+ * quays, the pontoons and the other boats; once it's come to a stop it waits a
+ * moment, then motors back to its berth (or on to where it was going). Badly
+ * damaged, it limps along; wrecked, it's left adrift. Pure, so it's tested; the
+ * scene draws it (BoatLayer.ts) and does the damage.
  */
 
+import type { Wreck } from '../car/dents';
 import { BOAT_SIZE, type Berth, type BoatKind } from '../map/berths';
 import type { GameMap, Pts } from '../map/osm';
+import type { Body } from '../physics/collisions';
+import { PAUSE, collideBodies } from './traffic';
 
-export interface Boat {
+export interface Boat extends Body {
   id: number;
   kind: BoatKind;
   /** Which of its kind's colours. */
@@ -29,7 +39,17 @@ export interface Boat {
   speed: number;
   length: number;
   beam: number;
-  mode: 'moored' | 'leaving' | 'underway' | 'arriving';
+  mode: 'moored' | 'leaving' | 'underway' | 'arriving' | 'adrift';
+  /** Always on the water (under the bridges): level 0. */
+  level: 0;
+  /** Its dents and scratches (see dents.ts). */
+  wreck?: Wreck;
+  /** Adrift: how long it's been still, s, and how long it's been trying to find a way back. */
+  rest: number;
+  lost: number;
+  /** Badly damaged: it goes slower; wrecked: it's left adrift. */
+  limping: boolean;
+  broken: boolean;
   /** Its berth (moored, or leaving it), or where it's heading (underway, arriving): index in `berths`; -1 a ferry's stop. */
   berth: number;
   /** Underway: its way (x, y, ...) and how far along it's got (the next point). */
@@ -56,6 +76,15 @@ const EVERY = 18;
 const DWELL = 25;
 /** How far ahead along its way a boat steers for, px. */
 const AHEAD = 7 * 8;
+/** Each kind's weight, against your car's 1. */
+const MASS: Record<BoatKind, number> = { narrowboat: 11, barge: 23, cruiser: 4.5, yacht: 4, dinghy: 0.15, tug: 90, ferry: 11 };
+/** Adrift: how quickly it slows on the water, along it and sideways (a hull slips along easily), and its spinning. */
+const DRAG = 0.25;
+const DRAG_SIDE = 0.7;
+const DRAG_SPIN = 1;
+/** Damage (the most any side's taken, see dents.ts) past which a boat limps along, and past which it's wrecked. */
+const LIMP = 75;
+const BROKEN = 150;
 
 /** Each kind's colours (hull, then trim). */
 export const BOAT_COLOURS: Record<BoatKind, [string, string][]> = {
@@ -71,6 +100,33 @@ export const BOAT_COLOURS: Record<BoatKind, [string, string][]> = {
 /** A small, quick random number generator, for tests that want the same each time. */
 type Rand = () => number;
 
+/** Shore cells, px (1 m). */
+const SHORE_CELL = 8;
+
+/** Sets the cells (cols × rows, `cell` px) whose middles are inside the rings (even-odd) to `value`. */
+function fillRings(cells: Uint8Array, cols: number, rows: number, cell: number, rings: Pts[], value: number): void {
+  let [y0, y1] = [Infinity, -Infinity];
+  for (const ring of rings) for (let i = 1; i < ring.length; i += 2) [y0, y1] = [Math.min(y0, ring[i]), Math.max(y1, ring[i])];
+  const r0 = Math.max(0, Math.floor(y0 / cell));
+  const r1 = Math.min(rows - 1, Math.ceil(y1 / cell));
+  for (let r = r0; r <= r1; r++) {
+    const y = (r + 0.5) * cell;
+    const xs: number[] = [];
+    for (const ring of rings) {
+      for (let i = 0, n = ring.length, j = n - 2; i < n; j = i, i += 2) {
+        const [xi, yi, xj, yj] = [ring[i], ring[i + 1], ring[j], ring[j + 1]];
+        if (yi > y !== yj > y) xs.push(xi + ((y - yi) * (xj - xi)) / (yj - yi));
+      }
+    }
+    xs.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const c0 = Math.max(0, Math.ceil(xs[k] / cell - 0.5));
+      const c1 = Math.min(cols - 1, Math.floor(xs[k + 1] / cell - 0.5));
+      for (let c = c0; c <= c1; c++) cells[r * cols + c] = value;
+    }
+  }
+}
+
 /**
  * The water as a grid: each cell's clearance, how many cells it is from the
  * nearest land, pontoon or moored boat (0 for those themselves).
@@ -79,6 +135,10 @@ export class WaterGrid {
   readonly cols: number;
   readonly rows: number;
   readonly clear: Uint8Array;
+  /** Where's water at all (the water areas less the pontoons and piers), a metre a cell, for boats knocked adrift to bump into the edge of. */
+  private readonly wet: Uint8Array;
+  private readonly wetCols: number;
+  private readonly wetRows: number;
   /** Which stretch of open water each cell's in (those a boat can be under way in, joined up): 0 for none. */
   private readonly part: Int32Array;
   /** For finding the ways, kept between finds. */
@@ -90,6 +150,11 @@ export class WaterGrid {
   constructor(map: GameMap, berths: Berth[] = []) {
     this.cols = Math.ceil(map.width / CELL);
     this.rows = Math.ceil(map.height / CELL);
+    this.wetCols = Math.ceil(map.width / SHORE_CELL);
+    this.wetRows = Math.ceil(map.height / SHORE_CELL);
+    this.wet = new Uint8Array(this.wetCols * this.wetRows);
+    for (const a of map.areas) if (a.kind === 'water') fillRings(this.wet, this.wetCols, this.wetRows, SHORE_CELL, a.rings, 1);
+    for (const a of map.areas) if (a.kind === 'pontoon' || a.kind === 'pier') fillRings(this.wet, this.wetCols, this.wetRows, SHORE_CELL, a.rings, 0);
     const wet = new Uint8Array(this.cols * this.rows);
     for (const a of map.areas) if (a.kind === 'water') this.fill(wet, a.rings, 1);
     for (const a of map.areas) if (a.kind === 'pontoon' || a.kind === 'pier') this.fill(wet, a.rings, 0);
@@ -163,28 +228,21 @@ export class WaterGrid {
     return false;
   }
 
-  /** Sets the cells whose middles are inside the rings (even-odd) to `value`. */
   private fill(cells: Uint8Array, rings: Pts[], value: number): void {
-    let [y0, y1] = [Infinity, -Infinity];
-    for (const ring of rings) for (let i = 1; i < ring.length; i += 2) [y0, y1] = [Math.min(y0, ring[i]), Math.max(y1, ring[i])];
-    const r0 = Math.max(0, Math.floor(y0 / CELL));
-    const r1 = Math.min(this.rows - 1, Math.ceil(y1 / CELL));
-    for (let r = r0; r <= r1; r++) {
-      const y = (r + 0.5) * CELL;
-      const xs: number[] = [];
-      for (const ring of rings) {
-        for (let i = 0, n = ring.length, j = n - 2; i < n; j = i, i += 2) {
-          const [xi, yi, xj, yj] = [ring[i], ring[i + 1], ring[j], ring[j + 1]];
-          if (yi > y !== yj > y) xs.push(xi + ((y - yi) * (xj - xi)) / (yj - yi));
-        }
-      }
-      xs.sort((a, b) => a - b);
-      for (let k = 0; k + 1 < xs.length; k += 2) {
-        const c0 = Math.max(0, Math.ceil(xs[k] / CELL - 0.5));
-        const c1 = Math.min(this.cols - 1, Math.floor(xs[k + 1] / CELL - 0.5));
-        for (let c = c0; c <= c1; c++) cells[r * this.cols + c] = value;
-      }
-    }
+    fillRings(cells, this.cols, this.rows, CELL, rings, value);
+  }
+
+  /** Whether there's water at a point (not land, a pontoon or a pier). */
+  water(x: number, y: number): boolean {
+    const [c, r] = [Math.floor(x / SHORE_CELL), Math.floor(y / SHORE_CELL)];
+    return c >= 0 && r >= 0 && c < this.wetCols && r < this.wetRows && this.wet[r * this.wetCols + c] === 1;
+  }
+
+  /** Whether there's water all along the line between two points. */
+  wetLine(ax: number, ay: number, bx: number, by: number): boolean {
+    const steps = Math.ceil(Math.hypot(bx - ax, by - ay) / (SHORE_CELL / 2));
+    for (let k = 0; k <= steps; k++) if (!this.water(ax + ((bx - ax) * k) / steps, ay + ((by - ay) * k) / steps)) return false;
+    return true;
   }
 
   /** A point's clearance, cells (0 on land, or off the map). */
@@ -369,6 +427,10 @@ export class Boats {
   private clock: number;
   /** How many trips have ended at a berth (for the tests). */
   arrivals = 0;
+  /** Boats knocked into each other since the scene last looked: where, and how hard (it dents them both). */
+  readonly hits: { a: Boat; b: Boat; x: number; y: number; impulse: number }[] = [];
+  /** Adrift boats that hit the shore since the scene last looked: where, and how hard. */
+  readonly grounded: { boat: Boat; x: number; y: number; impulse: number }[] = [];
 
   constructor(map: GameMap, options: { rand?: Rand; occupied?: number } = {}) {
     this.rand = options.rand ?? Math.random;
@@ -417,6 +479,17 @@ export class Boats {
       curve: [],
       t: 0,
       span: 1,
+      r: W / 2,
+      vx: 0,
+      vy: 0,
+      invMass: 1 / MASS[kind],
+      spin: 0,
+      circles: Math.max(3, Math.ceil(L / (W * 0.7))),
+      level: 0,
+      rest: 0,
+      lost: 0,
+      limping: false,
+      broken: false,
       cruise: (kind === 'ferry' ? 3.4 : kind === 'dinghy' ? 3.6 : kind === 'narrowboat' || kind === 'barge' ? 2.2 : 2.9) * this.px * (0.9 + this.rand() * 0.2),
     };
     this.boats.push(boat);
@@ -513,16 +586,166 @@ export class Boats {
   }
 
   update(dt: number): void {
+    if (!(dt > 0)) return;
     this.clock -= dt;
-    const moving = this.boats.filter((b) => !b.ferry && b.mode !== 'moored').length;
+    const moving = this.boats.filter((b) => !b.ferry && !b.broken && b.mode !== 'moored').length;
     if (this.clock <= 0) {
       this.clock = EVERY * (0.6 + this.rand() * 0.8);
       if (moving < MOST_MOVING) this.castOff();
     }
     for (const boat of this.boats) {
+      const [x, y, angle] = [boat.x, boat.y, boat.angle];
+      if (boat.mode === 'adrift') {
+        this.drift(boat, dt);
+        if (![boat.x, boat.y, boat.vx, boat.vy, boat.angle, boat.spin].every(Number.isFinite)) this.rescue(boat);
+        continue;
+      }
       if (boat.ferry && boat.mode === 'moored') this.ferryWaits(boat, dt);
       else if (boat.mode === 'leaving' || boat.mode === 'arriving') this.curving(boat, dt);
       else if (boat.mode === 'underway') this.steer(boat, dt);
+      // How it's moving, for what it hits (or what hits it).
+      boat.vx = (boat.x - x) / dt;
+      boat.vy = (boat.y - y) / dt;
+      boat.spin = turn(angle, boat.angle) / dt;
+    }
+    this.bump();
+  }
+
+  /** Something's gone wrong with one (it's lost where it is): it's put back where it's bound, and the rest go on. */
+  private rescue(boat: Boat): void {
+    console.error('boats: lost one', boat.id);
+    [boat.x, boat.y, boat.angle] = this.bound(boat);
+    [boat.vx, boat.vy, boat.spin, boat.speed] = [0, 0, 0, 0];
+    boat.mode = 'moored';
+    if (boat.ferry) boat.ferry.dwell = DWELL;
+  }
+
+  /** The boats within `reach` of a point. */
+  near(x: number, y: number, reach: number): Boat[] {
+    return this.boats.filter((b) => Math.abs(b.x - x) < reach + b.length / 2 && Math.abs(b.y - y) < reach + b.length / 2);
+  }
+
+  /** It's been hit (how hard): knocked adrift, if that shifted it at all (a heavy one takes a lot more than a dinghy). */
+  knock(boat: Boat, impulse: number): void {
+    if (impulse * boat.invMass < 3) return;
+    boat.mode = 'adrift';
+    boat.rest = 0;
+    boat.lost = 0;
+    boat.speed = 0;
+  }
+
+  /** Its damage has changed (see dents.ts): badly enough, it limps along; worse, it's wrecked, and left adrift. */
+  hurt(boat: Boat): void {
+    const w = boat.wreck;
+    if (!w) return;
+    const worst = Math.max(w.taken.front, w.taken.rear, w.taken.left, w.taken.right);
+    if (worst > LIMP) boat.limping = true;
+    if (worst > BROKEN && !boat.broken) {
+      boat.broken = true;
+      // Its berth's free (it isn't going back); a ferry's route's left without it.
+      if (!boat.ferry && this.taken[boat.berth] === boat.id) this.taken[boat.berth] = -1;
+      boat.mode = 'adrift';
+      boat.rest = 0;
+    }
+  }
+
+  /** Knocked adrift: drifting, slowing on the water, bumping off the shore; when it's still a moment, it motors back. */
+  private drift(boat: Boat, dt: number): void {
+    const [cx, cy] = [Math.cos(boat.angle), Math.sin(boat.angle)];
+    let f = boat.vx * cx + boat.vy * cy;
+    let side = -boat.vx * cy + boat.vy * cx;
+    f *= Math.exp(-DRAG * dt);
+    side *= Math.exp(-DRAG_SIDE * dt);
+    boat.vx = f * cx - side * cy;
+    boat.vy = f * cy + side * cx;
+    boat.spin *= Math.exp(-DRAG_SPIN * dt);
+    boat.x += boat.vx * dt;
+    boat.y += boat.vy * dt;
+    boat.angle += boat.spin * dt;
+    boat.speed = 0;
+    this.shore(boat);
+    if (boat.broken) return;
+    if (Math.hypot(boat.vx, boat.vy) < 2 && Math.abs(boat.spin) < 0.05) boat.rest += dt;
+    else boat.rest = 0;
+    if (boat.rest > PAUSE) this.recover(boat, dt);
+  }
+
+  /** Bounces an adrift boat off the edge of the water (the quays, the banks, the pontoons). */
+  private shore(boat: Boat): void {
+    const [cx, cy] = [Math.cos(boat.angle), Math.sin(boat.angle)];
+    const end = boat.length / 2 - boat.r;
+    const n = boat.circles ?? 3;
+    let strongest = 0;
+    for (let k = 0; k < n; k++) {
+      const along = -end + (2 * end * k) / (n - 1);
+      const [px, py] = [boat.x + cx * along, boat.y + cy * along];
+      // Which way's out of the dry, from round the edge of this circle of its hull.
+      let [nx, ny, dry] = [0, 0, 0];
+      for (let a = 0; a < 12; a++) {
+        const [ox, oy] = [Math.cos((a * Math.PI) / 6), Math.sin((a * Math.PI) / 6)];
+        if (this.grid.water(px + ox * boat.r, py + oy * boat.r)) continue;
+        nx -= ox;
+        ny -= oy;
+        dry++;
+      }
+      const len = Math.hypot(nx, ny);
+      if (!dry || len < 1e-6) continue;
+      [nx, ny] = [nx / len, ny / len];
+      // Pushed back out, and bounced off.
+      const depth = Math.min(boat.r, (dry / 12) * boat.r);
+      boat.x += nx * depth * 0.5;
+      boat.y += ny * depth * 0.5;
+      const vn = boat.vx * nx + boat.vy * ny;
+      if (vn < 0) {
+        boat.vx -= 1.3 * vn * nx;
+        boat.vy -= 1.3 * vn * ny;
+        // Turned by it, hit off its middle.
+        boat.spin += (along * (nx * -cy + ny * cx) * -vn * 0.3) / (boat.length * boat.length / 12 + 1);
+        if (-vn > strongest) {
+          strongest = -vn;
+          this.grounded.push({ boat, x: px - nx * boat.r, y: py - ny * boat.r, impulse: -vn / boat.invMass });
+        }
+      }
+    }
+  }
+
+  /** It's come to a stop, adrift: back to its berth, its stop, or on to where it was going. */
+  private recover(boat: Boat, dt: number): void {
+    boat.lost += dt;
+    const [x, y, angle] = this.bound(boat);
+    const facing = Math.abs(turn(boat.angle, angle)) < Math.PI / 2 ? angle : angle + Math.PI;
+    const lieAs = boat.ferry ? facing : angle;
+    // Close, with nothing but water in the way: straight in alongside.
+    if ((Math.hypot(x - boat.x, y - boat.y) < 25 * this.px && this.grid.wetLine(boat.x, boat.y, x, y)) || boat.lost > 12) {
+      this.comeAlongside(boat, x, y, lieAs);
+      return;
+    }
+    // Otherwise, a way round to it (tried every couple of seconds till there is one).
+    if (boat.lost - dt > 0 && Math.floor(boat.lost / 2) === Math.floor((boat.lost - dt) / 2)) return;
+    const from = this.grid.open(boat.x, boat.y, 10 * this.px);
+    const into = this.offing(x, y, lieAs, boat.length, boat.beam, -1);
+    const way = from && into ? this.grid.way(from[0], from[1], into[0], into[1]) : null;
+    if (!way) return;
+    boat.path = [boat.x, boat.y, ...way];
+    boat.next = 1;
+    boat.mode = 'underway';
+    boat.speed = 0;
+  }
+
+  /** Boats adrift bump into the others (and knock them adrift too, hard enough). */
+  private bump(): void {
+    for (const a of this.boats) {
+      if (a.mode !== 'adrift') continue;
+      for (const b of this.boats) {
+        if (a === b || (b.mode === 'adrift' && b.id < a.id)) continue;
+        const reach = (a.length + b.length) / 2;
+        if (Math.abs(a.x - b.x) > reach || Math.abs(a.y - b.y) > reach) continue;
+        const at = { x: 0, y: 0 };
+        const hit = collideBodies(a, b, 0.3, at);
+        if (hit > 0) this.hits.push({ a, b, x: at.x, y: at.y, impulse: hit });
+        if (b.mode !== 'adrift') this.knock(b, hit);
+        if (hit > 0) a.rest = 0;
+      }
     }
   }
 
@@ -601,7 +824,7 @@ export class Boats {
     let [tx, ty] = along + AHEAD < seg ? [ax + ((bx - ax) * (along + AHEAD)) / seg, ay + ((by - ay) * (along + AHEAD)) / seg] : [bx, by];
     // Others: slowing behind one ahead, keeping to starboard of one coming.
     const [ux, uy] = [Math.cos(boat.angle), Math.sin(boat.angle)];
-    let limit = boat.cruise;
+    let limit = boat.cruise * (boat.limping ? 0.5 : 1);
     for (const o of this.boats) {
       if (o === boat || o.mode === 'moored') continue;
       const [dx, dy] = [o.x - boat.x, o.y - boat.y];

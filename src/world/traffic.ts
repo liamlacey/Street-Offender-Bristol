@@ -12,7 +12,7 @@
 
 import type { Wreck } from '../car/dents';
 import type { BusRoute, GameMap, Pts, Road, RoadKind } from '../map/osm';
-import type { Body } from '../physics/collisions';
+import { type Body, bodyHull } from '../physics/collisions';
 import type { Light } from './lights';
 import { type Space, parkingSpaces } from './parking';
 import { Terrain } from './terrain';
@@ -1680,13 +1680,9 @@ function pick<T>(rand: () => number, weighted: [T, number][]): T | undefined {
 /** Two long bodies bumping: both move and both turn. Returns the impulse. */
 export function collideBodies(a: Body, b: Body, restitution = 0.3, contactOut?: { x: number; y: number }): number {
   let strongest = 0;
-  const hull = (body: Body) => {
-    const end = Math.max(0, (body.length ?? 0) / 2 - body.r);
-    return end ? [-end, 0, end] : [0];
-  };
   const inertia = (body: Body) => (12 * body.invMass) / ((body.length ?? body.r * 2) ** 2 + (body.r * 2) ** 2);
-  for (const pa of hull(a)) {
-    for (const pb of hull(b)) {
+  for (const pa of bodyHull(a)) {
+    for (const pb of bodyHull(b)) {
       const ax = a.x + Math.cos(a.angle) * pa;
       const ay = a.y + Math.sin(a.angle) * pa;
       const bx = b.x + Math.cos(b.angle) * pb;

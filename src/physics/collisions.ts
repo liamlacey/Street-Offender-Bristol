@@ -31,6 +31,8 @@ export interface Body extends Circle {
   spin: number;
   /** A long body (a parked car) is three circles of radius r along its angle, this long end to end. */
   length?: number;
+  /** A very long, thin one (a narrowboat) is more circles than three along it, so there are no gaps between them. */
+  circles?: number;
   /** How quickly it slides to a stop on the ground (default 2.5; a parked car's handbrake is on). */
   damping?: number;
 }
@@ -304,11 +306,12 @@ export function collideCarWithBody(car: CarState, body: Body, material = CONE_HI
   return strongest;
 }
 
-/** Where a body's circles are along it, from its middle: just the one, or three along a long body. */
-function bodyHull(body: Body): number[] {
-  if (!body.length) return SINGLE;
-  const end = body.length / 2 - body.r;
-  return [-end, 0, end];
+/** Where a body's circles are along it, from its middle: just the one, or three (or `circles`) along a long body. */
+export function bodyHull(body: Body): number[] {
+  const end = Math.max(0, (body.length ?? 0) / 2 - body.r);
+  if (!end) return SINGLE;
+  const n = Math.max(3, body.circles ?? 3);
+  return Array.from({ length: n }, (_, k) => -end + (2 * end * k) / (n - 1));
 }
 const SINGLE = [0];
 

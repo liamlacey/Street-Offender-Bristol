@@ -66,4 +66,53 @@ describe('boats', () => {
     const at = boats.boats.filter((b) => b.mode === 'moored' && !b.ferry).map((b) => b.berth);
     expect(new Set(at).size).toBe(at.length);
   });
+
+  it('knocked adrift, it drifts, keeps off the shore, and comes back to its berth', () => {
+    const boats = new Boats(map, { rand: seeded(5), occupied: 1 });
+    const boat = boats.boats.find((b) => b.mode === 'moored' && b.kind === 'cruiser')!;
+    const berth = boats.berths[boat.berth];
+    // Shoved out from its berth, as hard as a car hitting it at 20 mph.
+    const [nx, ny] = [-Math.sin(berth.angle), Math.cos(berth.angle)];
+    const side = boats.grid.water(boat.x + nx * boat.beam * 1.5, boat.y + ny * boat.beam * 1.5) ? 1 : -1;
+    boat.vx = nx * side * 3 * 8;
+    boat.vy = ny * side * 3 * 8;
+    boat.spin = 0.3;
+    boats.knock(boat, 200);
+    let moved = 0;
+    for (let t = 0; t < 120 && !(t > 3 && boat.mode === 'moored'); t += 1 / 30) {
+      boats.update(1 / 30);
+      moved = Math.max(moved, Math.hypot(boat.x - berth.x, boat.y - berth.y));
+      if (boat.mode === 'adrift') expect(boats.grid.water(boat.x, boat.y)).toBe(true);
+    }
+    expect(moved).toBeGreaterThan(2.5 * 8);
+    expect(boat.mode).toBe('moored');
+    expect(Math.hypot(boat.x - berth.x, boat.y - berth.y)).toBeLessThan(1);
+  });
+
+  it('an adrift boat bumps into a moored one, knocking it adrift too', () => {
+    const boats = new Boats(map, { rand: seeded(5), occupied: 1 });
+    const moored = boats.boats.filter((b) => b.mode === 'moored' && !b.ferry);
+    // Two moored next to each other along the same edge.
+    const inLine = (p: (typeof moored)[0], q: (typeof moored)[0]) => {
+      const d = Math.hypot(p.x - q.x, p.y - q.y);
+      return Math.abs(Math.cos(p.angle) * (q.x - p.x) + Math.sin(p.angle) * (q.y - p.y)) > d * 0.98 && d < (p.length + q.length) / 2 + 4 * 8;
+    };
+    const [a, b] = moored.flatMap((p) => moored.filter((q) => q !== p && inLine(p, q)).map((q) => [p, q]))[0];
+    const [dx, dy] = [(b.x - a.x) / Math.hypot(b.x - a.x, b.y - a.y), (b.y - a.y) / Math.hypot(b.x - a.x, b.y - a.y)];
+    a.vx = dx * 4 * 8;
+    a.vy = dy * 4 * 8;
+    boats.knock(a, 100);
+    for (let t = 0; t < 5 && b.mode === 'moored'; t += 1 / 30) boats.update(1 / 30);
+    expect(b.mode).toBe('adrift');
+  });
+
+  it('wrecked, a boat is left adrift; its berth is free', () => {
+    const boats = new Boats(map, { rand: seeded(5), occupied: 1 });
+    const boat = boats.boats.find((b) => b.mode === 'moored' && !b.ferry)!;
+    boat.wreck = { taken: { front: 200, rear: 0, left: 0, right: 0 }, marks: [], lost: [], version: 1, last: 0, lastForce: 0 };
+    boats.hurt(boat);
+    expect(boat.broken).toBe(true);
+    for (let t = 0; t < 30; t += 1 / 30) boats.update(1 / 30);
+    expect(boat.mode).toBe('adrift');
+  });
 });

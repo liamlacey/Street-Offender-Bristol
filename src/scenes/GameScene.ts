@@ -47,8 +47,8 @@ import { type Debris, type DebrisKind, debris, impactSpeed } from '../world/dama
 import { HudScene, RESET_EVENT, STREET_EVENT } from './HudScene';
 import { SkidMarks } from './SkidMarks';
 import { TrafficLayer } from './TrafficLayer';
-import { Traffic, VEHICLES, type Vehicle } from '../world/traffic';
-import { Boats } from '../world/boats';
+import { Traffic, VEHICLES, type Vehicle, collideBodies } from '../world/traffic';
+import { type Boat, Boats } from '../world/boats';
 import { BoatLayer } from './BoatLayer';
 import { type Shape, STIFFNESS, type Wreck, hit as dentAt, newWreck, toBody, toWorld } from '../car/dents';
 import { paintWreck } from './dentArt';
@@ -510,6 +510,17 @@ export class GameScene extends Phaser.Scene {
       // A good knock: a long blast of its horn, once it's stopped.
       if (fresh && bump > 120) this.time.delayedCall(700, () => this.audio?.horn(this.hearing(v.x, v.y), true));
     }
+    // The boats (moored, under way, or adrift), on the water under the bridges: knocked adrift, and dented.
+    if (this.level === 0) {
+      for (const b of this.boats.near(car.x, car.y, CAR_LENGTH)) {
+        const bump = collideCarWithBody(car, b, CAR_BUMP, this.contact);
+        if (bump <= 0) continue;
+        this.boats.knock(b, bump);
+        this.hit(bump);
+        this.dentBoat(b, this.contact.x, this.contact.y, bump);
+        this.dent(null, this.contact.x, this.contact.y, bump);
+      }
+    }
     // Up onto a bridge at its end, or down off it.
     const level = this.decks.levelAt(this.level, car.x, car.y);
     if (level !== this.level) {
@@ -566,6 +577,24 @@ export class GameScene extends Phaser.Scene {
     } catch (e) {
       console.error('boats:', e);
     }
+    // Boats knocked into each other, or into the side of the harbour; and cars knocked into the boats.
+    for (const h of this.boats.hits) {
+      this.dentBoat(h.a, h.x, h.y, h.impulse);
+      this.dentBoat(h.b, h.x, h.y, h.impulse);
+    }
+    this.boats.hits.length = 0;
+    for (const g of this.boats.grounded) this.dentBoat(g.boat, g.x, g.y, g.impulse);
+    this.boats.grounded.length = 0;
+    for (const v of this.traffic.loose()) {
+      if (v.level !== 0) continue;
+      for (const b of this.boats.near(v.x, v.y, v.length)) {
+        const hit = collideBodies(v, b, 0.3, this.contact);
+        if (hit <= 0) continue;
+        this.boats.knock(b, hit);
+        this.dent(v, this.contact.x, this.contact.y, hit);
+        this.dentBoat(b, this.contact.x, this.contact.y, hit);
+      }
+    }
     for (const v of this.traffic.loose()) {
       const wall = collideBodyWithWalls(v, this.walls[v.level], 0.4, this.contact);
       if (wall > 0) this.dent(v, this.contact.x, this.contact.y, wall / v.invMass);
@@ -591,6 +620,11 @@ export class GameScene extends Phaser.Scene {
         this.effects.smokeAt(v.x + Math.cos(v.angle) * v.length * 0.35, v.y + Math.sin(v.angle) * v.length * 0.35);
       }
       if (v.alarm > 0 && Math.floor(v.alarm * 2.2) !== Math.floor((v.alarm + dt) * 2.2)) this.audio?.beep(this.hearing(v.x, v.y));
+    }
+    for (const b of this.boats.boats) {
+      if (!(b.broken || b.limping) || !seen(b.x, b.y) || Math.random() > dt * (b.broken ? 9 : 4)) continue;
+      // From its engine, at the back.
+      this.effects.smokeAt(b.x - Math.cos(b.angle) * b.length * 0.3, b.y - Math.sin(b.angle) * b.length * 0.3);
     }
     if (this.wreck.taken.front > 120 && Math.random() < dt * 6) {
       this.effects.smokeAt(this.car.x + Math.cos(this.car.heading) * 12, this.car.y + Math.sin(this.car.heading) * 12);
@@ -641,6 +675,24 @@ export class GameScene extends Phaser.Scene {
           this.audio?.shatter('glass', impulse);
       }
     }
+  }
+
+  /**
+   * Damage where a boat's been hit, at (x, y), this hard: dents, scratches and
+   * the hull stove in (nothing comes off it), and a splash, hit hard.
+   */
+  private dentBoat(b: Boat, x: number, y: number, impulse: number): void {
+    const shape: Shape = { length: b.length, width: b.beam, stiffness: BOAT_STIFFNESS[b.kind], mirror: 1e6, screen: 1e6 };
+    const wreck = (b.wreck ??= newWreck());
+    const [u, w] = toBody(x, y, b.x, b.y, b.angle);
+    const before = wreck.version;
+    dentAt(wreck, shape, u, w, impulse, this.time.now / 1000, Math.random);
+    if (wreck.version === before) return;
+    // No lights, mirrors, bumpers or windscreen to lose.
+    wreck.lost.length = 0;
+    wreck.marks = wreck.marks.filter((m) => m.kind !== 'crack');
+    this.boats.hurt(b);
+    if (impulse > 40) this.effects.splashAt(x, y, Math.min(14, Math.round(impulse / 25)));
   }
 
   /** How loud something at (x, y) is, by how far it is from the car: 1 close, 0 out of earshot. */
@@ -930,6 +982,9 @@ const PLAYER_SHAPE: Shape = { length: CAR_LENGTH, width: CAR_WIDTH, stiffness: S
 const shapes = new Map<string, Shape>();
 
 /** A kind of vehicle, for its damage. */
+/** How sturdy each kind of boat is (a car's 1): a dinghy's thin plastic, a narrowboat's steel, an old tug's heavy plate. */
+const BOAT_STIFFNESS: Record<Boat['kind'], number> = { dinghy: 0.7, cruiser: 1.1, yacht: 1.2, narrowboat: 2.4, barge: 3, ferry: 2, tug: 4 };
+
 function vehicleShape(v: Vehicle): Shape {
   let shape = shapes.get(v.kind);
   if (!shape) {
