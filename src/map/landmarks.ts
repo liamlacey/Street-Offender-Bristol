@@ -57,6 +57,8 @@ export interface Correction {
 }
 
 export const CORRECTIONS: Record<string, Correction> = {
-  // King Street: pedestrianised (OSM still has it as a one-way street), its whole width (the old carriageway and pavements) paved; the streets across it are open.
+  // King Street: pedestrianised (OSM still has it as a one-way street), its whole width (the old carriageway and pavements) paved; bollards from the Prince Street junction.
   'way/191322143': { tags: { highway: 'pedestrian', oneway: 'no', width: '11' }, bollards: true, seating: true },
+  // King William Avenue, from King Street up to Little King Street: pedestrianised too, bollards across it at Little King Street (beyond, it's a street still).
+  'way/194012625': { tags: { highway: 'pedestrian', oneway: 'no', width: '10' }, bollards: true },
 };
