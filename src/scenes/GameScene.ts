@@ -71,14 +71,21 @@ const DEPTH = {
   buildings: 7,
 };
 
-/** How high the camera is when stopped, px (the lower it is, the more the buildings lean). */
+/** How high the camera is when the view's shorter side is CAMERA_VIEW px, px (higher as it pulls back; the lower it is, the more the buildings lean). */
 const CAMERA_HEIGHT = 1250;
+const CAMERA_VIEW = 430;
 /** How high traffic lights' heads and Belisha beacons' globes are, px. */
 const LIGHT_HEIGHT = 3.5 * 8;
 const BEACON_HEIGHT = 2.6 * 8;
-/** The view's shorter side, in map px, when the car's stopped (it pulls back as you speed up, as in the old games). */
-const VIEW_AT_REST = 430;
-const PULL_BACK = 0.38;
+/**
+ * The view's shorter side, in map px: close in when the car's stopped or going
+ * slowly, pulling back as you speed up (more and more quickly, the faster you
+ * go), to the furthest at FULL_SPEED px/s, as in the old games.
+ */
+const VIEW_AT_REST = 300;
+const VIEW_AT_SPEED = 690;
+const FULL_SPEED = 400;
+const PULL_EASE = 1.7;
 /** How long a hop off a speed hump lasts, seconds. */
 const HOP_TIME = 0.35;
 /** How many loose things (benches, bins, and the bits of what's been broken) before the smallest bits stop being kept. */
@@ -653,8 +660,8 @@ export class GameScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const car = this.car;
     const speed = Math.hypot(car.vx, car.vy);
-    const rest = this.restZoom();
-    const target = rest * (1 - PULL_BACK * Math.min(speed / 400, 1));
+    const t = Math.min(speed / FULL_SPEED, 1) ** PULL_EASE;
+    const target = Math.min(this.scale.width, this.scale.height) / (VIEW_AT_REST + (VIEW_AT_SPEED - VIEW_AT_REST) * t);
     this.zoom += (target - this.zoom) * Math.min(1, dt * 1.5);
     cam.setZoom(this.zoom);
     const ahead = 0.45;
@@ -725,7 +732,8 @@ export class GameScene extends Phaser.Scene {
     const p = this.perspective;
     p.cx = view.centerX;
     p.cy = view.centerY;
-    p.height = CAMERA_HEIGHT * (this.restZoom() / this.zoom);
+    // Lower as it closes in: the camera coming down, not just magnifying.
+    p.height = CAMERA_HEIGHT * (Math.min(this.scale.width, this.scale.height) / this.zoom / CAMERA_VIEW);
     p.ground = this.carHeight();
   }
 
