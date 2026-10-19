@@ -160,9 +160,18 @@ export class GameScene extends Phaser.Scene {
   private keys!: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'space' | 'r', Phaser.Input.Keyboard.Key>;
   private input_: CarInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   private accumulator = 0;
+  /** Where the car was before the last physics step: it's drawn (and followed) between that and where it is now, by how far into the next step the frame is, so it moves smoothly whatever the screen's refresh rate. */
+  private prev = { x: 0, y: 0, heading: 0 };
+  /** Where it's drawn this frame. */
+  private shown = { x: 0, y: 0, heading: 0 };
   private zoom = 1;
+  private zoomRate = 0;
+  /** How far ahead of the car the camera looks (and how fast that's changing), and the car's speed the zoom goes by, smoothed. */
   private lookX = 0;
   private lookY = 0;
+  private lookVX = 0;
+  private lookVY = 0;
+  private pace = 0;
   private surface: Surface = Surface.Road;
   /** Seconds since the car went into the harbour, or -1. */
   private sinking = -1;
@@ -389,8 +398,10 @@ export class GameScene extends Phaser.Scene {
     this.accumulator = Math.min(this.accumulator + dt, PHYSICS_DT * MAX_STEPS_PER_FRAME);
     while (this.accumulator >= PHYSICS_DT) {
       this.accumulator -= PHYSICS_DT;
+      this.prev = { x: this.car.x, y: this.car.y, heading: this.car.heading };
       this.step(PHYSICS_DT);
     }
+    this.interpolate(this.accumulator / PHYSICS_DT);
     this.updateSinking(dt);
     this.updateLoose();
     this.updateTraffic(dt);
@@ -803,8 +814,18 @@ export class GameScene extends Phaser.Scene {
     this.carSprite.setTexture(TEX.car).setAlpha(1).setTint(0xffffff);
   }
 
+  /** Where the car's drawn: between where it was and where it is (straight there if it's jumped, put back after sinking, say). */
+  private interpolate(f: number): void {
+    const { car, prev } = this;
+    if (Math.hypot(car.x - prev.x, car.y - prev.y) > 60) this.prev = { x: car.x, y: car.y, heading: car.heading };
+    const p = this.prev;
+    let turn = car.heading - p.heading;
+    turn -= Math.round(turn / (Math.PI * 2)) * Math.PI * 2;
+    this.shown = { x: p.x + (car.x - p.x) * f, y: p.y + (car.y - p.y) * f, heading: p.heading + turn * f };
+  }
+
   private drawCar(): void {
-    const { x, y, heading } = this.car;
+    const { x, y, heading } = this.shown;
     if (this.wreck.version !== this.wreckShown) {
       this.wreckShown = this.wreck.version;
       paintWreck(this, 'car-dented', { base: TEX.car, length: CAR_LENGTH, width: CAR_WIDTH, mirror: PLAYER_SHAPE.mirror }, this.wreck);
@@ -831,17 +852,18 @@ export class GameScene extends Phaser.Scene {
   private updateCamera(dt: number): void {
     const cam = this.cameras.main;
     const car = this.car;
-    const speed = Math.hypot(car.vx, car.vy);
-    const t = Math.min(speed / FULL_SPEED, 1) ** PULL_EASE;
+    // Everything it follows eased in and out (springs, not jumps): a knock, a kerb or a sudden turn doesn't jolt it.
+    this.pace += (Math.hypot(car.vx, car.vy) - this.pace) * Math.min(1, dt * 4);
+    const t = Math.min(this.pace / FULL_SPEED, 1) ** PULL_EASE;
     const side = Math.min(this.scale.width, this.scale.height);
     const rest = restView(side);
     const target = side / (rest + (VIEW_AT_SPEED - rest) * t);
-    this.zoom += (target - this.zoom) * Math.min(1, dt * 1.5);
+    [this.zoom, this.zoomRate] = spring(this.zoom, this.zoomRate, target, 2, dt);
     cam.setZoom(this.zoom);
     const ahead = 0.45;
-    this.lookX += (car.vx * ahead - this.lookX) * Math.min(1, dt * 3);
-    this.lookY += (car.vy * ahead - this.lookY) * Math.min(1, dt * 3);
-    cam.centerOn(car.x + this.lookX, car.y + this.lookY);
+    [this.lookX, this.lookVX] = spring(this.lookX, this.lookVX, car.vx * ahead, 3.5, dt);
+    [this.lookY, this.lookVY] = spring(this.lookY, this.lookVY, car.vy * ahead, 3.5, dt);
+    cam.centerOn(this.shown.x + this.lookX, this.shown.y + this.lookY);
   }
 
   /** How high the car is, px: on the ground, or on the deck of the bridge it's on. */
@@ -995,6 +1017,15 @@ const shapes = new Map<string, Shape>();
 /** A kind of vehicle, for its damage. */
 /** How sturdy each kind of boat is (a car's 1): a dinghy's thin plastic, a narrowboat's steel, an old tug's heavy plate. */
 const BOAT_STIFFNESS: Record<Boat['kind'], number> = { dinghy: 0.7, cruiser: 1.1, yacht: 1.2, narrowboat: 2.4, barge: 3, ferry: 2, tug: 4 };
+
+/** A critically damped spring: `value` (moving at `rate`) eased towards `target`, about 1/`omega` s to get most of the way, never overshooting. */
+function spring(value: number, rate: number, target: number, omega: number, dt: number): [number, number] {
+  const x = omega * dt;
+  const decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+  const change = value - target;
+  const temp = (rate + omega * change) * dt;
+  return [target + (change + temp) * decay, (rate - omega * temp) * decay];
+}
 
 /** How much of the map the view's shorter side (`side` css px) shows with the car stopped, px: VIEW_AT_REST on a phone, more on a bigger screen. */
 function restView(side: number): number {
