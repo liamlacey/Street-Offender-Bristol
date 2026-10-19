@@ -349,8 +349,10 @@ it meets another into edges, each with its lanes (`lanes:forward/backward`, or o
 way; a one-way road 7.5 m or wider, two), on the left of the way they go, inside any
 bus, cycle or parking lane painted along that side. Lanes stop short of a junction
 (where three or more edges meet) by half the widest road there plus 1.2 m; a smooth
-curve takes each lane on to the next across it. One-way streets are only driven one
-way.
+curve takes each lane on to the next across it. Where two roads leave a junction at a
+sharp angle (under 80°), their carriageways overlap for a way out from it, so the lanes
+stop beyond that too (half their widths together ÷ the tangent of the angle, at most
+25 m). One-way streets are only driven one way.
 
 **Driving, by the law:**
 - Speed: the road's (trunk 13.4 m/s, primary 12.5, secondary 12, tertiary 11.5,
@@ -363,17 +365,17 @@ way.
   for a shop, or somewhere to park). Up a hill it slows (by the grade times 0.5 to
   0.8 for a car, 1.3 for a van, 3 for a lorry; never below 45%) and pulls away less
   briskly; down one it's up to 5% quicker. Slower round bends and turns: no more sideways pull than
-  2.2 m/s², the sharpness measured every 2 m over 8 m either side along a lane (so a
+  3 m/s², the sharpness measured every 2 m over 8 m either side along a lane (so a
   kink in the road's line is the gentle bend it is) and 1.5 to 4 m on a turn; it
-  slows in time, braking at 2.2 m/s², and is slowest at the sharpest part.
-- Driven smoothly: it eases towards the speed it wants (closing 1.6 of the
-  difference a second), pulling away at up to 2.2 m/s² (less as it gets up to
-  speed; some drivers brisker than others, 0.8 to 1.2 times), on and off the
-  accelerator and brake gradually (2.5 and 5 m/s³), rolling up to a stop no faster
-  than 0.9 m/s per metre left; braking harder only when it must (up to 9 m/s²). It
-  takes 0.35 to 1.05 s to move off when it can, so a queue at the lights moves off
-  one after another.
-- Keeps 2 m plus 1.5 s behind whatever's in its way ahead (another vehicle, a parked
+  slows in time, braking at 3.4 m/s², and is slowest at the sharpest part.
+- Driven like people drive in town: pulling away briskly (up to 3.4 m/s², less as
+  it gets up to speed; some drivers keener than others, 0.8 to 1.3 times), braking
+  late and firmly (3.4 m/s² times that, as it plans to; up to 9 when it must), quick
+  on and off the pedals but never all at once (6 and 12 m/s³), closing 2.2 of the
+  difference to the speed it wants a second, and rolling the last bit up to a stop
+  (no faster than 1.3 m/s per metre left). It takes 0.25 to 0.75 s to move off when
+  it can, so a queue at the lights moves off one after another.
+- Keeps 2 m plus 1.3 s behind whatever's in its way ahead (another vehicle, a parked
   car knocked out into the road, you), looking ahead 14 m plus 3 s of travel (at
   most 70 m). Never drives into you on purpose; held up by you for 2.5 s, it honks.
 - Stops at the stop line on red, and red and amber; on amber, if it can stop
@@ -381,20 +383,23 @@ way.
 - Gives way at the end of a road onto a more major one (trunk > primary > secondary >
   tertiary > street), or where a give way line's painted (`highway=give_way`):
   waits until nothing coming (looking up to 70 m) will reach the junction within
-  4.5 s, and nothing's in it.
+  3.2 s, and nothing's in it.
 - Two turning into the same lane from different ways: within 25 m of it, the one
   further off lets the other in first (if the nearer one's on its way in, not waiting
   at a line).
 - Not into a junction (where three or more roads meet) with no room on the far side:
   it waits at the end of its lane until there's room for it beyond (nothing stopped,
   or nearly, within its length and 3 m of the lane's start, or in the turn).
-- Waiting to pull out, it takes a smaller gap the longer it's waited (the 4.5 s down
-  to 2 s over 30 s), and traffic crawling under 2 m/s lets it out.
+- Waiting to pull out, it takes a smaller gap the longer it's waited (the 3.2 s down
+  to 1.4 s over 30 s), and traffic crawling under 2 m/s lets it out.
 - Oncoming, two squeeze past each other (needing only 80% of their widths between
   them); on a narrow two-way street they keep over to the kerb (no nearer it than
   1.1 m). Nose to nose in a knot, the one with less right of way backs off (1.2 m/s
-  for 3 s).
+  for 3 s, if there's room behind it; if not, after 10 s it edges past). Oncoming
+  along another road (two one-way roads drawn close where they join) isn't in the way.
 - A road off the map's edge: driven on to its end, and gone.
+- Standing still 25 s, not for a red light or behind you (anywhere along the queue it's
+  in): a knot; out of sight, it's taken off the road.
 - What's on a bridge isn't in the way of what's under it, and the other way round:
   each point it looks at ahead is on the level of the road there.
 - At each junction it turns onto another road (never back the way it came unless the
