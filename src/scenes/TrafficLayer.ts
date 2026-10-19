@@ -31,6 +31,8 @@ export class TrafficLayer {
     private readonly traffic: Traffic,
     /** The height of the ground (or the deck, on level 1) under a point, px. */
     private readonly base: (x: number, y: number, level: number) => number,
+    /** Whether a point's at the end of a bridge, where its deck meets the road (within `reach` px). */
+    private readonly atDeckEnd: (x: number, y: number, reach: number) => boolean,
     private readonly depths: TrafficDepths,
   ) {
     this.lamps = [scene.add.graphics(), scene.add.graphics()];
@@ -40,9 +42,11 @@ export class TrafficLayer {
     const pad = 60;
     const seen = new Set<Vehicle>();
     for (const g of this.lamps) g.clear();
-    const depth = (v: Vehicle) => (level === 0 ? (v.level === 0 ? this.depths.ground : this.depths.onDeck) : v.level === 0 ? this.depths.below : this.depths.beside);
-    this.lamps[0].setDepth(depth({ level: 0 } as Vehicle) + 0.01);
-    this.lamps[1].setDepth(depth({ level: 1 } as Vehicle) + 0.01);
+    // Up on a bridge, or at the end of one (driving on or off it, where the deck meets the road): drawn with the deck, over it.
+    const up = (v: Vehicle) => v.level === 1 || this.atDeckEnd(v.x, v.y, v.length / 2 + 4);
+    const depthOf = (onDeck: boolean) => (level === 0 ? (onDeck ? this.depths.onDeck : this.depths.ground) : onDeck ? this.depths.beside : this.depths.below);
+    this.lamps[0].setDepth(depthOf(false) + 0.01);
+    this.lamps[1].setDepth(depthOf(true) + 0.01);
     for (const list of [this.traffic.parked, this.traffic.vehicles]) {
       for (const v of list) {
         if (v.x < view.left - pad || v.x > view.right + pad || v.y < view.top - pad || v.y > view.bottom + pad) continue;
@@ -63,12 +67,13 @@ export class TrafficLayer {
         }
         const lift = perspective.lift(this.base(v.x, v.y, v.level));
         const [x, y] = [perspective.x(v.x, lift), perspective.y(v.y, lift)];
-        const d = depth(v);
+        const onDeck = up(v);
+        const d = depthOf(onDeck);
         s.body.setPosition(x, y).setRotation(v.angle).setDepth(d);
         // Taller, the further its shadow falls.
         const fall = v.kind === 'lorry' ? 1.8 : v.kind === 'van' || v.kind === 'suv' ? 1.3 : 1;
         s.shadow.setPosition(x + 2.5 * fall, y + 3.5 * fall).setRotation(v.angle).setDepth(d - 0.02);
-        this.drawLamps(this.lamps[v.level === 1 ? 1 : 0], v, x, y, time);
+        this.drawLamps(this.lamps[onDeck ? 1 : 0], v, x, y, time);
       }
     }
     // Gone, or out of sight.

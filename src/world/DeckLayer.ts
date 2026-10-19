@@ -37,10 +37,11 @@ export class DeckLayer {
     });
   }
 
-  /** Call once a frame: lays the decks near the view where the perspective puts them, at `depth`. */
-  update(view: Phaser.Geom.Rectangle, perspective: Perspective, depth: number): void {
+  /** Call once a frame: lays the decks near the view where the perspective puts them, each at its depth. */
+  update(view: Phaser.Geom.Rectangle, perspective: Perspective, depthOf: (deck: number) => number): void {
     const pad = 200;
-    for (const s of this.sheets) {
+    for (const [i, s] of this.sheets.entries()) {
+      const depth = depthOf(i);
       const near = s.x1 > view.left - pad && s.x0 < view.right + pad && s.y1 > view.top - pad && s.y0 < view.bottom + pad;
       s.sheet.setVisible(near);
       if (!near) continue;

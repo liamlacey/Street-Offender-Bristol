@@ -208,7 +208,7 @@ export class GameScene extends Phaser.Scene {
     this.addTrees();
     this.addLights();
     this.traffic = new Traffic(map);
-    this.trafficLayer = new TrafficLayer(this, this.traffic, (x, y, level) => this.surfaceHeight(x, y, level), {
+    this.trafficLayer = new TrafficLayer(this, this.traffic, (x, y, level) => this.surfaceHeight(x, y, level), (x, y, reach) => this.decks.atEnd(x, y, reach), {
       ground: DEPTH.car - 0.05,
       onDeck: DEPTH.onDeck,
       below: DEPTH.deckBelow - 0.05,
@@ -388,7 +388,10 @@ export class GameScene extends Phaser.Scene {
     this.ground.update(view, this.perspective);
     this.skids.update(view, this.perspective);
     // A bridge is drawn over the car when it's underneath, and under it when it's on top.
-    this.deckLayer.update(view, this.perspective, this.level === 1 ? DEPTH.deckBelow : DEPTH.deckAbove);
+    // (And under it at the end of a bridge you're driving onto or off, where the deck meets the road.)
+    this.deckLayer.update(view, this.perspective, (i) =>
+      this.level === 1 || this.decks.atEnd(this.car.x, this.car.y, CAR_LENGTH / 2 + 4, this.decks.decks[i]) ? DEPTH.deckBelow : DEPTH.deckAbove,
+    );
     this.buildings.update(view, this.perspective, this.car.x, this.car.y);
     // Before the trees: it moves the ones coming down.
     this.wreckage.update(view, this.perspective);

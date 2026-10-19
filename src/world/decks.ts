@@ -154,6 +154,33 @@ export class Decks {
     return 0;
   }
 
+  /**
+   * Whether (x, y) is at an open end of a deck (one where it meets the road):
+   * on it near the end, or just off it, within `reach` px. A vehicle there is
+   * at the deck's height and drawn over it, not under it (half on and half off,
+   * it'd be cut in two). Any deck, or just `only`.
+   */
+  atEnd(x: number, y: number, reach: number, only?: Deck): boolean {
+    for (const deck of only ? [only] : this.decks) {
+      if (x < deck.x0 - reach || x > deck.x1 + reach || y < deck.y0 - reach || y > deck.y1 + reach) continue;
+      const p = deck.road.pts;
+      const n = p.length;
+      for (const [open, ex, ey, ix, iy] of [
+        [deck.open0, p[0], p[1], p[2], p[3]],
+        [deck.open1, p[n - 2], p[n - 1], p[n - 4], p[n - 3]],
+      ] as [boolean, number, number, number, number][]) {
+        if (!open) continue;
+        const len = Math.hypot(ix - ex, iy - ey) || 1;
+        const [ux, uy] = [(ix - ex) / len, (iy - ey) / len];
+        const [rx, ry] = [x - ex, y - ey];
+        const along = rx * ux + ry * uy;
+        const across = Math.abs(rx * uy - ry * ux);
+        if (across <= deck.half + 4 && along > -reach && along < DECK_END + reach) return true;
+      }
+    }
+    return false;
+  }
+
   /** The parapets along both sides of each deck (open at the ends), as walls for the cars on it. */
   parapets(): Segment[] {
     const walls: Segment[] = [];
