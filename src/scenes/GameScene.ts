@@ -98,6 +98,8 @@ const VIEW_AT_REST = 270;
 const VIEW_AT_SPEED = 620;
 const FULL_SPEED = 400;
 const PULL_EASE = 1.7;
+/** On foot, the view at rest is this much of what it is in a car (closer in). */
+const ON_FOOT_VIEW = 0.6;
 /**
  * VIEW_AT_REST is for a phone (its screen's shorter side PHONE_SIDE css px or
  * less): on a bigger screen, the camera's further back at rest, so it doesn't
@@ -1212,7 +1214,8 @@ export class GameScene extends Phaser.Scene {
     this.pace += (Math.hypot(car.vx, car.vy) - this.pace) * Math.min(1, dt * 4);
     const t = Math.min(this.pace / FULL_SPEED, 1) ** PULL_EASE;
     const side = Math.min(this.scale.width, this.scale.height);
-    const rest = restView(side);
+    // (On foot, closer in.)
+    const rest = restView(side) * (this.onFoot ? ON_FOOT_VIEW : 1);
     const target = side / (rest + (VIEW_AT_SPEED - rest) * t);
     [this.zoom, this.zoomRate] = spring(this.zoom, this.zoomRate, target, 2, dt);
     cam.setZoom(this.zoom);
