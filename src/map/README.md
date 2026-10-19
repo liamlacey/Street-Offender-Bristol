@@ -476,7 +476,7 @@ touched:
 | 45, from the side by a wheel | Half the time, its hubcap comes off |
 | An end that's taken 160 in all | Its bumper falls off |
 
-It all adds up, hit after hit (the bumper's off once its end has had enough), and stays.
+It all adds up, hit after hit (the bumper's off once its end has had enough), and stays (RESET repairs your car).
 A car pressed against something is hit once, not over and over: hits within 0.15 s count
 only if half as hard again. A bumper on the road breaks into bits run over hard
 enough (90); a mirror smashes (50).

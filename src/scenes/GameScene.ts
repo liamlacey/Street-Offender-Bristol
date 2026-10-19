@@ -695,14 +695,17 @@ export class GameScene extends Phaser.Scene {
     if (this.sinking > 2.2) this.resetCar();
   }
 
-  /** Back on the road, where it last was safely. */
+  /** Back on the road, where it last was safely, and repaired. */
   private resetCar(): void {
     Object.assign(this.car, { x: this.safe.x, y: this.safe.y, heading: this.safe.heading, vx: 0, vy: 0, spin: 0 });
     this.sinking = -1;
     this.level = 0;
     this.surface = this.surfaces.at(this.car.x, this.car.y);
     this.effects.reset();
-    this.carSprite.setAlpha(1).setTint(0xffffff);
+    // Good as new.
+    Object.assign(this.wreck, newWreck());
+    this.wreckShown = this.wreck.version;
+    this.carSprite.setTexture(TEX.car).setAlpha(1).setTint(0xffffff);
   }
 
   private drawCar(): void {
