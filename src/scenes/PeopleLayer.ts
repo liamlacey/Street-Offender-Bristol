@@ -141,9 +141,14 @@ export class PeopleLayer {
       } else if (s.texture.key !== key) s.setTexture(key);
       // Head height (lying down, the ground), and how high they've been thrown: up over the car, and a little bigger.
       const lift = perspective.lift(this.base(p.x, p.y, p.level) + (p.mode === 'down' ? 0.2 : p.mode === 'sit' ? 0.8 : 1.2) * 8 + p.z);
+      // Knocked down: head over heels in the air (seen from above, shortening and flipping end over end),
+      // or rolling over on the ground (lying across the way they're rolling, flipping side over side).
+      const size = (SIZE / ART_SCALE) * (1 + p.z / 160);
+      const flip = (a: number) => (Math.cos(a) < 0 ? -1 : 1) * Math.max(0.3, Math.abs(Math.cos(a)));
+      const [fx, fy] = pose !== 'down' ? [1, 1] : p.z > 0 ? [flip(p.tumble), 1] : [1, flip(p.roll)];
       s.setPosition(perspective.x(p.x, lift), perspective.y(p.y, lift))
         .setRotation(p.angle)
-        .setScale((SIZE / ART_SCALE) * (1 + p.z / 160))
+        .setScale(size * fx, size * fy)
         .setDepth(p.level === 1 ? this.depths.deck + (p.z > 0 ? 0.02 : 0) : p.z > 0 ? this.depths.air : this.depths.ground);
     }
     for (const [p, s] of this.sprites) {

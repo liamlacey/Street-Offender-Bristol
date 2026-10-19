@@ -31,8 +31,10 @@ const NEAR = 30 * M;
 const FAR = 55 * M;
 /** A hit faster than this, px/s (about 15 mph), and they stay down. */
 const HURT = 6.7 * M;
-/** Pulling them back down when they're thrown up, px/s². */
-const GRAVITY = 9.8 * M;
+/** Pulling them back down when they're thrown up, px/s²: more than real, so they come down heavily rather than float. */
+const GRAVITY = 1.8 * 9.8 * M;
+/** How fast someone knocked down rolls over on the ground, radians/s. */
+const ROLL = 13;
 /** How long they're down after a slower hit, s. */
 const DOWN: [number, number] = [2.5, 4.5];
 /** Running from danger this long, s. */
@@ -115,10 +117,18 @@ export interface Person {
   /** Lying under a vehicle (its id, or null): how far along it they were, px (for its wheels going over them). */
   under: number | null;
   underAlong: number;
-  /** Off the ground, toppling over a car that hit them: how high, px, and how fast going up; and how fast they're turning over, radians a second. */
+  /**
+   * Off the ground, toppling over a car that hit them: how high, px, and how
+   * fast going up; how fast they're turning head over heels, radians a second,
+   * and how far over they've turned. Down on the ground: how far they've rolled
+   * over sideways, and how far they've still to roll, radians.
+   */
   z: number;
   vz: number;
   spin: number;
+  tumble: number;
+  roll: number;
+  rollLeft: number;
 }
 
 /** A vehicle as the people see it: where, which way, how big, how fast; a bus's stop. */
@@ -513,6 +523,9 @@ export class People {
       z: 0,
       vz: 0,
       spin: 0,
+      tumble: 0,
+      roll: 0,
+      rollLeft: 0,
     };
     this.people.push(p);
     return p;
@@ -1022,26 +1035,33 @@ export class People {
     if (walkable(nx, ny, p.level)) [p.x, p.y] = [nx, ny];
     else [p.vx, p.vy] = [0, 0];
     if (p.z > 0 || p.vz > 0) {
-      // Up over the bonnet and roof, turning over, and down again (a little bounce if they come down hard).
+      // Up over the bonnet and roof, head over heels, and down again.
       p.vz -= GRAVITY * dt;
       p.z += p.vz * dt;
-      p.angle += p.spin * dt;
+      p.tumble += p.spin * dt;
       if (p.z <= 0) {
+        // Down heavily, flat (no bounce), losing half the way they were going; then rolling over
+        // once or twice, lying across it.
         p.z = 0;
-        p.vz = p.vz < -3.5 * M ? -p.vz * 0.12 : 0;
-        p.spin *= 0.2;
-        // Coming down heavily: most of the way they were going is lost.
-        p.vx *= 0.45;
-        p.vy *= 0.45;
+        p.vz = 0;
+        p.spin = 0;
+        p.tumble = 0;
+        p.vx *= 0.5;
+        p.vy *= 0.5;
+        this.fallOver(p, Math.hypot(p.vx, p.vy) > 1.2 * M ? 2 : 1);
       }
       p.speed = Math.hypot(p.vx, p.vy);
       return;
     }
-    // On the ground: a short slide to a stop.
-    const k = Math.exp(-(p.mode === 'dive' ? 3 : 9) * dt);
+    // On the ground: rolling over (and stopping as they stop rolling), then lying still.
+    if (p.rollLeft > 0) {
+      const step = Math.min(p.rollLeft, ROLL * dt);
+      p.roll += step;
+      p.rollLeft -= step;
+    }
+    const k = Math.exp(-(p.mode === 'dive' ? 3 : p.rollLeft > 0 ? 6 : 14) * dt);
     p.vx *= k;
     p.vy *= k;
-    p.spin = 0;
     p.speed = Math.hypot(p.vx, p.vy);
     p.timer -= dt;
     if (p.hurt || p.timer > 0) return;
@@ -1119,6 +1139,13 @@ export class People {
     }
   }
 
+  /** Falling over, onto the ground: lying across the way they're going, rolling over `halves` half turns. */
+  private fallOver(p: Person, halves: number): void {
+    if (Math.hypot(p.vx, p.vy) > 0.1 * M) p.angle = Math.atan2(p.vy, p.vx) + Math.PI / 2;
+    p.roll = Math.round(p.roll / Math.PI) * Math.PI;
+    p.rollLeft = Math.PI * halves;
+  }
+
   /**
    * Lying in a vehicle's way: it goes over them (they're too heavy to be
    * shoved along), each axle bumping over them as it reaches them, which
@@ -1167,9 +1194,14 @@ export class People {
     p.vx = v.vx * f - (v.vy / v0) * side * shove;
     p.vy = v.vy * f + (v.vx / v0) * side * shove;
     p.z = 0;
-    p.vz = speed < 4 * M ? 0 : Math.min(5.6 * M, 1.2 * M + (speed - 4 * M) * 0.35);
-    p.spin = p.vz ? side * (2.5 + this.rand() * 2) : 0;
-    p.angle = Math.atan2(v.vy, v.vx) + (this.rand() - 0.5) * 0.6;
+    p.vz = speed < 4 * M ? 0 : Math.min(6.2 * M, 1.6 * M + (speed - 4 * M) * 0.45);
+    // Head over heels in the air: half a turn, or a whole one when it's fast, landing flat.
+    const air = (2 * p.vz) / GRAVITY;
+    p.tumble = 0;
+    p.spin = p.vz ? (side * Math.PI * (speed > 10 * M ? 2 : 1)) / air : 0;
+    p.angle = Math.atan2(v.vy, v.vx) + (this.rand() - 0.5) * 0.3;
+    // Slow: straight over onto the ground, and rolled over once.
+    if (!p.vz) this.fallOver(p, 1);
     if (speed > HURT) p.hurt = true;
     p.timer = DOWN[0] + this.rand() * (DOWN[1] - DOWN[0]);
     // What hit them loses some of its speed to them (a car's 15 times their weight, but they're thrown at its speed, near enough), and to the knock.

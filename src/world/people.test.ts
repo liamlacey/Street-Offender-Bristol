@@ -88,8 +88,8 @@ describe('people', () => {
     expect(a.mode).not.toBe('down');
     expect(b.mode).toBe('down');
     expect(b.hurt).toBe(true);
-    // Up over the car (higher than its roof), and down again not far from where they were hit.
-    expect(high).toBeGreaterThan(1.5 * 8);
+    // Up over the bonnet, and down again not far from where they were hit.
+    expect(high).toBeGreaterThan(0.9 * 8);
     expect(b.z).toBe(0);
     expect(Math.hypot(b.x - bx, b.y - by)).toBeLessThan(5 * 8);
   });
