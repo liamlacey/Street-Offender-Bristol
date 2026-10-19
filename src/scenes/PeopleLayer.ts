@@ -14,12 +14,14 @@ const BOTTOMS = ['#22293a', '#3a3a3a', '#5a4a36', '#2a3f5f'];
 const HAIR = ['#1c1410', '#4a2e1a', '#8a6a3a', '#c9b07a', '#6e6e6e', '#a8452a'];
 const SKIN = ['#e6c2a2', '#c99a74', '#8d5e3c', '#5c3b25'];
 
+/** One of the looks' clothes, hair and skin. */
+export function clothes(look: number): { top: string; bottom: string; hair: string; skin: string } {
+  return { top: TOPS[look % TOPS.length], bottom: BOTTOMS[Math.floor(look / 3) % BOTTOMS.length], hair: HAIR[Math.floor(look / 5) % HAIR.length], skin: SKIN[Math.floor(look / 7) % SKIN.length] };
+}
+
 /** A person from above, facing right: `pose` is standing, a step (one foot forward, then the other), or lying down. */
 function person(ctx: Ctx, look: number, pose: Pose): void {
-  const top = TOPS[look % TOPS.length];
-  const bottom = BOTTOMS[Math.floor(look / 3) % BOTTOMS.length];
-  const hair = HAIR[Math.floor(look / 5) % HAIR.length];
-  const skin = SKIN[Math.floor(look / 7) % SKIN.length];
+  const { top, bottom, hair, skin } = clothes(look);
   const ellipse = (x: number, y: number, rx: number, ry: number, fill: string) => {
     ctx.fillStyle = fill;
     ctx.beginPath();

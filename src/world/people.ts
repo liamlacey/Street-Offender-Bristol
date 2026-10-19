@@ -1125,6 +1125,17 @@ export class People {
     }
   }
 
+  /**
+   * A cyclist knocked off their bike, going `speed` px/s: down on the road
+   * at (x, y), facing `angle`; hurt if it was fast. (Up again, they go on on
+   * foot.) `look` is their clothes, as they were riding.
+   */
+  unseat(x: number, y: number, angle: number, level: number, speed: number, look: number): Person {
+    const p = this.make(x, y, 'down');
+    Object.assign(p, { look: look % LOOKS, angle, level, was: 'walk' as Mode, hurt: speed > HURT, timer: DOWN[0] + this.rand() * (DOWN[1] - DOWN[0]) });
+    return p;
+  }
+
   /** Knocked down by a vehicle going `speed` px/s: thrown, and down for a moment, or for good. */
   knock(p: Person, v: { vx: number; vy: number; id?: number }, speed: number): void {
     if (p.mode !== 'down' && p.mode !== 'flee' && p.mode !== 'dive') p.was = p.mode;

@@ -138,7 +138,7 @@ export function gapFor(kind: WallKind, speed: number, weight = 1): number {
   return w.gap * Math.min(2, Math.max(1, (speed * weight) / w.strength));
 }
 
-export type DebrisKind = 'pump' | 'meter' | 'clockface' | 'post' | 'ring' | 'plastic' | 'arm' | 'log' | 'billet' | 'splinter' | 'plank' | 'foliage' | 'twig' | 'glass' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head' | 'bumper' | 'mirror' | 'hubcap' | 'lens';
+export type DebrisKind = 'pump' | 'meter' | 'clockface' | 'post' | 'ring' | 'plastic' | 'arm' | 'log' | 'billet' | 'splinter' | 'plank' | 'foliage' | 'twig' | 'glass' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head' | 'bumper' | 'mirror' | 'hubcap' | 'lens' | 'bike';
 
 /** A piece of what's broken, flying off: it ends up somewhere, in the way. */
 export interface Debris {
@@ -184,7 +184,15 @@ const PIECES: Record<DebrisKind, { r: number; length?: number; invMass: number }
   mirror: { r: 1.4, invMass: 25 },
   hubcap: { r: 2.2, invMass: 20 },
   lens: { r: 0.8, invMass: 40 },
+  // A bike on its side: off a cyclist knocked down, or out of a rack knocked over.
+  bike: { r: 2.4, length: 13, invMass: 12 },
 };
+
+/** How many bikes are locked to a rack (the same each time for the same rack): none to four. */
+export function racked(x: number, y: number): number {
+  const h = Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
+  return Math.floor(h * 5);
+}
 
 /**
  * The pieces something breaks into, hit at (x, y) by a vehicle going
@@ -252,7 +260,8 @@ export function fallen(kind: Exclude<ThingKind, Structure>, x: number, y: number
     case 'lifering':
       return [lying('post', 6, 0.2), lying('ring', 12, 0.6)];
     case 'bikes':
-      return [lying('rail', 6, 0.3), lying('rail', 2, 0.4), lying('rail', 9, 0.35)];
+      // Its stands, and the bikes locked to them.
+      return [lying('rail', 6, 0.3), lying('rail', 2, 0.4), lying('rail', 9, 0.35), ...Array.from({ length: racked(x, y) }, (_, i) => lying('bike', 3 + i * 3, 0.25 + i * 0.05))];
     case 'fountain':
       return [lying('rubble', 0, 0.2), lying('rubble', 6, 0.3), lying('rubble', 12, 0.35), lying('brick', 4, 0.4), lying('brick', 9, 0.45), lying('rubble', -5, 0.15)];
     case 'statue':

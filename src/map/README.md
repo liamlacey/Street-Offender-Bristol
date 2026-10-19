@@ -477,6 +477,35 @@ more than rolling), bumping into the walls, posts and other vehicles (and knocki
 them about too), waits 1.6 s, then drives gently back into its lane (reversing first if
 it's pointing the wrong way) and carries on. A parked car stays where it ends up.
 
+**Cyclists** (`'bike'` in the traffic, so they keep to the same rules as everything
+else: the lights, giving way, queueing):
+
+- 10% of what comes into being, in the kerb lane only: three times as likely on a road
+  with a cycle lane, 60% as likely on a primary or trunk road. They keep to the kerb
+  lane at junctions (but to turn right), never change lanes or overtake, and ride at
+  5.3 m/s on the flat (each at their own pace, as drivers do, and never faster than the
+  road's speed), pulling away less than half as briskly as a car, and much slower uphill.
+- **Where in the road:** along the middle of the cycle lane on their left (from
+  `cycleway*=lane`), or of a bus lane bikes may use; with neither, 0.8 m out from the
+  kerb (or from the parking bays). Never on the pavement.
+- **At the lights:** where there's a box for bikes in front of the stop line (an
+  advanced stop line, `cycleway=asl` on the road: its front line within 8 m past the
+  stop line), they ride on up into it and stop at its front line; the cars stop at
+  their stop line behind it.
+- **Being passed:** a cyclist ahead is gone round, as something stuck in the road is:
+  in the next lane, if there is one going the same way; on a two-way road, out past
+  them when nothing's coming, only as far as gives them a car's width and 1.5 m (the
+  Highway Code's room), and back in. A cyclist in a cycle lane is out of the cars' way.
+- **Knocked off:** a bike and its rider are about 90 kg (0.08 of your car). Hit (by
+  you, or by anything knocked about) harder than an impulse of 1 (about 1 m/s
+  between them), the rider comes off: the bike skids down on its side where it was
+  (loose, knocked about like any wreckage), and the rider's down on the road by it,
+  in their own clothes (as people are: up again in a few seconds and on their way on
+  foot, unless it was faster than 6.7 m/s). Bikes aren't dented, and don't honk.
+
+**Bikes at the racks** (`amenity=bicycle_parking`): none to four bikes locked to each
+rack's stands (the same each time for the same rack); knocked over, they fall with it.
+
 ## People
 
 **Where they go** (worked out when the map's built: `venues`): the businesses counted for

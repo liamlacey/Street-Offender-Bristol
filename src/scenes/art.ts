@@ -414,6 +414,53 @@ export function createArt(scene: Phaser.Scene): void {
     ctx.closePath();
     ctx.fill();
   });
+  // A bike lying on its side: both wheels, its frame, the bars and saddle.
+  canvasTexture(scene, TEX.debris('bike'), 16, 7, (ctx) => {
+    ctx.lineWidth = 0.7;
+    ctx.strokeStyle = '#161616';
+    for (const x of [3.3, 12.7]) {
+      ctx.beginPath();
+      ctx.arc(x, 3.6, 2.9, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#22508f';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(3.3, 3.6);
+    ctx.lineTo(7, 3.8);
+    ctx.lineTo(11.4, 1.6);
+    ctx.lineTo(6.4, 1.4);
+    ctx.lineTo(7, 3.8);
+    ctx.moveTo(11.4, 1.6);
+    ctx.lineTo(12.7, 3.6);
+    ctx.stroke();
+    ctx.fillStyle = '#1d1e22';
+    ctx.fillRect(5.4, 0.4, 2.2, 0.8);
+    ctx.fillRect(10.8, 0.2, 1.6, 0.9);
+  });
+  // A rack's stands with bikes locked to them: none to four (see `racked`), upright, either side of the stands.
+  for (let n = 0; n <= 4; n++) {
+    canvasTexture(scene, `${TEX.prop('bikes')}-${n}`, 16, 18, (ctx) => {
+      const frames = ['#1d1e22', '#b21f24', '#22508f', '#b8bcc1', '#2f5d3a', '#e8e9eb'];
+      const slots = [2, 9.6, 4.6, 14, 7, 11.6];
+      for (let k = 0; k < n; k++) {
+        const x = slots[k];
+        const flip = k % 2 ? 1 : -1;
+        ctx.fillStyle = '#141414';
+        ctx.fillRect(x - 0.4, 1, 0.8, 4.2);
+        ctx.fillRect(x - 0.4, 12.8, 0.8, 4.2);
+        ctx.fillStyle = frames[(k * 3 + n) % frames.length];
+        ctx.fillRect(x - 0.35, 4, 0.7, 10);
+        // Bars at one end, saddle nearer the other.
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(x - 2, flip > 0 ? 13 : 4.2, 4, 0.7);
+        ctx.fillRect(x - 0.6, flip > 0 ? 6 : 11.2, 1.2, 1.6);
+      }
+      // The stands: hoops of steel, seen from above.
+      ctx.fillStyle = '#7a7f86';
+      for (const x of [3.3, 8, 12.7]) ctx.fillRect(x - 0.5, 6, 1, 6);
+    });
+  }
   // A shard of broken glass, catching the light.
   canvasTexture(scene, TEX.debris('glass'), 3, 3, (ctx) => {
     ctx.fillStyle = 'rgba(200, 228, 240, 0.9)';

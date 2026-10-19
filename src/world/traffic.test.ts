@@ -290,3 +290,70 @@ describe('damage', () => {
     expect(v.mode).toBe('parked');
   });
 });
+
+describe('cyclists', () => {
+  it('ride along the cycle lane where there is one, out of the way of the cars', () => {
+    const main = road('primary', 80, [0, 400, 2000, 400], { lanes: [{ side: 1, kind: 'cycle', width: 12 }], laneSpans: [0, 2000] });
+    const traffic = quiet(crossroads({ width: 2000, roads: [main] } as Partial<GameMap>));
+    const lane = traffic.lanes.find((l) => l.dir === 1 && l.index === 0)!;
+    expect(lane.cycleLane).toBe(true);
+    const bike = traffic.spawn(lane, 10, 'bike');
+    const car = traffic.spawn(lane, -60, 'hatch');
+    car.speed = 12 * 8;
+    run(traffic, 6, { ...away, x: bike.x, y: 900 });
+    // In the middle of the cycle lane (34 px north of the road's line), at a cyclist's speed.
+    expect(Math.abs(bike.y - (400 - 34))).toBeLessThan(2);
+    expect(bike.speed).toBeGreaterThan(3.5 * 8);
+    expect(bike.speed).toBeLessThan(7 * 8);
+    // The car's gone on past it, without pulling out.
+    expect(car.x).toBeGreaterThan(bike.x + 40);
+    expect(traffic.stats.overtakes).toBe(0);
+  });
+
+  it('keep to the left, near the kerb, where there is no cycle lane, and are given room going past', () => {
+    const map = crossroads({ width: 3000, roads: [road('street', 64, [0, 400, 3000, 400])] } as Partial<GameMap>);
+    const traffic = quiet(map);
+    const east = traffic.lanes.find((l) => l.dir === 1)!;
+    const bike = traffic.spawn(east, 300, 'bike');
+    const car = traffic.spawn(east, 60, 'hatch');
+    let closest = Infinity;
+    for (let t = 0; t < 25; t += 1 / 60) {
+      traffic.update(1 / 60, { ...away, x: car.x, y: 900 }, { x0: car.x - 400, y0: 0, x1: car.x + 400, y1: 800 }, green);
+      // Alongside: how far apart their sides are.
+      if (Math.abs(car.x - bike.x) < (car.length + bike.length) / 2) closest = Math.min(closest, Math.abs(car.y - bike.y) - car.r - bike.r);
+    }
+    // 0.8 m in from the kerb (the road's 8 m wide: the kerb's 32 px north of its line).
+    expect(Math.abs(bike.y - (400 - 32 + 6.4))).toBeLessThan(2);
+    expect(car.x).toBeGreaterThan(bike.x + 40);
+    expect(traffic.stats.overtakes).toBe(1);
+    expect(closest).toBeGreaterThan(1.4 * 8);
+  });
+
+  it('stop at a red light in the box for bikes in front of the stop line', () => {
+    const map = crossroads({
+      signals: [{ x: 360, y: 360, angle: 0, stop: [320, 368, 320, 400], controller: 0, group: 0 }],
+      controllers: [{ x: 400, y: 400, groups: 2, walk: false }],
+      paint: [{ kind: 'asl', x: 356, y: 384, angle: 0, width: 32 }],
+    } as Partial<GameMap>);
+    const traffic = quiet(map);
+    const lane = traffic.lanes.find((l) => l.road === 0 && l.dir === 1 && l.pts[0] < 400)!;
+    expect(lane.stops[0].box).toBeGreaterThan(30);
+    const bike = traffic.spawn(lane, 10, 'bike');
+    run(traffic, 15, away, () => 'red');
+    expect(bike.speed).toBeLessThan(1);
+    // Past the cars' stop line (x = 320), up to the box's front (x = 356).
+    expect(bike.x + bike.length / 2).toBeGreaterThan(330);
+    expect(bike.x + bike.length / 2).toBeLessThan(358);
+  });
+
+  it('knocked hard enough, come off: off the road, for the scene to put down', () => {
+    const traffic = quiet(crossroads());
+    const lane = traffic.lanes.find((l) => l.road === 0 && l.dir === 1)!;
+    const bike = traffic.spawn(lane, 10, 'bike');
+    traffic.knock(bike, 0.5);
+    expect(traffic.vehicles).toContain(bike);
+    traffic.knock(bike, 3);
+    expect(traffic.vehicles).not.toContain(bike);
+    expect(traffic.unseated.map((u) => u.bike)).toEqual([bike]);
+  });
+});

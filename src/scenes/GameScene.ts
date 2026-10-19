@@ -43,7 +43,7 @@ import { Wreckage } from './Wreckage';
 import { Kerbs } from '../world/kerbs';
 import { Humps } from '../world/humps';
 import { WallLayer } from '../world/WallLayer';
-import { type Debris, type DebrisKind, debris, impactSpeed } from '../world/damage';
+import { type Debris, type DebrisKind, debris, impactSpeed, racked } from '../world/damage';
 import { HudScene, RESET_EVENT, STREET_EVENT } from './HudScene';
 import { SkidMarks } from './SkidMarks';
 import { TrafficLayer } from './TrafficLayer';
@@ -337,8 +337,9 @@ export class GameScene extends Phaser.Scene {
       // Those on a bridge stand on its deck, and are drawn over it.
       const deck = p.level === 1 ? this.decks.over(p.x, p.y) : null;
       const z = deck ? this.decks.height(deck.deck, deck.along) : this.groundAt(p.x, p.y);
+      // (A bike rack with the bikes locked to it.)
       const image = this.add
-        .image(p.x, p.y, TEX.prop(p.kind))
+        .image(p.x, p.y, p.kind === 'bikes' ? `${TEX.prop('bikes')}-${racked(p.x, p.y)}` : TEX.prop(p.kind))
         .setScale(1 / ART_SCALE)
         .setRotation(p.angle ?? 0)
         .setDepth(deck ? DEPTH.onDeck : DEPTH.props)
@@ -673,8 +674,18 @@ export class GameScene extends Phaser.Scene {
       this.dent(h.b, h.x, h.y, h.impulse);
     }
     this.traffic.hits.length = 0;
+    // Cyclists knocked off: the bike down on its side, skidding on the way it was going; the rider down by it.
+    for (const { bike, impulse } of this.traffic.unseated) {
+      const [vx, vy] = [bike.vx, bike.vy];
+      this.addDebris({ kind: 'bike', x: bike.x, y: bike.y, vx, vy, angle: bike.angle + (Math.random() - 0.5) * 0.8, spin: (Math.random() - 0.5) * 3, r: 2.4, length: 13, invMass: 12 }, bike.level);
+      const speed = Math.hypot(vx, vy);
+      const [ux, uy] = speed > 1 ? [vx / speed, vy / speed] : [Math.cos(bike.angle), Math.sin(bike.angle)];
+      this.people.unseat(bike.x + ux * 10, bike.y + uy * 10, bike.angle, bike.level, speed, bike.rider ?? 0);
+      if (this.hearing(bike.x, bike.y) > 0) this.audio?.crash(Math.min(80, 20 + impulse * 4));
+    }
+    this.traffic.unseated.length = 0;
     for (const v of this.traffic.vehicles) {
-      if (v.annoyed > 2.5) {
+      if (v.annoyed > 2.5 && v.kind !== 'bike') {
         this.audio?.horn(this.hearing(v.x, v.y), Math.random() < 0.3);
         v.annoyed = -3 - Math.random() * 3;
       }
@@ -704,6 +715,8 @@ export class GameScene extends Phaser.Scene {
    * ground (a smashed light's glass, a mirror, a hubcap, the bumper).
    */
   private dent(v: Vehicle | null, x: number, y: number, impulse: number): void {
+    // (A bike isn't dented: its rider comes off it, see `unseated`.)
+    if (v?.kind === 'bike') return;
     const body = v ? { x: v.x, y: v.y, angle: v.angle, vx: v.vx, vy: v.vy, level: v.level } : { x: this.car.x, y: this.car.y, angle: this.car.heading, vx: this.car.vx, vy: this.car.vy, level: this.level };
     const shape = v ? vehicleShape(v) : PLAYER_SHAPE;
     const wreck = v ? (v.wreck ??= newWreck()) : this.wreck;

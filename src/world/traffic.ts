@@ -22,14 +22,14 @@ const M = 8;
 
 // --- The vehicles ---
 
-export type VehicleKind = 'small' | 'hatch' | 'saloon' | 'estate' | 'suv' | 'van' | 'lorry' | 'bus' | 'double';
+export type VehicleKind = 'small' | 'hatch' | 'saloon' | 'estate' | 'suv' | 'van' | 'lorry' | 'bus' | 'double' | 'bike';
 
 /**
  * Each kind: how long and wide (px; real sizes, a tenth up, to match your car),
  * how heavy (your car's 1), how common in the traffic and parked, and which
  * colours it comes in.
  */
-export const VEHICLES: Record<VehicleKind, { length: number; width: number; mass: number; traffic: number; parked: number; paint: 'car' | 'van' | 'lorry' | 'bus' }> = {
+export const VEHICLES: Record<VehicleKind, { length: number; width: number; mass: number; traffic: number; parked: number; paint: 'car' | 'van' | 'lorry' | 'bus' | 'bike' }> = {
   small: { length: 3.7 * 1.1 * M, width: 1.65 * 1.1 * M, mass: 0.8, traffic: 0.18, parked: 0.22, paint: 'car' },
   hatch: { length: 4.1 * 1.1 * M, width: 1.75 * 1.1 * M, mass: 0.9, traffic: 0.26, parked: 0.27, paint: 'car' },
   saloon: { length: 4.7 * 1.1 * M, width: 1.82 * 1.1 * M, mass: 1, traffic: 0.14, parked: 0.14, paint: 'car' },
@@ -40,10 +40,14 @@ export const VEHICLES: Record<VehicleKind, { length: number; width: number; mass
   // Buses only run their routes (see BusService): a single-decker and a double-decker.
   bus: { length: 12 * 1.1 * M, width: 2.55 * 1.1 * M, mass: 9, traffic: 0, parked: 0, paint: 'bus' },
   double: { length: 10.6 * 1.1 * M, width: 2.55 * 1.1 * M, mass: 11, traffic: 0, parked: 0, paint: 'bus' },
+  // A bike and its rider (about 90 kg, against your car's tonne and more).
+  bike: { length: 1.8 * 1.1 * M, width: 0.65 * 1.1 * M, mass: 0.08, traffic: 0.1, parked: 0, paint: 'bike' },
 };
 
 /** The colours, about as common as on Britain's roads (grey, black and white the most); vans mostly white; lorries' cabs. */
-export const COLOURS: Record<'car' | 'van' | 'lorry' | 'bus', [string, number][]> = {
+export const COLOURS: Record<'car' | 'van' | 'lorry' | 'bus' | 'bike', [string, number][]> = {
+  // A bike's frame.
+  bike: [['#1d1e22', 20], ['#b8bcc1', 12], ['#22508f', 12], ['#b21f24', 10], ['#2f5d3a', 8], ['#e8e9eb', 8], ['#e07a1f', 5], ['#2a8fa3', 5], ['#e2c23b', 3]],
   // A bus whose route hasn't a colour mapped.
   bus: [['#3b6db3', 1]],
   car: [
@@ -121,6 +125,8 @@ export interface Vehicle extends Body {
   bus?: BusService;
   /** Its way runs out (a road off the map's edge): it drives on to the end, and goes. */
   ends?: boolean;
+  /** A cyclist's rider's clothes (one of the people's looks). */
+  rider?: number;
 }
 
 /** A bus on its route. */
@@ -198,14 +204,17 @@ export interface Lane extends Path {
   speed: number;
   rank: number;
   density: number;
-  /** Where the traffic lights' stop lines are along it (and which lights). */
-  stops: { s: number; signal: number }[];
+  /** Where the traffic lights' stop lines are along it (and which lights); and, where there's a box for bikes in front of it, how far on its front line is, px (where the bikes stop). */
+  stops: { s: number; signal: number; box?: number }[];
   /** How busy the road is (see Road.activity). */
   activity: number;
   /** How wide a bus lane there is on its left (buses drive in it), px; 0 for none. */
   busLane: number;
   /** At its end, it gives way to the traffic on the road it joins. */
   giveWay: boolean;
+  /** Where the bikes ride, px over from its middle (+ to its left): along the cycle lane, if it has one (`cycleLane`), else near the kerb; in the kerb lane only. */
+  cycleAt: number;
+  cycleLane: boolean;
 }
 
 interface Node {
@@ -227,9 +236,17 @@ const MAX_SPEED = 13.4 * M;
 const DENSITY: Partial<Record<RoadKind, number>> = { trunk: 3.6, primary: 3.2, secondary: 2.6, tertiary: 2.1, street: 1 };
 const BUSIEST = 3;
 /** How fast each kind's driven, against the road's usual speed (before the driver's own pace). */
-const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85, bus: 0.85, double: 0.82 };
+const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85, bus: 0.85, double: 0.82, bike: 1 };
+/** How fast a cyclist rides on the flat, px/s (each faster or slower: see pace); how much less briskly they pull away than a car. */
+const BIKE_SPEED = 5.3 * M;
+const BIKE_ACCEL = 0.4;
+/** How far a cyclist keeps from the kerb, px, where there's no cycle lane; and how much room a driver gives one going past, px (the Highway Code's 1.5 m). */
+const BIKE_KERB = 0.8 * M;
+const BIKE_ROOM = 1.5 * M;
+/** A cyclist hit harder than this (an impulse, your car's mass × px/s) comes off. */
+const UNSEAT = 1;
 /** Up a hill, how much each kind slows for each 1 in 1 of it (a lorry labours; a car barely notices); and how strongly gravity holds it back pulling away. */
-const CLIMB: Record<VehicleKind, number> = { small: 0.8, hatch: 0.6, saloon: 0.5, estate: 0.5, suv: 0.5, van: 1.3, lorry: 3, bus: 2.2, double: 2.4 };
+const CLIMB: Record<VehicleKind, number> = { small: 0.8, hatch: 0.6, saloon: 0.5, estate: 0.5, suv: 0.5, van: 1.3, lorry: 3, bus: 2.2, double: 2.4, bike: 7 };
 const GRAVITY = 9.81 * M;
 /** Dawdling: how often a driver slows a moment, a second (more often the busier the street), and for how long. */
 const DAWDLE = 0.003;
@@ -410,6 +427,7 @@ export function buildLanes(map: GameMap): { lanes: Lane[]; nodes: Node[] } {
           rank: RANK[r.kind] ?? 1,
           activity: r.activity ?? 0,
           busLane: index === 0 ? (r.lanes ?? []).filter((l) => l.kind === 'bus' && l.side === dir).reduce((w, l) => w + l.width, 0) : 0,
+          ...cycling(r, dir, index, left, offset),
           density: ((DENSITY[r.kind] ?? 0.6) * Math.min(BUSIEST, 1 + (r.activity ?? 0) / 15)) / (100 * M),
           stops: [],
           giveWay: false,
@@ -434,6 +452,18 @@ export function buildLanes(map: GameMap): { lanes: Lane[]; nodes: Node[] } {
       lane.stops.push({ s, signal });
     }
   });
+  // A box for bikes in front of a stop line (an advanced stop line): its front line, where they stop.
+  for (const m of (map.paint ?? []).filter((p) => p.kind === 'asl')) {
+    const [ux, uy] = [Math.cos(m.angle), Math.sin(m.angle)];
+    for (const lane of lanes) {
+      const { s, d } = nearestOn(lane, m.x, m.y);
+      if (d > map.roads[lane.road].width / 2 + M) continue;
+      const [, , tx, ty] = pathAt(lane, s);
+      if (tx * ux + ty * uy < 0.8) continue;
+      const st = lane.stops.find((st) => s - st.s > 0 && s - st.s < 8 * M);
+      if (st) st.box = s - st.s;
+    }
+  }
   for (const lane of lanes) lane.stops.sort((a, b) => a.s - b.s);
   // Giving way: at the end of a minor road (to a more major one), or where it's painted.
   const giveWays = (map.paint ?? []).filter((m) => m.kind === 'giveway');
@@ -450,6 +480,22 @@ export function buildLanes(map: GameMap): { lanes: Lane[]; nodes: Node[] } {
 }
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
+
+/**
+ * Where the bikes ride along a lane (over from its middle, + to its left):
+ * in the kerb lane, along the middle of the cycle lane (or a bus lane they
+ * share) on its left, if there is one; otherwise near the kerb (in from any
+ * parking bays). In the other lanes, along the middle.
+ */
+function cycling(r: Road, dir: 1 | -1, index: number, left: number, offset: number): { cycleAt: number; cycleLane: boolean } {
+  if (index > 0) return { cycleAt: 0, cycleLane: false };
+  const painted = (r.lanes ?? []).filter((l) => l.side === dir);
+  // (Painted lanes are measured in from the kerb.)
+  const lane = painted.find((l) => l.kind === 'cycle') ?? painted.find((l) => l.kind === 'bus' && l.bikes);
+  if (lane) return { cycleAt: left - lane.width / 2 - offset, cycleLane: true };
+  const bays = painted.filter((l) => l.kind === 'parking').reduce((w, l) => Math.max(w, l.width), 0);
+  return { cycleAt: Math.max(0, left - bays - BIKE_KERB - offset), cycleLane: false };
+}
 
 /** The turn from the end of one lane to the start of the next: a smooth curve, and where it's sharpest. */
 export function turnBetween(a: Lane, b: Lane): Path {
@@ -579,6 +625,8 @@ export class Traffic {
   readonly stats = { laneChanges: 0, overtakes: 0, letOut: 0 };
   /** Vehicles that have bumped into each other since this was last emptied: where, and how hard (for their damage). */
   readonly hits: { a: Vehicle; b: Vehicle; x: number; y: number; impulse: number }[] = [];
+  /** Cyclists knocked off their bikes since this was last emptied (and taken off the road): the bike, how it was going, and how hard it was hit. */
+  readonly unseated: { bike: Vehicle; impulse: number }[] = [];
 
   constructor(map: GameMap, options: TrafficOptions = {}) {
     ({ lanes: this.lanes, nodes: this.nodes } = buildLanes(map));
@@ -665,17 +713,24 @@ export class Traffic {
   /** A vehicle starting `s` along a lane, at the lane's speed. */
   spawn(lane: Lane, s: number, kind?: VehicleKind, bus?: { route: number; leg: number }): Vehicle {
     const major = lane.rank >= 3;
-    kind ??= bus ? (this.rand() < 0.55 ? 'double' : 'bus') : pick(this.rand, (Object.keys(VEHICLES) as VehicleKind[]).map((k) => [k, k === 'lorry' && !major ? 0 : VEHICLES[k].traffic]))!;
+    // (Bikes in the kerb lane only, more where there's a cycle lane, fewer on the main roads.)
+    const weight = (k: VehicleKind) =>
+      k === 'lorry' && !major ? 0 : k === 'bike' ? (lane.index > 0 ? 0 : VEHICLES.bike.traffic * (lane.cycleLane ? 3 : 1) * (lane.rank >= 4 ? 0.6 : 1)) : VEHICLES[k].traffic;
+    kind ??= bus ? (this.rand() < 0.55 ? 'double' : 'bus') : pick(this.rand, (Object.keys(VEHICLES) as VehicleKind[]).map((k) => [k, weight(k)]))!;
     const v = this.make(kind, 0, 0, 0, lane.level);
     v.route = [lane];
     v.s = s;
+    if (kind === 'bike') {
+      v.side = lane.cycleAt;
+      v.rider = Math.floor(this.rand() * 48);
+    }
     if (bus) {
       const r = this.routes[bus.route];
       v.bus = { route: bus.route, ref: r.ref, colour: r.colour ?? COLOURS.bus[0][0], leg: bus.leg, stops: [], served: new Set(), dwell: -1, yield: false, lost: false };
       this.findStops(v, lane);
     }
     this.plan(v);
-    v.speed = Math.min(lane.speed * v.pace, MAX_SPEED, this.limitAhead(v));
+    v.speed = Math.min(Math.min(lane.speed, kind === 'bike' ? BIKE_SPEED : Infinity) * v.pace, MAX_SPEED, this.limitAhead(v));
     // Coming up behind another in its lane: no faster than it can follow it at.
     for (const o of this.vehicles) {
       if (o.route[0] !== lane || o.s <= s) continue;
@@ -694,7 +749,7 @@ export class Traffic {
     while (ahead < LOOK_MAX + 20 * M) {
       const last = v.route[v.route.length - 1];
       if (!last.lane) break;
-      const next = v.bus && !v.bus.lost ? this.busNext(v, last.lane) : this.next(last.lane);
+      const next = v.bus && !v.bus.lost ? this.busNext(v, last.lane) : this.next(last.lane, v.kind === 'bike');
       if (!next) {
         v.ends = true;
         break;
@@ -757,7 +812,7 @@ export class Traffic {
   }
 
   /** Which lane to take on from the end of one: never back the way it came unless the road ends. */
-  private next(a: Lane): Lane | null {
+  private next(a: Lane, bike = false): Lane | null {
     const node = this.nodes[a.to];
     const [, , ux, uy] = pathAt(a, a.length);
     const onward = node.out.map((i) => this.lanes[i]).filter((l) => l.edge !== a.edge);
@@ -780,6 +835,8 @@ export class Traffic {
     const [, , vx, vy] = pathAt(choice[0], 0);
     const cross = ux * vy - uy * vx;
     const byKerb = [...choice].sort((p, q) => p.index - q.index);
+    // A cyclist keeps to the kerb lane (but to turn right).
+    if (bike && (ux * vx + uy * vy >= 0.7 || cross < 0)) return byKerb[0];
     // Turning left from the kerb lane, right from the one nearest the middle; straight on, any.
     if (ux * vx + uy * vy < 0.7) return cross < 0 ? byKerb[0] : byKerb[byKerb.length - 1];
     return byKerb[Math.floor(this.rand() * byKerb.length)];
@@ -966,7 +1023,8 @@ export class Traffic {
       const lane = p.lane;
       if (lane) {
         for (const st of lane.stops) {
-          const at = d + st.s;
+          // (A cyclist on up into the box in front, if there is one.)
+          const at = d + st.s + (v.kind === 'bike' ? (st.box ?? 0) : 0);
           if (at < -2) continue;
           const l = light(st.signal);
           const stop = l === 'red' || l === 'redamber' || (l === 'amber' && at > (v.speed * v.speed) / (2 * BRAKE * 1.5));
@@ -1094,7 +1152,8 @@ export class Traffic {
     // The speed it likes: the road's, at its own pace, never quite steady (it swells and eases off a little as it drives)...
     const lane = v.route.find((p) => p.lane)?.lane;
     const [w1, p1, w2, p2] = v.wander;
-    let cruise = (lane?.speed ?? 8 * M) * v.pace * (1 + 0.06 * Math.sin(this.clock * w1 + p1) + 0.035 * Math.sin(this.clock * w2 + p2));
+    const bike = v.kind === 'bike';
+    let cruise = Math.min(lane?.speed ?? 8 * M, bike ? BIKE_SPEED : Infinity) * v.pace * (1 + 0.06 * Math.sin(this.clock * w1 + p1) + 0.035 * Math.sin(this.clock * w2 + p2));
     // ...slower up a hill (a lorry much slower), a little quicker down one...
     const [gx, gy] = this.terrain.slope(v.x, v.y);
     const grade = gx * Math.cos(v.angle) + gy * Math.sin(v.angle);
@@ -1132,7 +1191,7 @@ export class Traffic {
     }
     // Onto the accelerator or brake, and off it, smoothly: easing towards the speed it wants.
     // Pulling away: less briskly as it gets up to speed, and up a hill.
-    const top = Math.max(ACCEL * 0.35, ACCEL * v.verve * (1 - 0.4 * Math.min(1, v.speed / Math.max(cruise, 1))) - GRAVITY * Math.max(0, grade) * 0.5);
+    const top = Math.max(ACCEL * 0.35, ACCEL * v.verve * (1 - 0.4 * Math.min(1, v.speed / Math.max(cruise, 1))) - GRAVITY * Math.max(0, grade) * 0.5) * (bike ? BIKE_ACCEL : 1);
     const target = urgent ? -Math.min(HARDEST, ((v.speed ** 2 - lead ** 2) / (2 * Math.max(gap - hold * 0.5, 0.1))) * 1.1) : Math.max(-BRAKE * 1.6 * v.verve, Math.min(top, (want - v.speed) * GAIN));
     const jerk = urgent ? 40 * M : target > v.accel ? (v.accel < 0 ? JERK_OFF : JERK_ON * v.verve) : JERK_OFF;
     v.accel += Math.max(-jerk * dt, Math.min(jerk * dt, target - v.accel));
@@ -1270,7 +1329,7 @@ export class Traffic {
   private manoeuvre(v: Vehicle, dt: number, blocker: number | undefined, gap: number, lead: number, obstacles: Obstacle[]): void {
     v.settle = Math.max(0, v.settle - dt);
     const lane = v.route[0].lane;
-    if (!lane || v.bus || v.limping) {
+    if (!lane || v.bus || v.limping || v.kind === 'bike') {
       v.passing = undefined;
       return;
     }
@@ -1299,18 +1358,22 @@ export class Traffic {
     const b = blocker !== undefined && blocker >= 0 ? this.vehicleById(blocker) : undefined;
     if (!b || gap > 40 * M || toEnd < 25 * M) return;
     const stuck = this.obstructs(b);
-    if (!stuck && lead > lane.speed * v.pace * 0.6) return;
+    // A cyclist ahead (and slower): it's gone round, as something stuck in the road would be.
+    const cyclist = b.kind === 'bike' && b.mode === 'drive';
+    if (!stuck && !cyclist && lead > lane.speed * v.pace * 0.6) return;
     if (lane.count > 1) {
       for (const d of [1, -1]) {
         const to = this.besideLane(lane, d);
         if (to && this.laneClear(v, to, obstacles) && this.freerAhead(v, to, gap, obstacles)) return this.shiftLane(v, to);
       }
-    } else if (stuck && gap < 18 * M) {
+    } else if ((stuck || cyclist) && gap < 18 * M) {
       const other = this.oppositeLane(lane);
       const pass = gap + b.length + v.length / 2 + 2 * GAP;
       if (other && toEnd > pass + 10 * M && this.oncomingClear(v, other, pass, obstacles)) {
         const [x, y] = pathAt(lane, v.s);
-        v.passing = { id: b.id, out: nearestOn(other, x, y).d };
+        const full = nearestOn(other, x, y).d;
+        // Past a cyclist, only as far out as it takes to give them room (a car's width from them, and a metre and a half).
+        v.passing = { id: b.id, out: cyclist ? Math.min(full, Math.max(0.5 * M, v.r + b.r + BIKE_ROOM - (b.side - v.side))) : full };
         this.stats.overtakes++;
       }
     }
@@ -1395,6 +1458,11 @@ export class Traffic {
       rate = SIDLE;
     }
     if (v.passing) want = -v.passing.out;
+    // A cyclist: over in the cycle lane, or near the kerb (through a turn, as they were).
+    if (v.kind === 'bike') {
+      want = lane ? lane.cycleAt : v.side;
+      rate = SIDLE;
+    }
     // Something alongside where it'd move to: it waits (easing off to let it by).
     const move = want - v.side;
     const blocked = Math.abs(move) > 0.5 && this.beside(v, obstacles, Math.sign(move), Math.abs(move));
@@ -1539,6 +1607,7 @@ export class Traffic {
         const at = { x: 0, y: 0 };
         const hit = collideBodies(a, b, 0.3, at);
         if (hit > 0) this.hits.push({ a, b, x: at.x, y: at.y, impulse: hit });
+        for (const v of [a, b]) if (v.kind === 'bike' && hit > UNSEAT) this.unseat(v, hit);
         if (hit > 15) {
           for (const v of [a, b]) {
             if (v.mode === 'drive' || v.mode === 'parked' || v.mode === 'rejoin') v.mode = 'knocked';
@@ -1577,10 +1646,18 @@ export class Traffic {
 
   /** You've hit it (how hard): it's knocked about, and stops a moment. */
   knock(v: Vehicle, impulse: number): void {
+    if (v.kind === 'bike' && impulse > UNSEAT) return this.unseat(v, impulse);
     if (impulse < 4) return;
     v.mode = 'knocked';
     v.rest = 0;
     v.speed = 0;
+  }
+
+  /** A cyclist knocked off their bike: taken off the road (the bike and its rider go down on it: see `unseated`). */
+  private unseat(v: Vehicle, impulse: number): void {
+    if (!this.vehicles.includes(v)) return;
+    this.remove(v);
+    this.unseated.push({ bike: v, impulse });
   }
 
   private remove(v: Vehicle): void {

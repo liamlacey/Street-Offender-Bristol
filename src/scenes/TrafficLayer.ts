@@ -54,7 +54,7 @@ export class TrafficLayer {
         let s = this.sprites.get(v);
         if (!s) {
           const shadow = this.scene.add.image(0, 0, vehicleShadow(this.scene, v.kind)).setScale(1 / ART_SCALE).setTint(0x000000).setAlpha(0.33);
-          const body = this.scene.add.image(0, 0, (v.bus ? busTexture(this.scene, v.kind, v.bus.colour, v.bus.ref) : vehicleTexture(this.scene, v.kind, v.colour))).setScale(1 / ART_SCALE);
+          const body = this.scene.add.image(0, 0, (v.bus ? busTexture(this.scene, v.kind, v.bus.colour, v.bus.ref) : vehicleTexture(this.scene, v.kind, v.colour, v.rider))).setScale(1 / ART_SCALE);
           s = { body, shadow, shown: 0 };
           this.sprites.set(v, s);
         }
@@ -73,9 +73,9 @@ export class TrafficLayer {
         const d = depthOf(onDeck);
         s.body.setPosition(x, y).setRotation(v.angle).setDepth(d);
         // Taller, the further its shadow falls.
-        const fall = v.kind === 'lorry' ? 1.8 : v.kind === 'van' || v.kind === 'suv' ? 1.3 : 1;
+        const fall = v.kind === 'lorry' ? 1.8 : v.kind === 'van' || v.kind === 'suv' ? 1.3 : v.kind === 'bike' ? 0.7 : 1;
         s.shadow.setPosition(x + 2.5 * fall, y + 3.5 * fall).setRotation(v.angle).setDepth(d - 0.02);
-        this.drawLamps(this.lamps[onDeck ? 1 : 0], v, x, y, time);
+        if (v.kind !== 'bike') this.drawLamps(this.lamps[onDeck ? 1 : 0], v, x, y, time);
       }
     }
     // Gone, or out of sight.
