@@ -268,7 +268,7 @@ export class GameScene extends Phaser.Scene {
     this.traffic = new Traffic(map);
     this.boats = new Boats(map);
     this.people = new People(map, { seats: this.world.loose });
-    this.peopleLayer = new PeopleLayer(this, this.people, (x, y) => this.groundAt(x, y), DEPTH.props + 0.05);
+    this.peopleLayer = new PeopleLayer(this, this.people, (x, y) => this.groundAt(x, y), DEPTH.props + 0.05, DEPTH.car + 0.1);
     this.ripples = new WaterRipples(this, this.surfaces, (x, y) => this.groundAt(x, y), DEPTH.ripples);
     this.boatLayer = new BoatLayer(this, this.boats, (x, y) => this.groundAt(x, y), DEPTH.boats);
     this.trafficLayer = new TrafficLayer(this, this.traffic, (x, y, level) => this.surfaceHeight(x, y, level), (x, y, reach) => this.decks.atEnd(x, y, reach), {
@@ -485,7 +485,7 @@ export class GameScene extends Phaser.Scene {
       this.audio?.crash(this.bigHit);
       if (this.bigHit > 220) this.shake(0.12, Math.min(7, this.bigHit / 68));
       // A crash: everyone near runs.
-      if (this.bigHit > 120 && this.level === 0) this.people.scareAround(this.car.x, this.car.y, 22 * 8);
+      if (this.bigHit > 120 && this.level === 0) this.people.scareAround(this.car.x, this.car.y, 12 * 8);
       this.bigHit = 0;
     }
   }
@@ -774,7 +774,7 @@ export class GameScene extends Phaser.Scene {
     for (const h of this.people.hits) {
       this.audio?.knock();
       // Everyone near runs from it.
-      this.people.scareAround(h.person.x, h.person.y, 18 * 8);
+      this.people.scareAround(h.person.x, h.person.y, 8 * 8);
     }
     this.people.hits.length = 0;
     // Those out in the road, for the traffic to stop for.

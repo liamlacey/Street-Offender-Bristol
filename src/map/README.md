@@ -511,16 +511,21 @@ church`, `amenity=theatre/arts_centre/fountain`).
 - **Buses**: 1 to 3 wait at each bus stop near the view (on the walk nearest it); when a
   bus is waiting at the stop (within 20 m), they walk to its door (front, kerb side) and
   get on; 0 to 3 get off each bus at each stop.
-- **Danger**: you going over 11 m/s within 7 m of them, or driving along a pavement (over
-  5 m/s, within 15 m): they run (4.2 m/s) away from you, roads or not (but not into the
-  water or a wall), for 4 to 7 s, then go back to walking. A crash (or someone knocked
-  down) sends everyone within 22 m (18 m) running.
+- **Danger**: only close by: you going over 8 m/s within 3.5 m of them, or driving along a
+  pavement (over 5 m/s, within 5 m): they run (4.2 m/s) away from you, roads or not (but
+  not into the water or a wall), for 4 to 7 s, then go back to walking. A crash (or
+  someone knocked down) sends everyone within 12 m (8 m) running.
 - **Jumping out of the way**: a car coming straight at them (over 4 m/s, getting there in
   0.15 to 0.9 s, its path within 1.2 m of them): each frame there's a 12% chance they see
   it, and dive sideways (6 m/s) away from it, then run.
 - **Knocked down**: a vehicle going into them faster than 1.2 m/s (slower, they're nudged
-  aside) throws them the way it was going; faster than 6.7 m/s (15 mph) and they stay
-  down; slower, they're up in 2.5 to 4.5 s and on their way.
+  aside) knocks them over. Under 4 m/s they're pushed over in front of it (at 0.9 of its
+  speed); faster, they're scooped up over the bonnet and roof, turning over (4 to 8
+  radians a second), thrown up at 1.5 m/s + 0.4 × (its speed − 4 m/s), at most 6 m/s, and
+  only a little the way it was going (0.9 of its speed at 4 m/s, down to 0.15 at 10 m/s
+  and over), so it goes on under them and they land near where they were hit, then slide
+  to a stop. Faster than 6.7 m/s (15 mph) and they stay down; slower, they're up in 2.5 to
+  4.5 s and on their way.
 - **Stepping round each other**: walking, anyone within 2 m ahead and 0.8 m to the side
   is stepped round (to the side away from them, up to 1.05 m off the middle of the walk,
   easing over at 1.6 m/s; head on, each keeps to their left). Behind someone slower going

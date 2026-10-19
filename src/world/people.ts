@@ -30,6 +30,8 @@ const NEAR = 30 * M;
 const FAR = 55 * M;
 /** A hit faster than this, px/s (about 15 mph), and they stay down. */
 const HURT = 6.7 * M;
+/** Pulling them back down when they're thrown up, px/s². */
+const GRAVITY = 9.8 * M;
 /** How long they're down after a slower hit, s. */
 const DOWN: [number, number] = [2.5, 4.5];
 /** Running from danger this long, s. */
@@ -107,6 +109,10 @@ export interface Person {
   seat: Seat | null;
   seatAt: [number, number, number, number];
   picnic: Picnic | null;
+  /** Off the ground, toppling over a car that hit them: how high, px, and how fast going up; and how fast they're turning over, radians a second. */
+  z: number;
+  vz: number;
+  spin: number;
 }
 
 /** A vehicle as the people see it: where, which way, how big, how fast; a bus's stop. */
@@ -483,6 +489,9 @@ export class People {
       seat: null,
       seatAt: [0, 0, 0, 0],
       picnic: null,
+      z: 0,
+      vz: 0,
+      spin: 0,
     };
     this.people.push(p);
     return p;
@@ -687,13 +696,13 @@ export class People {
   update(dt: number, view: PeopleView, player: Mover, movers: Mover[], light: (signal: number) => Light, walkable: (x: number, y: number) => boolean): void {
     this.populate(view);
     const all = [player, ...movers];
-    // Danger: you, going fast near people (or on the pavement).
+    // Danger: you, going fast right by them (or along the pavement at them).
     const pspeed = Math.hypot(player.vx, player.vy);
     for (const p of this.people) {
       if (p.mode === 'down' || p.mode === 'board') continue;
       const d = Math.hypot(p.x - player.x, p.y - player.y);
-      const onPavement = pspeed > 5 * M && d < 15 * M && !this.inRoad(player.x, player.y);
-      if ((pspeed > 11 * M && d < 7 * M) || onPavement) this.scare(p, player.x, player.y);
+      const onPavement = pspeed > 5 * M && d < 5 * M && !this.inRoad(player.x, player.y);
+      if ((pspeed > 8 * M && d < 3.5 * M) || onPavement) this.scare(p, player.x, player.y);
       if ((p.mode as Mode) !== 'dive') this.dodge(p, player, pspeed);
     }
     // Who's where, for stepping round each other.
@@ -974,9 +983,24 @@ export class People {
     const [nx, ny] = [p.x + p.vx * dt, p.y + p.vy * dt];
     if (walkable(nx, ny)) [p.x, p.y] = [nx, ny];
     else [p.vx, p.vy] = [0, 0];
-    const k = Math.exp(-(p.mode === 'dive' ? 3 : 4) * dt);
+    if (p.z > 0 || p.vz > 0) {
+      // Up over the bonnet and roof, turning over, and down again (a little bounce if they come down hard).
+      p.vz -= GRAVITY * dt;
+      p.z += p.vz * dt;
+      p.angle += p.spin * dt;
+      if (p.z <= 0) {
+        p.z = 0;
+        p.vz = p.vz < -3 * M ? -p.vz * 0.2 : 0;
+        p.spin *= 0.3;
+      }
+      p.speed = Math.hypot(p.vx, p.vy);
+      return;
+    }
+    // On the ground: a short slide to a stop.
+    const k = Math.exp(-(p.mode === 'dive' ? 3 : 6) * dt);
     p.vx *= k;
     p.vy *= k;
+    p.spin = 0;
     p.speed = Math.hypot(p.vx, p.vy);
     p.timer -= dt;
     if (p.hurt || p.timer > 0) return;
@@ -1026,7 +1050,8 @@ export class People {
   /** The vehicles hitting people: knocked flying, the way it was going (and up again, after a slow one). */
   private hitBy(all: Mover[]): void {
     for (const p of this.people) {
-      if (p.mode === 'board') continue;
+      // In the air, over the car: it's gone under them.
+      if (p.mode === 'board' || p.z > 0.2 * M) continue;
       for (const v of all) {
         if (Math.abs(v.x - p.x) > v.length || Math.abs(v.y - p.y) > v.length) continue;
         const [ux, uy] = [Math.cos(v.angle), Math.sin(v.angle)];
@@ -1055,10 +1080,16 @@ export class People {
     p.stop = -1;
     p.seat = null;
     p.picnic = null;
-    const spin = (this.rand() - 0.5) * 0.6;
-    p.vx = v.vx * 1.1 + (this.rand() - 0.5) * 1.5 * M;
-    p.vy = v.vy * 1.1 + (this.rand() - 0.5) * 1.5 * M;
-    p.angle = Math.atan2(p.vy, p.vx) + spin;
+    // Slow, they're pushed over in front of it; faster, scooped up over the bonnet and roof, turning
+    // over, to land not far from where they were hit (it's gone on under them), a little the way it was going.
+    const f = speed < 4 * M ? 0.9 : Math.max(0.15, 0.9 - (speed - 4 * M) / (6 * M) * 0.75);
+    const [vx, vy] = [v.vx * f + (this.rand() - 0.5) * 0.6 * M, v.vy * f + (this.rand() - 0.5) * 0.6 * M];
+    p.vx = vx;
+    p.vy = vy;
+    p.z = 0;
+    p.vz = speed < 4 * M ? 0 : Math.min(6 * M, 1.5 * M + (speed - 4 * M) * 0.4);
+    p.spin = p.vz ? (this.rand() < 0.5 ? 1 : -1) * (4 + this.rand() * 4) : 0;
+    p.angle = Math.atan2(v.vy, v.vx) + (this.rand() - 0.5) * 0.6;
     if (speed > HURT) p.hurt = true;
     p.timer = DOWN[0] + this.rand() * (DOWN[1] - DOWN[0]);
     this.hits.push({ person: p, speed });

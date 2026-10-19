@@ -52,12 +52,21 @@ describe('people', () => {
     const people = new People(map, { rand: seeded(7) });
     people.populate(viewAt(x, y), true);
     const [a, b] = people.people;
+    const [bx, by] = [b.x, b.y];
     people.knock(a, { vx: 30, vy: 0 }, 30);
     people.knock(b, { vx: 160, vy: 0 }, 160);
-    for (let t = 0; t < 8; t += 1 / 30) people.update(1 / 30, viewAt(x, y), still(-1e6, -1e6), [], () => 'red', () => true);
+    let high = 0;
+    for (let t = 0; t < 8; t += 1 / 30) {
+      people.update(1 / 30, viewAt(x, y), still(-1e6, -1e6), [], () => 'red', () => true);
+      high = Math.max(high, b.z);
+    }
     expect(a.mode).not.toBe('down');
     expect(b.mode).toBe('down');
     expect(b.hurt).toBe(true);
+    // Up over the car (higher than its roof), and down again not far from where they were hit.
+    expect(high).toBeGreaterThan(1.5 * 8);
+    expect(b.z).toBe(0);
+    expect(Math.hypot(b.x - bx, b.y - by)).toBeLessThan(5 * 8);
   });
 
   it('jump out of the way of a car coming straight at them', () => {

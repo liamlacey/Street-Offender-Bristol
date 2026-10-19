@@ -123,6 +123,8 @@ export class PeopleLayer {
     /** The height of the ground under a point, px. */
     private readonly base: (x: number, y: number) => number,
     private readonly depth: number,
+    /** Over the cars, for anyone thrown up over one. */
+    private readonly airDepth: number,
   ) {}
 
   update(view: Phaser.Geom.Rectangle, perspective: Perspective): void {
@@ -138,9 +140,12 @@ export class PeopleLayer {
         s = this.scene.add.image(0, 0, key).setScale(SIZE / ART_SCALE).setDepth(this.depth);
         this.sprites.set(p, s);
       } else if (s.texture.key !== key) s.setTexture(key);
-      // Head height (lying down, the ground).
-      const lift = perspective.lift(this.base(p.x, p.y) + (p.mode === 'down' ? 0.2 : p.mode === 'sit' ? 0.8 : 1.2) * 8);
-      s.setPosition(perspective.x(p.x, lift), perspective.y(p.y, lift)).setRotation(p.angle);
+      // Head height (lying down, the ground), and how high they've been thrown: up over the car, and a little bigger.
+      const lift = perspective.lift(this.base(p.x, p.y) + (p.mode === 'down' ? 0.2 : p.mode === 'sit' ? 0.8 : 1.2) * 8 + p.z);
+      s.setPosition(perspective.x(p.x, lift), perspective.y(p.y, lift))
+        .setRotation(p.angle)
+        .setScale((SIZE / ART_SCALE) * (1 + p.z / 160))
+        .setDepth(p.z > 0 ? this.airDepth : this.depth);
     }
     for (const [p, s] of this.sprites) {
       if (seen.has(p)) continue;
