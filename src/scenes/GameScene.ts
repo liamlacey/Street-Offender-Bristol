@@ -564,10 +564,9 @@ export class GameScene extends Phaser.Scene {
     }
     this.traffic.hits.length = 0;
     for (const v of this.traffic.vehicles) {
-      if (v.annoyed > 2.5 || v.honk) {
-        this.audio?.horn(this.hearing(v.x, v.y), v.honk ? v.mode === 'chase' || Math.random() < 0.5 : Math.random() < 0.3);
+      if (v.annoyed > 2.5) {
+        this.audio?.horn(this.hearing(v.x, v.y), Math.random() < 0.3);
         v.annoyed = -3 - Math.random() * 3;
-        v.honk = false;
       }
     }
     // Smoke from wrecked engines (yours too); car alarms beeping.

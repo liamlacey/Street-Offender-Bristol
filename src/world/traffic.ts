@@ -59,8 +59,8 @@ export interface Vehicle extends Body {
   kind: VehicleKind;
   /** Which of its kind's COLOURS. */
   colour: number;
-  /** Driving along a lane; knocked about (sliding to a stop); finding its way back into its lane; chasing you (road rage); or parked. */
-  mode: 'drive' | 'knocked' | 'rejoin' | 'chase' | 'parked';
+  /** Driving along a lane; knocked about (sliding to a stop); finding its way back into its lane; or parked. */
+  mode: 'drive' | 'knocked' | 'rejoin' | 'parked';
   /** Where it's going: the lane it's in, then the turns and lanes ahead. `s` is how far along the first it is. */
   route: Path[];
   s: number;
@@ -97,14 +97,13 @@ export interface Vehicle extends Body {
   still: number;
   /** Seconds left backing off out of a knot. */
   backing: number;
-  /** How far it's over from the middle of its lane, px (+ to its left): in a bus lane, pulled in at a stop, changing lanes, overtaking, swerving; and how fast that's changing, px/s. */
+  /** How far it's over from the middle of its lane, px (+ to its left): in a bus lane, pulled in at a stop, changing lanes, overtaking; and how fast that's changing, px/s. */
   side: number;
   sideRate: number;
   /** Overtaking on a two-way road: what it's going past (by id), and how far out it goes to (px, to its right). */
   passing?: { id: number; out: number };
-  /** Seconds before it'll change lanes again; seconds left swerving out of your way. */
+  /** Seconds before it'll change lanes again. */
   settle: number;
-  swerve: number;
   /** Lets traffic out of side roads when it's queueing anyway. */
   courteous: boolean;
   /** Badly damaged: limping along with its hazards on; broken down (and smoking). */
@@ -112,10 +111,6 @@ export interface Vehicle extends Body {
   broken: boolean;
   /** A parked car's alarm, seconds left going off. */
   alarm: number;
-  /** It sounds its horn (once; the scene plays it). */
-  honk: boolean;
-  /** Seconds left chasing you, after you hit it (road rage). */
-  angry: number;
   /** Seconds it's been waiting to pull out at a give way. */
   waiting: number;
   /** Seconds it's been held up by you (it honks). */
@@ -521,16 +516,10 @@ const SIDLE = 1.2 * M;
 
 /** Standing still this long, seconds, not for a red light or you: a knot (out of sight, it's undone). */
 const GRIDLOCK = 25;
-/** Hit harder than this by you, one driver in ANGRY loses their temper and chases you a while; how fast they'll go, px/s. */
-const ANGER = 70;
-const ANGRY = 0.25;
-const CHASE_SPEED = 15 * M;
 /** Damage (the most any side's taken, see dents.ts) past which a vehicle limps along, and past which it's broken down. */
 const LIMP = 75;
 const BROKEN = 150;
 
-/** Swerving out of your way, how far over (to its left; less to its right), px. */
-const SWERVE = 1.3 * M;
 /** How quickly it moves over changing lanes or pulling out to overtake, px/s. */
 const SHIFT = 2 * M;
 
@@ -660,13 +649,10 @@ export class Traffic {
       side: 0,
       sideRate: 0,
       settle: 0,
-      swerve: 0,
       courteous: this.rand() < 0.7,
       limping: false,
       broken: false,
       alarm: 0,
-      honk: false,
-      angry: 0,
       backing: 0,
       atLight: false,
       still: 0,
@@ -898,7 +884,6 @@ export class Traffic {
         if (v.mode === 'drive') this.drive(v, dt, obstacles, light);
         else if (v.mode === 'knocked') this.slide(v, dt);
         else if (v.mode === 'rejoin') this.rejoin(v, dt, obstacles, view);
-        else if (v.mode === 'chase') this.chase(v, dt, player);
         if (![v.x, v.y, v.angle, v.speed].every(Number.isFinite)) throw new Error('lost its way');
       } catch (e) {
         // Something's gone wrong with this one: it's taken off the road, and the rest drive on (the game mustn't stop).
@@ -1093,25 +1078,6 @@ export class Traffic {
         blocker = undefined;
       }
     }
-    // You, coming at it fast: it brakes hard, and swerves out of your way.
-    const you = obstacles[0];
-    let panic = false;
-    if (you.level === v.level) {
-      const [rx, ry, wx, wy] = [you.x - v.x, you.y - v.y, you.vx - v.vx, you.vy - v.vy];
-      const closing = wx * wx + wy * wy;
-      const t = closing > 0 ? -(rx * wx + ry * wy) / closing : -1;
-      if (Math.sqrt(closing) > 6 * M && t > 0 && t < 1.3 && Math.hypot(rx + wx * t, ry + wy * t) < v.r + you.r + 1 * M) {
-        panic = true;
-        if (v.swerve <= 0) {
-          // Away from where you'll be: to its left if you're coming at its right, and the other way.
-          const yourSide = -(rx + wx * t) * Math.sin(v.angle) + (ry + wy * t) * Math.cos(v.angle);
-          v.swerve = 1.5 * (yourSide < 0 ? -1 : 1);
-          v.honk = true;
-        }
-      }
-    }
-    if (v.swerve > 0) v.swerve = Math.max(0, v.swerve - dt);
-    else if (v.swerve < 0) v.swerve = Math.min(0, v.swerve + dt);
     // Changing lanes, and overtaking.
     this.manoeuvre(v, dt, blocker, gap, lead, obstacles);
     if (v.passing) {
@@ -1154,7 +1120,6 @@ export class Traffic {
       const need = v.speed > lead ? (v.speed ** 2 - lead ** 2) / (2 * Math.max(gap - hold * 0.5, 0.1)) : 0;
       urgent = need > BRAKE * 1.4;
     }
-    if (panic) want = 0;
     // Moving off: a moment to react first.
     if (v.speed < 0.3 && want < 1) v.react = -1;
     else if (v.speed < 0.3 && v.react < 0) v.react = REACT + this.rand() * REACT_MORE;
@@ -1165,8 +1130,8 @@ export class Traffic {
     // Onto the accelerator or brake, and off it, smoothly: easing towards the speed it wants.
     // Pulling away: less briskly as it gets up to speed, and up a hill.
     const top = Math.max(ACCEL * 0.35, ACCEL * v.verve * (1 - 0.4 * Math.min(1, v.speed / Math.max(cruise, 1))) - GRAVITY * Math.max(0, grade) * 0.5);
-    const target = panic ? -HARDEST * 0.8 : urgent ? -Math.min(HARDEST, ((v.speed ** 2 - lead ** 2) / (2 * Math.max(gap - hold * 0.5, 0.1))) * 1.1) : Math.max(-BRAKE * 1.6 * v.verve, Math.min(top, (want - v.speed) * GAIN));
-    const jerk = urgent || panic ? 40 * M : target > v.accel ? (v.accel < 0 ? JERK_OFF : JERK_ON * v.verve) : JERK_OFF;
+    const target = urgent ? -Math.min(HARDEST, ((v.speed ** 2 - lead ** 2) / (2 * Math.max(gap - hold * 0.5, 0.1))) * 1.1) : Math.max(-BRAKE * 1.6 * v.verve, Math.min(top, (want - v.speed) * GAIN));
+    const jerk = urgent ? 40 * M : target > v.accel ? (v.accel < 0 ? JERK_OFF : JERK_ON * v.verve) : JERK_OFF;
     v.accel += Math.max(-jerk * dt, Math.min(jerk * dt, target - v.accel));
     v.speed = Math.max(0, v.speed + v.accel * dt);
     if (gap < hold * 0.4 && v.speed > lead) v.speed = lead;
@@ -1416,7 +1381,7 @@ export class Traffic {
     return true;
   }
 
-  /** Moving over in its lane (or out of it, overtaking; or swerving): smoothly, and only when nothing's there. */
+  /** Moving over in its lane (or out of it, overtaking): smoothly, and only when nothing's there. */
   private sidle(v: Vehicle, dt: number, atStop: boolean, obstacles: Obstacle[]): void {
     const lane = v.route[0].lane;
     let want = 0;
@@ -1427,13 +1392,9 @@ export class Traffic {
       rate = SIDLE;
     }
     if (v.passing) want = -v.passing.out;
-    if (v.swerve) {
-      want = v.swerve > 0 ? SWERVE : -SWERVE * 0.6;
-      rate = 3.5 * M;
-    }
     // Something alongside where it'd move to: it waits (easing off to let it by).
     const move = want - v.side;
-    const blocked = Math.abs(move) > 0.5 && !v.swerve && this.beside(v, obstacles, Math.sign(move), Math.abs(move));
+    const blocked = Math.abs(move) > 0.5 && this.beside(v, obstacles, Math.sign(move), Math.abs(move));
     if (blocked) want = v.side;
     if (v.bus) v.bus.yield = blocked;
     const step = Math.max(-rate * dt, Math.min(rate * dt, want - v.side));
@@ -1513,7 +1474,7 @@ export class Traffic {
     } else v.rest = 0;
     if (v.rest > PAUSE) {
       v.rest = 0;
-      v.mode = v.space || v.broken ? 'parked' : v.angry > 0 ? 'chase' : 'rejoin';
+      v.mode = v.space || v.broken ? 'parked' : 'rejoin';
       v.stuck = 0;
     }
   }
@@ -1594,7 +1555,7 @@ export class Traffic {
 
   /** Those knocked about, or finding their way back: they bump into things. */
   loose(): Vehicle[] {
-    return [...this.vehicles, ...this.parked].filter((v) => v.mode === 'knocked' || v.mode === 'rejoin' || v.mode === 'chase');
+    return [...this.vehicles, ...this.parked].filter((v) => v.mode === 'knocked' || v.mode === 'rejoin');
   }
 
   /** Its damage has changed (see dents.ts): badly enough, it limps along with its hazards on; worse, it's broken down where it is, smoking. */
@@ -1605,66 +1566,15 @@ export class Traffic {
     if (worst > LIMP) v.limping = true;
     if (worst > BROKEN && !v.broken) {
       v.broken = true;
-      v.angry = 0;
       v.passing = undefined;
       if (v.mode !== 'knocked') v.mode = 'parked';
       v.speed = 0;
     }
   }
 
-  /** Road rage: it drives straight at you a while (honking), then calms down and finds its way back onto the road. */
-  private chase(v: Vehicle, dt: number, player: Player): void {
-    v.angry -= dt;
-    const [tx, ty] = [player.x + player.vx * 0.4, player.y + player.vy * 0.4];
-    const dist = Math.hypot(tx - v.x, ty - v.y);
-    if (v.angry <= 0 || dist > 90 * M || player.level !== v.level) return this.calmDown(v);
-    const aim = Math.atan2(ty - v.y, tx - v.x);
-    const err = Math.atan2(Math.sin(aim - v.angle), Math.cos(aim - v.angle));
-    const want = Math.abs(err) > 1.2 ? 4 * M : Math.min(CHASE_SPEED, 2 * M + dist * 1.2);
-    const a = Math.max(-HARDEST, Math.min(ACCEL * 1.3, (want - v.speed) * 3));
-    v.speed = Math.max(0, v.speed + a * dt);
-    const steer = Math.max(-0.6, Math.min(0.6, err * 1.5));
-    v.angle += (v.speed / (v.length * 0.6)) * Math.tan(steer) * dt;
-    v.x += Math.cos(v.angle) * v.speed * dt;
-    v.y += Math.sin(v.angle) * v.speed * dt;
-    v.vx = Math.cos(v.angle) * v.speed;
-    v.vy = Math.sin(v.angle) * v.speed;
-    v.spin = 0;
-    v.braking = a < -M;
-    v.turning = 0;
-    v.side = 0;
-    v.sideRate = 0;
-    if (this.rand() < dt * 0.5) v.honk = true;
-  }
-
-  /** Done chasing: back onto the nearest lane it can find, the way it's pointing. */
-  private calmDown(v: Vehicle): void {
-    v.angry = 0;
-    let best: { lane: Lane; s: number } | null = null;
-    let score = Infinity;
-    for (const lane of this.lanes) {
-      if (lane.level !== v.level) continue;
-      const [x0, y0, x1, y1] = [lane.pts[0], lane.pts[1], lane.pts[lane.pts.length - 2], lane.pts[lane.pts.length - 1]];
-      if (Math.min(Math.hypot(x0 - v.x, y0 - v.y), Math.hypot(x1 - v.x, y1 - v.y)) > lane.length + 40 * M) continue;
-      const { s, d } = nearestOn(lane, v.x, v.y);
-      const [, , ux, uy] = pathAt(lane, s);
-      const k = d + (1 - (ux * Math.cos(v.angle) + uy * Math.sin(v.angle))) * 15 * M;
-      if (k < score) [best, score] = [{ lane, s }, k];
-    }
-    if (!best) return this.remove(v);
-    v.route = [best.lane];
-    v.s = best.s;
-    v.back = null;
-    v.ends = false;
-    v.mode = 'rejoin';
-    v.stuck = 0;
-  }
-
   /** You've hit it (how hard): it's knocked about, and stops a moment. */
   knock(v: Vehicle, impulse: number): void {
     if (impulse < 4) return;
-    // Hit hard, now and then a driver loses their temper, and comes after you.
-    if (impulse > ANGER && v.mode === 'drive' && !v.bus && v.kind !== 'lorry' && !v.broken && this.rand() < ANGRY) v.angry = 12 + this.rand() * 10;
     v.mode = 'knocked';
     v.rest = 0;
     v.speed = 0;

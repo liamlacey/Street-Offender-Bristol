@@ -276,7 +276,7 @@ describe('changing lanes and overtaking', () => {
   });
 });
 
-describe('damage and tempers', () => {
+describe('damage', () => {
   it('limps along when badly damaged, and breaks down when wrecked', () => {
     const traffic = quiet(crossroads());
     const lane = traffic.lanes.find((l) => l.road === 0 && l.dir === 1 && l.pts[0] < 400)!;
@@ -288,34 +288,5 @@ describe('damage and tempers', () => {
     traffic.hurt(v);
     expect(v.broken).toBe(true);
     expect(v.mode).toBe('parked');
-  });
-
-  it('brakes and swerves when you come at it fast', () => {
-    const traffic = quiet(crossroads());
-    const lane = traffic.lanes.find((l) => l.road === 0 && l.dir === 1 && l.pts[0] < 400)!;
-    const v = traffic.spawn(lane, 60, 'hatch');
-    run(traffic, 1);
-    const speed = v.speed;
-    // You, head on in its lane, 25 m off and closing at 30 m/s.
-    const you = { ...away, x: v.x + 200, y: v.y, heading: Math.PI, vx: -240, vy: 0 };
-    for (let t = 0; t < 0.4; t += 1 / 60) traffic.update(1 / 60, { ...you, x: you.x + you.vx * t }, view, green);
-    expect(v.speed).toBeLessThan(speed - 15);
-    expect(Math.abs(v.side)).toBeGreaterThan(2);
-  });
-
-  it('loses its temper hit hard, and comes after you, then calms down', () => {
-    const traffic = quiet(crossroads());
-    const lane = traffic.lanes.find((l) => l.road === 0 && l.dir === 1 && l.pts[0] < 400)!;
-    const v = traffic.spawn(lane, 60, 'hatch');
-    v.angry = 8;
-    v.vx = 0;
-    v.vy = 0;
-    traffic.knock(v, 100);
-    const you = { ...away, x: 400, y: 600 };
-    run(traffic, 7, you);
-    expect(v.mode).toBe('chase');
-    expect(Math.hypot(v.x - you.x, v.y - you.y)).toBeLessThan(150);
-    run(traffic, 6, you);
-    expect(v.mode === 'rejoin' || v.mode === 'drive').toBe(true);
   });
 });

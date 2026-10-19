@@ -418,11 +418,6 @@ stop beyond that too (half their widths together ÷ the tangent of the angle, at
   it's broken down where it is, smoking, hazards flashing, and others go round it.
   Your car smokes too, its front wrecked. A parked car knocked hard enough (15) sets its
   alarm off for 12 s: beeping, its hazards flashing.
-- You coming at it fast (closing at more than 6 m/s, near enough to hit it within
-  1.3 s): it brakes hard and swerves (1.3 m to its left, or 0.8 m to its right, away
-  from you), and honks. Hit hard by you (70), one driver in four (not a bus or a
-  lorry) loses their temper: after the knock, they come after you for 12 to 22 s
-  (up to 15 m/s, honking), then calm down and find their way back onto the road.
 - A road off the map's edge: driven on to its end, and gone.
 - Standing still 25 s, not for a red light or behind you (anywhere along the queue it's
   in): a knot; out of sight, it's taken off the road.
