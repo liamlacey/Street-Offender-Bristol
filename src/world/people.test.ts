@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import mapData from '../map/bristol.json';
 import type { GameMap } from '../map/osm';
+import { Decks } from './decks';
 import { type Mover, People } from './people';
 import { buildWorld } from './world';
 
@@ -39,12 +40,36 @@ describe('people', () => {
       people.update(1 / 30, view, still(-1e6, -1e6), [], () => 'red', () => true);
       for (const p of people.people) {
         if (p.mode === 'cross') crossed++;
-        if (p.mode === 'walk' || p.mode === 'stand' || p.mode === 'queue') expect(people.inRoad(p.x, p.y, -1.2 * 8)).toBe(false);
+        if (p.mode === 'walk' || p.mode === 'stand' || p.mode === 'queue') expect(people.inRoad(p.x, p.y, -1.2 * 8, p.level)).toBe(false);
       }
     }
     expect(crossed).toBeGreaterThan(0);
     // Cheap: well under a millisecond a frame, most of the time.
     expect((performance.now() - t0) / frames).toBeLessThan(2);
+  });
+
+  it('walk over the bridges, up on the decks, out of the way of what goes under them', () => {
+    // Park Street's bridge over Frogmore Street: its pavements.
+    const decks = new Decks(map.roads, () => 0);
+    const bridge = map.roads.find((r) => r.bridge && r.name === 'Park Street')!;
+    const [x, y] = [(bridge.pts[0] + bridge.pts[2]) / 2, (bridge.pts[1] + bridge.pts[3]) / 2];
+    const people = new People(map, { rand: seeded(3) });
+    const view = viewAt(x, y);
+    people.populate(view, true);
+    // A car going along Frogmore Street, under the bridge, right through where they are.
+    const under: Mover = { x, y, angle: 0, length: 38, width: 18, vx: 120, vy: 0, id: 7, level: 0 };
+    let up = 0;
+    for (let t = 0; t < 30; t += 1 / 30) {
+      people.update(1 / 30, view, still(-1e6, -1e6), [under], () => 'red', (px, py, level) => level === 0 || !!decks.over(px, py), (level, px, py) => decks.stepAt(level, px, py, 0));
+      for (const p of people.people) {
+        if (p.level !== 1) continue;
+        up++;
+        expect(decks.over(p.x, p.y)).not.toBeNull();
+        expect(p.mode).not.toBe('down');
+        if (p.mode === 'walk') expect(people.inRoad(p.x, p.y, -1.2 * 8, 1)).toBe(false);
+      }
+    }
+    expect(up).toBeGreaterThan(0);
   });
 
   it('knocked down by a slow car get up again; by a fast one, stay down', () => {

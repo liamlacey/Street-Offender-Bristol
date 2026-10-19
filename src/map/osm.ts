@@ -101,6 +101,8 @@ export interface Road {
   aisle?: boolean;
   /** Which sides it has pavements along (as it runs: left and right of its line), drawn with it. */
   pavement?: 'both' | 'left' | 'right';
+  /** Not mapped: a road bridge's pavement, made a deck of its own (see Decks): the road's index, and which side of it it's on (1 left, -1 right). */
+  pavementOf?: { road: number; side: 1 | -1 };
   /** What it's surfaced with, if tagged (the drawing picks a usual one for its kind otherwise). */
   surface?: Paving;
   /** Stretches (distances along it, start, end, start, end, ...) with lane markings: not across junctions. */

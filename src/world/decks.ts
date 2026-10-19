@@ -7,13 +7,18 @@
  * gets off at the ends too: its sides have parapets. Each deck is as high as
  * the LIDAR measured it along its length (arched, humped, level), meeting the
  * ground at its ends; or, not measured, straight from the ground's height at
- * one end to the ground's height at the other.
+ * one end to the ground's height at the other. A road bridge's pavements
+ * are decks of their own alongside it (as they're not mapped as ways), as
+ * high as it is, with the parapets along their outsides.
  * Pure, so it's tested.
  */
 
 import { DECK_STEP, type Pts, type Road } from '../map/osm';
 import type { Segment } from '../physics/collisions';
-import { lineLength, pointAlong } from './world';
+import { lineLength, offsetLine, pointAlong } from './world';
+
+/** A road's pavement, how wide, px (as the ground's drawn). */
+const PAVEMENT = 2.4 * 8;
 
 /** You get on or off a deck within this far of one of its ends, px. */
 export const DECK_END = 8 * 8;
@@ -59,8 +64,19 @@ export class Decks {
 
   /** `ground` gives the ground's height (px) anywhere. */
   constructor(roads: Road[], ground: (x: number, y: number) => number) {
+    const all: [Road, number][] = [];
     roads.forEach((road, index) => {
       if (!road.bridge || road.pts.length < 4) return;
+      all.push([road, index]);
+      // Its pavements, either side (or one), as wide as on the ground, at its height.
+      if (!road.pavement) return;
+      for (const side of [1, -1] as const) {
+        if (road.pavement === (side === 1 ? 'right' : 'left')) continue;
+        const pts = offsetLine(road.pts, side * (road.width / 2 + PAVEMENT / 2));
+        all.push([{ kind: 'footway', width: PAVEMENT, pts, bridge: true, deck: road.deck, pavementOf: { road: index, side } }, index]);
+      }
+    });
+    for (const [road, index] of all) {
       const p = road.pts;
       const n = p.length;
       let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
@@ -86,7 +102,7 @@ export class Decks {
         x1: x1 + pad,
         y1: y1 + pad,
       });
-    });
+    }
     // Where two decks meet end to end, that's a joint in one bridge, not a way on or off.
     const touches = (x: number, y: number, self: Deck) =>
       this.decks.some((d) => {
@@ -152,6 +168,18 @@ export class Decks {
     const { deck, along } = on;
     if ((deck.open0 && along < DECK_END) || (deck.open1 && along > deck.length - DECK_END)) return 1;
     return 0;
+  }
+
+  /**
+   * Which level someone on foot at (x, y) is on now, having been on `level`,
+   * standing on ground `ground` px high: up onto a deck only where it's level
+   * with the ground (at its ends; not from under it), and down off it once
+   * they're off it.
+   */
+  stepAt(level: number, x: number, y: number, ground: number): number {
+    const on = this.over(x, y);
+    if (level === 1) return on ? 1 : 0;
+    return on && Math.abs(this.height(on.deck, on.along) - ground) < 0.6 * 8 ? 1 : 0;
   }
 
   /**

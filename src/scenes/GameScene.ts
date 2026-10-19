@@ -268,7 +268,7 @@ export class GameScene extends Phaser.Scene {
     this.traffic = new Traffic(map);
     this.boats = new Boats(map);
     this.people = new People(map, { seats: this.world.loose });
-    this.peopleLayer = new PeopleLayer(this, this.people, (x, y) => this.groundAt(x, y), DEPTH.props + 0.05, DEPTH.car + 0.1);
+    this.peopleLayer = new PeopleLayer(this, this.people, (x, y, level) => this.surfaceHeight(x, y, level), { ground: DEPTH.props + 0.05, deck: DEPTH.onDeck, air: DEPTH.car + 0.1 });
     this.ripples = new WaterRipples(this, this.surfaces, (x, y) => this.groundAt(x, y), DEPTH.ripples);
     this.boatLayer = new BoatLayer(this, this.boats, (x, y) => this.groundAt(x, y), DEPTH.boats);
     this.trafficLayer = new TrafficLayer(this, this.traffic, (x, y, level) => this.surfaceHeight(x, y, level), (x, y, reach) => this.decks.atEnd(x, y, reach), {
@@ -485,7 +485,7 @@ export class GameScene extends Phaser.Scene {
       this.audio?.crash(this.bigHit);
       if (this.bigHit > 220) this.shake(0.12, Math.min(7, this.bigHit / 68));
       // A crash: everyone near runs.
-      if (this.bigHit > 120 && this.level === 0) this.people.scareAround(this.car.x, this.car.y, 12 * 8);
+      if (this.bigHit > 120) this.people.scareAround(this.car.x, this.car.y, 12 * 8, this.level);
       this.bigHit = 0;
     }
   }
@@ -748,37 +748,36 @@ export class GameScene extends Phaser.Scene {
   private updatePeople(dt: number, controllers: GameMap['controllers'], signals: GameMap['signals'], time: number): void {
     const view = this.cameras.main.worldView;
     const car = this.car;
-    // You (on the ground; up on a bridge, you're nowhere near them), and the traffic.
-    const player: Mover = this.level === 0 ? { x: car.x, y: car.y, angle: car.heading, length: CAR_LENGTH, width: CAR_WIDTH, vx: car.vx, vy: car.vy, id: -1 } : { x: -1e6, y: -1e6, angle: 0, length: 0, width: 0, vx: 0, vy: 0, id: -1 };
+    // You and the traffic, each on its level (what's up on a bridge is nowhere near those under it).
+    const player: Mover = { x: car.x, y: car.y, angle: car.heading, length: CAR_LENGTH, width: CAR_WIDTH, vx: car.vx, vy: car.vy, id: -1, level: this.level };
     const movers: Mover[] = [];
     for (const v of [...this.traffic.vehicles, ...this.traffic.parked]) {
-      if (v.level !== 0 || Math.abs(v.x - car.x) > view.width + 400 || Math.abs(v.y - car.y) > view.height + 400) continue;
+      if (Math.abs(v.x - car.x) > view.width + 400 || Math.abs(v.y - car.y) > view.height + 400) continue;
       if (v.mode === 'parked' && v.vx === 0 && v.vy === 0) continue;
-      movers.push({ x: v.x, y: v.y, angle: v.angle, length: v.length, width: v.r * 2, vx: v.mode === 'drive' ? Math.cos(v.angle) * v.speed : v.vx, vy: v.mode === 'drive' ? Math.sin(v.angle) * v.speed : v.vy, id: v.id, dwelling: !!v.bus && v.bus.dwell > 0 });
+      movers.push({ x: v.x, y: v.y, angle: v.angle, length: v.length, width: v.r * 2, vx: v.mode === 'drive' ? Math.cos(v.angle) * v.speed : v.vx, vy: v.mode === 'drive' ? Math.sin(v.angle) * v.speed : v.vy, id: v.id, dwelling: !!v.bus && v.bus.dwell > 0, level: v.level });
     }
     const light = (i: number) => (this.signalHeads[i]?.gone ? 'green' : lightAt(controllers[signals[i].controller], signals[i].controller, signals[i].group, time));
-    // Open ground: not the water, not a building's (or a wall's) way.
-    const walkable = (x: number, y: number) => {
-      const s = this.surfaces.at(x, y);
-      if (s === Surface.Deep) return false;
-      return !this.walls[0].near(x, y, 4).some((w) => {
+    // Open ground: not the water, not a building's (or a wall's) way; up on a bridge, its deck, inside the parapets.
+    const walkable = (x: number, y: number, level: number) => {
+      if (level === 1 ? !this.decks.over(x, y) : this.surfaces.at(x, y) === Surface.Deep) return false;
+      return !this.walls[level].near(x, y, 4).some((w) => {
         const [px, py] = nearestOnSegment(x, y, w);
         return Math.hypot(px - x, py - y) < w.r + 2;
       });
     };
     try {
-      this.people.update(dt, { x0: view.left, y0: view.top, x1: view.right, y1: view.bottom }, player, movers, light, walkable);
+      this.people.update(dt, { x0: view.left, y0: view.top, x1: view.right, y1: view.bottom }, player, movers, light, walkable, (level, x, y) => this.decks.stepAt(level, x, y, this.groundAt(x, y)));
     } catch (e) {
       console.error('people:', e);
     }
     for (const h of this.people.hits) {
       this.audio?.knock();
       // Everyone near runs from it.
-      this.people.scareAround(h.person.x, h.person.y, 8 * 8);
+      this.people.scareAround(h.person.x, h.person.y, 8 * 8, h.person.level);
     }
     this.people.hits.length = 0;
     // Those out in the road, for the traffic to stop for.
-    this.traffic.pedestrians = this.people.inTheRoad().map((p) => ({ id: -100 - p.id, x: p.x, y: p.y, angle: p.angle, r: 0.4 * 8, length: 0.8 * 8, vx: 0, vy: 0, level: 0 }));
+    this.traffic.pedestrians = this.people.inTheRoad().map((p) => ({ id: -100 - p.id, x: p.x, y: p.y, angle: p.angle, r: 0.4 * 8, length: 0.8 * 8, vx: 0, vy: 0, level: p.level }));
   }
 
   /**

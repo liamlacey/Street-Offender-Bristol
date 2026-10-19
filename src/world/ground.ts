@@ -218,11 +218,22 @@ export function drawDeck(ctx: Ctx, r: Road, palette: Palette): void {
   ctx.lineJoin = 'round';
   ctx.lineCap = 'butt';
   const vehicle = VEHICLE_ROADS.has(r.kind) && r.kind !== 'track';
-  // Stone parapets, with a dark edge to show they stand up off the deck.
-  stroke(ctx, r.pts, '#3f3a34', r.width + 10);
-  stroke(ctx, r.pts, '#b9ae99', r.width + 7);
-  stroke(ctx, r.pts, 'rgba(0,0,0,0.35)', r.width + 2);
-  stroke(ctx, r.pts, vehicle ? (r.surface && r.surface !== 'asphalt' ? palette.paving[r.surface] : palette.asphalt) : pathFill(r, palette), r.width);
+  // Stone parapets, with a dark edge to show they stand up off the deck: along both sides, or (a road
+  // bridge with pavements, which are decks of their own) only where there's no pavement; a pavement's on its outside.
+  const sides = r.pavementOf ? [r.pavementOf.side] : ([1, -1] as const).filter((side) => !r.pavement || r.pavement === (side === 1 ? 'right' : 'left'));
+  if (sides.length === 2) {
+    stroke(ctx, r.pts, '#3f3a34', r.width + 10);
+    stroke(ctx, r.pts, '#b9ae99', r.width + 7);
+    stroke(ctx, r.pts, 'rgba(0,0,0,0.35)', r.width + 2);
+  } else {
+    for (const side of sides) {
+      stroke(ctx, offsetLine(r.pts, side * (r.width / 2 + 2.5)), '#3f3a34', 5);
+      stroke(ctx, offsetLine(r.pts, side * (r.width / 2 + 1.75)), '#b9ae99', 3.5);
+      stroke(ctx, offsetLine(r.pts, side * (r.width / 2 + 0.5)), 'rgba(0,0,0,0.35)', 1);
+    }
+  }
+  const fill = r.pavementOf ? palette.pavement : vehicle ? (r.surface && r.surface !== 'asphalt' ? palette.paving[r.surface] : palette.asphalt) : pathFill(r, palette);
+  stroke(ctx, r.pts, fill, r.width);
   if (vehicle) drawMarkings(ctx, [r], palette.marking);
   ctx.lineCap = 'round';
 }

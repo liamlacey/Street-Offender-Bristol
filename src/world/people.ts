@@ -8,8 +8,9 @@
  * of a car coming at them, and run (across the roads, if need be) when
  * there's danger about; hit, they're knocked down: by a slow car they get up
  * again and go on their way; by a fast one they stay down. Pure, so it's
- * tested; the scene draws them (PeopleLayer.ts). Ground level only: not on
- * the bridges.
+ * tested; the scene draws them (PeopleLayer.ts). On the ground and up on
+ * the bridges (level 1, as the traffic): only what's on their level gets in
+ * their way.
  */
 
 import { type GameMap, type Pts, VEHICLE_ROADS, pointInRing } from '../map/osm';
@@ -109,6 +110,8 @@ export interface Person {
   seat: Seat | null;
   seatAt: [number, number, number, number];
   picnic: Picnic | null;
+  /** Which level they're on: 0 the ground, 1 a bridge's deck. */
+  level: number;
   /** Off the ground, toppling over a car that hit them: how high, px, and how fast going up; and how fast they're turning over, radians a second. */
   z: number;
   vz: number;
@@ -127,6 +130,8 @@ export interface Mover {
   /** A bus waiting at a stop, with its door open. */
   dwelling?: boolean;
   id: number;
+  /** Which level it's on (0, the ground, if not given). */
+  level?: number;
 }
 
 export interface PeopleView {
@@ -143,6 +148,8 @@ interface Walk {
   busy: number;
   /** The road it's the pavement of, or -1. */
   road: number;
+  /** 0 on the ground, 1 over a bridge. */
+  level: number;
 }
 
 /** Somewhere people stand: outside a shop, by the water, at a sight, in a square; in a group or not, facing which way. */
@@ -192,7 +199,7 @@ export class People {
   private readonly along = new Map<string, [number, number, number][]>();
   private readonly spotGrid = new Map<string, number[]>();
   /** The roads' carriageways: where people mustn't walk (but to cross). */
-  private readonly roads: { pts: Pts; half: number }[] = [];
+  private readonly roads: { pts: Pts; half: number; level: number }[] = [];
   private readonly roadGrid = new Map<string, number[]>();
   private nextId = 1;
   private readonly rand: () => number;
@@ -228,8 +235,8 @@ export class People {
     const { roads } = this.map;
     // The carriageways first: the walks are kept off them.
     roads.forEach((r) => {
-      if (r.bridge || !VEHICLE_ROADS.has(r.kind) || r.kind === 'track') return;
-      this.roads.push({ pts: r.pts, half: r.width / 2 });
+      if (!VEHICLE_ROADS.has(r.kind) || r.kind === 'track') return;
+      this.roads.push({ pts: r.pts, half: r.width / 2, level: r.bridge ? 1 : 0 });
       const k = this.roads.length - 1;
       const index = (x: number, y: number) => {
         const list = this.roadGrid.get(key(x, y)) ?? [];
@@ -246,10 +253,10 @@ export class People {
       }
     });
     /** A walk, less where it runs over a road away from a crossing: in pieces. */
-    const add = (line: Pts, busy: number, road: number) => {
+    const add = (line: Pts, busy: number, road: number, level: number) => {
       const pieces: Pts[] = [];
       // (Over the road at a crossing, too: they cross as the crossing says, waiting for the lights or a gap, not walking straight on.)
-      const keep = (x: number, y: number) => !this.inRoad(x, y, 0.1 * M);
+      const keep = (x: number, y: number) => !this.inRoad(x, y, 0.1 * M, level);
       // Every metre along it: whether it's kept, and whether it's one of its corners.
       const pts: [number, number, boolean, boolean][] = [];
       for (let i = 0; i + 3 < line.length; i += 2) {
@@ -272,25 +279,26 @@ export class People {
         if (corner || !piece.length || last) piece.push(x, y);
       });
       if (piece.length) pieces.push(piece);
-      for (const pts of pieces) if (pts.length >= 4 && lengthOf(pts) > 3 * M) this.addWalk(pts, busy, road);
+      for (const pts of pieces) if (pts.length >= 4 && lengthOf(pts) > 3 * M) this.addWalk(pts, busy, road, level);
     };
+    // Over the bridges too (a road bridge's pavements are decks of their own: see Decks), on their level.
     roads.forEach((r, i) => {
-      if (r.bridge) return;
+      const level = r.bridge ? 1 : 0;
       if (VEHICLE_ROADS.has(r.kind)) {
         if (!r.pavement) return;
         // More people along the busier streets, as with the traffic.
         const busy = Math.min(4, 0.7 + (r.activity ?? 0) * 0.25);
         const off = r.width / 2 + PAVEMENT / 2;
-        if (r.pavement !== 'right') add(offsetLine(r.pts, off), busy, i);
-        if (r.pavement !== 'left') add(offsetLine(r.pts, -off), busy, i);
-      } else if (r.kind === 'pedestrian') add(r.pts, 2.5, -1);
-      else if (r.kind === 'footway' || r.kind === 'steps' || r.kind === 'cycleway') add(r.pts, r.kind === 'cycleway' ? 0.3 : 0.9, -1);
+        if (r.pavement !== 'right') add(offsetLine(r.pts, off), busy, i, level);
+        if (r.pavement !== 'left') add(offsetLine(r.pts, -off), busy, i, level);
+      } else if (r.kind === 'pedestrian') add(r.pts, 2.5, -1, level);
+      else if (r.kind === 'footway' || r.kind === 'steps' || r.kind === 'cycleway') add(r.pts, r.kind === 'cycleway' ? 0.3 : 0.9, -1, level);
     });
   }
 
-  private addWalk(pts: Pts, busy: number, road: number): void {
+  private addWalk(pts: Pts, busy: number, road: number, level: number): void {
     const k = this.walks.length;
-    this.walks.push({ pts, busy, road });
+    this.walks.push({ pts, busy, road, level });
     const n = pts.length;
     for (const [end, x, y] of [[0, pts[0], pts[1]], [1, pts[n - 2], pts[n - 1]]] as const) {
       const list = this.ends.get(key(x, y)) ?? [];
@@ -386,8 +394,8 @@ export class People {
     }
   }
 
-  /** The nearest point on a walk to (x, y), within `reach` px: x, y, which walk, which segment, how far along it. */
-  private nearestWalk(x: number, y: number, reach: number, offRoad = false): [number, number, number, number, number] | null {
+  /** The nearest point on a walk (on a level) to (x, y), within `reach` px: x, y, which walk, which segment, how far along it. */
+  private nearestWalk(x: number, y: number, reach: number, offRoad = false, level = 0): [number, number, number, number, number] | null {
     let best: [number, number, number, number, number] | null = null;
     let bestD = reach;
     const cells = Math.ceil(reach / GRID) + 1;
@@ -395,7 +403,7 @@ export class People {
     for (let i = -cells; i <= cells; i++) {
       for (let j = -cells; j <= cells; j++) {
         for (const [k] of this.along.get(key(x + i * GRID, y + j * GRID)) ?? []) {
-          if (seen.has(k)) continue;
+          if (seen.has(k) || this.walks[k].level !== level) continue;
           seen.add(k);
           const p = this.walks[k].pts;
           for (let s = 0; s + 3 < p.length; s += 2) {
@@ -404,7 +412,7 @@ export class People {
             const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2));
             const [px, py] = [ax + (bx - ax) * t, ay + (by - ay) * t];
             const d = Math.hypot(px - x, py - y);
-            if (d < bestD && (!offRoad || this.clear(x, y, px, py))) [best, bestD] = [[px, py, k, s / 2, t], d];
+            if (d < bestD && (!offRoad || this.clear(x, y, px, py, level))) [best, bestD] = [[px, py, k, s / 2, t], d];
           }
         }
       }
@@ -433,19 +441,20 @@ export class People {
   }
 
   /** Whether the way from one point to another keeps off the roads. */
-  private clear(ax: number, ay: number, bx: number, by: number): boolean {
+  private clear(ax: number, ay: number, bx: number, by: number, level = 0): boolean {
     const steps = Math.ceil(Math.hypot(bx - ax, by - ay) / M);
     for (let s = 1; s < steps; s++) {
       const [x, y] = [ax + ((bx - ax) * s) / steps, ay + ((by - ay) * s) / steps];
-      if (this.inRoad(x, y)) return false;
+      if (this.inRoad(x, y, undefined, level)) return false;
     }
     return true;
   }
 
-  /** Whether a point's on a road's carriageway (where people only go to cross, or running). */
-  inRoad(x: number, y: number, margin = -0.5 * M): boolean {
+  /** Whether a point's on a road's carriageway (on a level: where people only go to cross, or running). */
+  inRoad(x: number, y: number, margin = -0.5 * M, level = 0): boolean {
     for (const k of this.roadGrid.get(key(x, y)) ?? []) {
-      const { pts, half } = this.roads[k];
+      const { pts, half, level: on } = this.roads[k];
+      if (on !== level) continue;
       for (let i = 0; i + 3 < pts.length; i += 2) {
         const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
         const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
@@ -489,6 +498,7 @@ export class People {
       seat: null,
       seatAt: [0, 0, 0, 0],
       picnic: null,
+      level: 0,
       z: 0,
       vz: 0,
       spin: 0,
@@ -511,6 +521,8 @@ export class People {
   private onto(p: Person, k: number, seg: number, dir: 1 | -1, at?: [number, number]): void {
     p.mode = 'walk';
     p.line = k;
+    // On its level (getting onto it, once they're on it: where one walk goes on onto another up on a bridge, it's at the deck's end, level with the ground).
+    if (!at) p.level = this.walks[k].level;
     p.dir = dir;
     p.next = dir === 1 ? seg + 1 : seg;
     p.joining = !!at;
@@ -691,17 +703,28 @@ export class People {
    * Everyone does what they're doing. `player` and `movers` are the vehicles
    * (yours first): they're got out of the way of, run from, and hit by.
    * `light` says what a traffic light's showing. `walkable` says whether
-   * somewhere's open ground (not in the water or a building).
+   * somewhere's open ground on a level (not in the water or a building, or
+   * off the edge of a bridge's deck). `levelAt` says which level someone's on
+   * now, having been on one (up onto a deck at its ends, down off it).
    */
-  update(dt: number, view: PeopleView, player: Mover, movers: Mover[], light: (signal: number) => Light, walkable: (x: number, y: number) => boolean): void {
+  update(
+    dt: number,
+    view: PeopleView,
+    player: Mover,
+    movers: Mover[],
+    light: (signal: number) => Light,
+    walkable: (x: number, y: number, level: number) => boolean,
+    levelAt: (level: number, x: number, y: number) => number = (level) => level,
+  ): void {
     this.populate(view);
     const all = [player, ...movers];
     // Danger: you, going fast right by them (or along the pavement at them).
     const pspeed = Math.hypot(player.vx, player.vy);
+    const plevel = player.level ?? 0;
     for (const p of this.people) {
-      if (p.mode === 'down' || p.mode === 'board') continue;
+      if (p.mode === 'down' || p.mode === 'board' || p.level !== plevel) continue;
       const d = Math.hypot(p.x - player.x, p.y - player.y);
-      const onPavement = pspeed > 5 * M && d < 5 * M && !this.inRoad(player.x, player.y);
+      const onPavement = pspeed > 5 * M && d < 5 * M && !this.inRoad(player.x, player.y, undefined, plevel);
       if ((pspeed > 8 * M && d < 3.5 * M) || onPavement) this.scare(p, player.x, player.y);
       if ((p.mode as Mode) !== 'dive') this.dodge(p, player, pspeed);
     }
@@ -751,6 +774,7 @@ export class People {
           break;
       }
       if (p.speed > 0 && p.mode !== 'down') p.step = (p.step + (dt * p.speed) / (0.75 * M)) % 1;
+      if (p.z <= 0) p.level = levelAt(p.level, p.x, p.y);
     }
     this.hitBy(all);
     this.buses(movers);
@@ -761,7 +785,10 @@ export class People {
     const w = this.walks[p.line]?.pts;
     if (!w) return this.leave(p);
     if (p.joining) {
-      if (this.goTo(p, p.tx, p.ty, p.pace, dt)) p.joining = false;
+      if (this.goTo(p, p.tx, p.ty, p.pace, dt)) {
+        p.joining = false;
+        p.level = this.walks[p.line].level;
+      }
       return;
     }
     const n = w.length / 2;
@@ -814,7 +841,7 @@ export class People {
     for (let i = -1; i <= 1; i++) {
       for (let j = -1; j <= 1; j++) {
         for (const q of this.close.get(`${cx + i},${cy + j}`) ?? []) {
-          if (q === p) continue;
+          if (q === p || q.level !== p.level) continue;
           const [rx, ry] = [q.x - p.x, q.y - p.y];
           const ahead = rx * ux + ry * uy;
           if (ahead <= 0 || ahead > 2 * M) continue;
@@ -844,7 +871,7 @@ export class People {
           if (k === p.line) continue;
           const w = this.walks[k].pts;
           const [x, y] = e & 1 ? [w[w.length - 2], w[w.length - 1]] : [w[0], w[1]];
-          if (Math.hypot(x - p.x, y - p.y) < 6 * M && this.clear(p.x, p.y, x, y)) choices.push(e);
+          if (Math.hypot(x - p.x, y - p.y) < 6 * M && this.clear(p.x, p.y, x, y, p.level)) choices.push(e);
         }
       }
     }
@@ -892,7 +919,7 @@ export class People {
 
   /** Back to walking: onto the nearest walk within 15 m (or wandering about the park they're in; or standing a while longer). */
   private rejoin(p: Person): void {
-    const near = this.inRoad(p.x, p.y) ? this.nearestWalk(p.x, p.y, 15 * M) : this.nearestWalk(p.x, p.y, 15 * M, true);
+    const near = this.inRoad(p.x, p.y, undefined, p.level) ? this.nearestWalk(p.x, p.y, 15 * M, false, p.level) : this.nearestWalk(p.x, p.y, 15 * M, true, p.level);
     if (near) {
       const [x, y, k, seg] = near;
       this.onto(p, k, seg, this.rand() < 0.5 ? 1 : -1, [x, y]);
@@ -963,12 +990,12 @@ export class People {
   }
 
   /** Running from danger: away from it, roads or not (but not into the water or a wall); once it's passed, back to what they were doing. */
-  private flee(p: Person, dt: number, walkable: (x: number, y: number) => boolean): void {
+  private flee(p: Person, dt: number, walkable: (x: number, y: number, level: number) => boolean): void {
     p.timer -= dt;
     if (p.timer <= 0) return this.rejoin(p);
     const [ux, uy] = [Math.cos(p.angle), Math.sin(p.angle)];
     const [nx, ny] = [p.x + ux * RUN * dt, p.y + uy * RUN * dt];
-    if (walkable(nx, ny)) {
+    if (walkable(nx, ny, p.level)) {
       [p.x, p.y] = [nx, ny];
       p.speed = RUN;
     } else {
@@ -979,9 +1006,9 @@ export class People {
   }
 
   /** Thrown (hit, or diving out of the way): sliding to a stop; then, unless hurt, up again (diving: on their feet at once, and running). */
-  private thrown(p: Person, dt: number, walkable: (x: number, y: number) => boolean): void {
+  private thrown(p: Person, dt: number, walkable: (x: number, y: number, level: number) => boolean): void {
     const [nx, ny] = [p.x + p.vx * dt, p.y + p.vy * dt];
-    if (walkable(nx, ny)) [p.x, p.y] = [nx, ny];
+    if (walkable(nx, ny, p.level)) [p.x, p.y] = [nx, ny];
     else [p.vx, p.vy] = [0, 0];
     if (p.z > 0 || p.vz > 0) {
       // Up over the bonnet and roof, turning over, and down again (a little bounce if they come down hard).
@@ -1022,9 +1049,9 @@ export class People {
     p.angle = Math.atan2(p.y - y, p.x - x) + (this.rand() - 0.5) * 0.8;
   }
 
-  /** Everyone within `reach` px of (x, y) is scared (a crash, someone knocked down). */
-  scareAround(x: number, y: number, reach: number): void {
-    for (const p of this.people) if (Math.hypot(p.x - x, p.y - y) < reach) this.scare(p, x, y);
+  /** Everyone within `reach` px of (x, y), on its level, is scared (a crash, someone knocked down). */
+  scareAround(x: number, y: number, reach: number, level = 0): void {
+    for (const p of this.people) if (p.level === level && Math.hypot(p.x - x, p.y - y) < reach) this.scare(p, x, y);
   }
 
   /** A car coming straight at them, fast: they jump out of the way (most of them, if they see it in time). */
@@ -1053,7 +1080,7 @@ export class People {
       // In the air, over the car: it's gone under them.
       if (p.mode === 'board' || p.z > 0.2 * M) continue;
       for (const v of all) {
-        if (Math.abs(v.x - p.x) > v.length || Math.abs(v.y - p.y) > v.length) continue;
+        if ((v.level ?? 0) !== p.level || Math.abs(v.x - p.x) > v.length || Math.abs(v.y - p.y) > v.length) continue;
         const [ux, uy] = [Math.cos(v.angle), Math.sin(v.angle)];
         const [rx, ry] = [p.x - v.x, p.y - v.y];
         const along = rx * ux + ry * uy;
@@ -1113,7 +1140,7 @@ export class People {
 
   /** Those out in the road (crossing, or running): for the traffic to stop for. */
   inTheRoad(): Person[] {
-    return this.people.filter((p) => p.mode === 'cross' || p.mode === 'flee' || p.mode === 'dive' || (p.mode === 'down' && this.inRoad(p.x, p.y)));
+    return this.people.filter((p) => p.mode === 'cross' || p.mode === 'flee' || p.mode === 'dive' || (p.mode === 'down' && this.inRoad(p.x, p.y, undefined, p.level)));
   }
 }
 

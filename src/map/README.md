@@ -231,6 +231,9 @@ drawn over you. Each level has its own walls and posts (buildings stand on both;
 garden walls, railings, lamps and the like belong to the deck when they're on
 it, and trees to the ground), and its own surface (a deck's is tarmac for a road
 bridge, paving for the rest). The ground under a bridge isn't raised to meet it.
+A road bridge's pavements (worked out as for any road's: see Pavements) are decks of
+their own alongside it, 2.4 m wide and as high as it, paved; the parapets stand
+along their outsides (not between the road and its pavement).
 
 **Bridge decks, measured.** A deck's height every 2 m along it is the LIDAR's
 first-return surface there (the deck, not what's under it): the median of the
@@ -482,7 +485,16 @@ and the sights (`tourism=attraction/museum/gallery/viewpoint/artwork/aquarium/zo
 theme_park`, `historic=monument/memorial/ship/castle/ruins/archaeological_site/building/
 church`, `amenity=theatre/arts_centre/fountain`).
 
-**In the game** (`src/world/people.ts`), on the ground only (not on the bridges):
+**In the game** (`src/world/people.ts`), on the ground and on the bridges: everywhere
+but the water and the buildings.
+
+- **Levels**: as for the cars, a bridge's deck is level 1. A walk along a bridge (a
+  footbridge, a road bridge's pavement) is on level 1, cut only by the carriageways on
+  that level; one under it (Frogmore Street's pavements) on the ground. Anyone on foot
+  steps up onto a deck only where it's level with the ground they're on (within 0.6 m:
+  at its ends, not from under it), and down off it once they're off it; a deck's
+  parapets keep them on it. Only what's on their level hits them, scares them, or is
+  stepped round.
 
 - **Where they walk**: the footways, steps, cycleways and pedestrian streets, and the
   pavements along the roads that have them (down the middle of each, 1.2 m in from the

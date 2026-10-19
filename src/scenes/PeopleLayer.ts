@@ -120,11 +120,10 @@ export class PeopleLayer {
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly people: People,
-    /** The height of the ground under a point, px. */
-    private readonly base: (x: number, y: number) => number,
-    private readonly depth: number,
-    /** Over the cars, for anyone thrown up over one. */
-    private readonly airDepth: number,
+    /** The height of what's underfoot at a point on a level (the ground, a bridge's deck), px. */
+    private readonly base: (x: number, y: number, level: number) => number,
+    /** Drawn on the ground (under the bridges), up on the decks, and thrown up over a car (over the cars). */
+    private readonly depths: { ground: number; deck: number; air: number },
   ) {}
 
   update(view: Phaser.Geom.Rectangle, perspective: Perspective): void {
@@ -137,15 +136,15 @@ export class PeopleLayer {
       const key = texture(this.scene, p.look, pose);
       let s = this.sprites.get(p);
       if (!s) {
-        s = this.scene.add.image(0, 0, key).setScale(SIZE / ART_SCALE).setDepth(this.depth);
+        s = this.scene.add.image(0, 0, key).setScale(SIZE / ART_SCALE);
         this.sprites.set(p, s);
       } else if (s.texture.key !== key) s.setTexture(key);
       // Head height (lying down, the ground), and how high they've been thrown: up over the car, and a little bigger.
-      const lift = perspective.lift(this.base(p.x, p.y) + (p.mode === 'down' ? 0.2 : p.mode === 'sit' ? 0.8 : 1.2) * 8 + p.z);
+      const lift = perspective.lift(this.base(p.x, p.y, p.level) + (p.mode === 'down' ? 0.2 : p.mode === 'sit' ? 0.8 : 1.2) * 8 + p.z);
       s.setPosition(perspective.x(p.x, lift), perspective.y(p.y, lift))
         .setRotation(p.angle)
         .setScale((SIZE / ART_SCALE) * (1 + p.z / 160))
-        .setDepth(p.z > 0 ? this.airDepth : this.depth);
+        .setDepth(p.level === 1 ? this.depths.deck + (p.z > 0 ? 0.02 : 0) : p.z > 0 ? this.depths.air : this.depths.ground);
     }
     for (const [p, s] of this.sprites) {
       if (seen.has(p)) continue;
@@ -159,10 +158,10 @@ export class PeopleLayer {
       spread.add(c);
       let b = this.blankets.get(c);
       if (!b) {
-        b = this.scene.add.image(0, 0, blanket(this.scene, c.pattern)).setScale(1 / ART_SCALE).setDepth(this.depth - 0.01);
+        b = this.scene.add.image(0, 0, blanket(this.scene, c.pattern)).setScale(1 / ART_SCALE).setDepth(this.depths.ground - 0.01);
         this.blankets.set(c, b);
       }
-      const lift = perspective.lift(this.base(c.x, c.y));
+      const lift = perspective.lift(this.base(c.x, c.y, 0));
       b.setPosition(perspective.x(c.x, lift), perspective.y(c.y, lift)).setRotation(c.angle);
     }
     for (const [c, b] of this.blankets) {
