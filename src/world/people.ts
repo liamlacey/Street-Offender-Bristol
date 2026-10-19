@@ -1139,8 +1139,8 @@ export class People {
     p.angle = Math.atan2(v.vy, v.vx) + (this.rand() - 0.5) * 0.8;
     if (speed > HURT) p.hurt = true;
     p.timer = DOWN[0] + this.rand() * (DOWN[1] - DOWN[0]);
-    // What hit them loses some of its speed to the knock (a car's 15 times their weight).
-    this.hits.push({ person: p, speed, by: v.id, how: 'hit', loss: speed < 1.2 * M ? 0 : Math.min(0.2, 0.06 + speed / (40 * M) * 0.06) });
+    // What hit them loses a good part of its speed to the knock: 12%, and more the faster it was going (up to 30%).
+    this.hits.push({ person: p, speed, by: v.id, how: 'hit', loss: speed < 1.2 * M ? 0 : Math.min(0.3, 0.12 + (speed / (40 * M)) * 0.16) });
   }
 
   /** Walks towards (x, y) at `speed`; whether they're there (within `near` px). */

@@ -773,11 +773,19 @@ export class GameScene extends Phaser.Scene {
     for (const h of this.people.hits) {
       // What hit them (or went over them) loses some speed to it: you feel it.
       if (h.by === -1) {
+        const [bvx, bvy] = [car.vx, car.vy];
         car.vx *= 1 - h.loss;
         car.vy *= 1 - h.loss;
         if (h.how === 'hit') {
+          // A thump: the front dented where they were hit, the car twisted round towards that side
+          // (the speed it lost, lost there, off its middle), and a jolt.
+          const lost = Math.hypot(bvx - car.vx, bvy - car.vy);
+          const [rx, ry] = [h.person.x - car.x, h.person.y - car.y];
+          car.spin += (rx * (car.vy - bvy) - ry * (car.vx - bvx)) * 0.0035;
+          if (lost > 6) this.dent(null, h.person.x, h.person.y, lost * 2.5);
           this.audio?.knock();
-          if (h.speed > 4 * 8) this.shake(0.1, Math.min(1.6, h.speed / 90));
+          this.audio?.crash(Math.min(120, lost * 2));
+          if (h.speed > 3 * 8) this.shake(0.16, Math.min(2.6, 0.5 + h.speed / 60));
         } else {
           // A wheel over them: a thud and a lurch, like a hump.
           this.audio?.crash(Math.min(60, 12 + h.speed * 0.15));
