@@ -271,8 +271,8 @@ export function buildWorld(map: GameMap): World {
     if (p.kind === 'signals' || p.kind === 'busstop') return;
     const l = LOOSE[p.kind];
     if (l) {
-      // Benches face along the nearest wall or path; without knowing which, turn each its own way.
-      loose.push({ kind: p.kind, x: p.x, y: p.y, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: ((i * 2.399) % Math.PI) - Math.PI / 2, spin: 0, moved: false, level });
+      // Benches face along the nearest wall or path; without knowing which (unless the map says), turn each its own way.
+      loose.push({ kind: p.kind, x: p.x, y: p.y, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: p.angle ?? ((i * 2.399) % Math.PI) - Math.PI / 2, spin: 0, moved: false, level });
     } else {
       fixed.push({ ...p, level });
     }

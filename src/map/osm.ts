@@ -8,7 +8,7 @@
  */
 
 import { type Berth, type FerryRoute, type MooringEdge, Water, ferryStop, findBerths, overlap } from './berths.ts';
-import { LANDMARKS, STREETS } from './landmarks.ts';
+import { CORRECTIONS, LANDMARKS, STREETS } from './landmarks.ts';
 import { type Arm, type Controller, type LightPoint, type Signal, trafficLights } from './signals.ts';
 
 export type { Controller, Signal } from './signals.ts';
@@ -324,6 +324,21 @@ function polylineLength(pts: Pts): number {
 }
 
 /** The point `along` px along a polyline, and the way it's heading there. */
+/** How far along a polyline the nearest point to (x, y) is, and how far it is from it. */
+function nearestAlongLine(pts: Pts, x: number, y: number): { along: number; distance: number } {
+  let best = { along: 0, distance: Infinity };
+  let run = 0;
+  for (let i = 0; i + 3 < pts.length; i += 2) {
+    const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
+    const len = Math.hypot(bx - ax, by - ay);
+    const t = len ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / (len * len))) : 0;
+    const d = Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y);
+    if (d < best.distance) best = { along: run + t * len, distance: d };
+    run += len;
+  }
+  return best;
+}
+
 function alongPolyline(pts: Pts, along: number): [number, number, number, number] {
   let run = 0;
   for (let i = 0; i + 3 < pts.length; i += 2) {
@@ -1188,7 +1203,14 @@ export interface BuildOptions {
 const round = (v: number) => Math.round(v);
 const roundPts = (pts: Pts) => pts.map(round);
 
-export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMap {
+export function buildMap(source: OsmData, { bounds, start }: BuildOptions): GameMap {
+  // What's different on the ground from what OSM has (see landmarks.ts): its tags put over the element's own.
+  const data: OsmData = { ...source, ways: new Map(source.ways) };
+  for (const [ref, c] of Object.entries(CORRECTIONS)) {
+    const [type, id] = ref.split('/');
+    const way = type === 'way' ? data.ways.get(Number(id)) : undefined;
+    if (way) data.ways.set(way.id, { ...way, tags: { ...way.tags, ...c.tags } });
+  }
   const proj = new Projection(bounds.maxlat, bounds.minlon);
   const width = round(proj.x(bounds.maxlon));
   const height = round(proj.y(bounds.minlat));
@@ -2183,6 +2205,73 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     if (!isSight(way.tags)) continue;
     const c = centre(way);
     if (c && inside(c[0], c[1])) venues.push(round(c[0]), round(c[1]), 1);
+  }
+
+  // A street made pedestrian (see landmarks.ts): bollards across it where the roads meet it, and the pubs' and bars' tables along it.
+  for (const [ref, c] of Object.entries(CORRECTIONS)) {
+    const way = data.ways.get(Number(ref.split('/')[1]));
+    const pts = way && pointsOf(way.nodes);
+    if (!way || !pts || !(c.bollards || c.seating)) continue;
+    const half = (roadWidth('pedestrian', way.tags) * PX_PER_METRE) / 2;
+    const length = polylineLength(pts);
+    // Where along it the roads cross it or meet it, and how wide each is (half).
+    const meets: [number, number][] = [];
+    let run = 0;
+    for (let k = 0; k < way.nodes.length; k++) {
+      if (k > 0) run += Math.hypot(pts[k * 2] - pts[k * 2 - 2], pts[k * 2 + 1] - pts[k * 2 - 1]);
+      for (const other of data.ways.values()) {
+        const kind = other === way ? null : roadKind(other.tags);
+        if (!kind || !VEHICLE_ROADS.has(kind) || kind === 'service' || kind === 'track' || !other.nodes.includes(way.nodes[k])) continue;
+        // (Once for each point, however many roads meet there: the widest.)
+        const h = (roadWidth(kind, other.tags) * PX_PER_METRE) / 2;
+        const same = meets.find(([d]) => d === run);
+        if (same) same[1] = Math.max(same[1], h);
+        else meets.push([run, h]);
+      }
+    }
+    if (c.bollards) {
+      for (const [d, h] of meets) {
+        for (const dir of [-1, 1]) {
+          const at = d + dir * (h + 1.2 * PX_PER_METRE);
+          if (at < 0 || at > length) continue;
+          const [x, y, ux, uy] = alongPolyline(pts, at);
+          for (let o = -half + 0.7 * PX_PER_METRE; o <= half - 0.7 * PX_PER_METRE + 0.1; o += 1.6 * PX_PER_METRE) {
+            const [bx, by] = [x - uy * o, y + ux * o];
+            if (inside(bx, by)) props.push({ kind: 'bollard', x: round(bx), y: round(by) });
+          }
+        }
+      }
+    }
+    if (c.seating) {
+      const tables: [number, number][] = [];
+      const drinking = (t: Tags) => t.amenity === 'pub' || t.amenity === 'bar';
+      const spots: [number, number][] = [];
+      for (const n of data.nodes.values()) if (drinking(n.tags)) spots.push([proj.x(n.lon), proj.y(n.lat)]);
+      for (const w of data.ways.values()) {
+        const cw = drinking(w.tags) ? centre(w) : null;
+        if (cw) spots.push([cw[0], cw[1]]);
+      }
+      for (const [vx, vy] of spots) {
+        // In front of it: level with it along the street, on its side, a table's width out from the middle's way through.
+        const { along: d, distance } = nearestAlongLine(pts, vx, vy);
+        if (distance > half + 25 * PX_PER_METRE || d < 2 * PX_PER_METRE || d > length - 2 * PX_PER_METRE) continue;
+        const [x0, y0, ux, uy] = alongPolyline(pts, d);
+        const side = Math.sign(-(vx - x0) * uy + (vy - y0) * ux) || 1;
+        for (const j of [-1, 0, 1]) {
+          const at = d + j * 2.4 * PX_PER_METRE;
+          if (at < 1.5 * PX_PER_METRE || at > length - 1.5 * PX_PER_METRE || meets.some(([m, h]) => Math.abs(at - m) < h + 3 * PX_PER_METRE)) continue;
+          const [x, y, tx, ty] = alongPolyline(pts, at);
+          const off = side * 2.6 * PX_PER_METRE;
+          const [px, py] = [x - ty * off, y + tx * off];
+          // (On the street: not over the water, nor in a building.)
+          const wet = areas.some((ar) => ar.kind === 'water' && ar.rings.reduce((inn, r) => (pointInRing(px, py, r) ? !inn : inn), false));
+          const built = buildings.some((b) => b.solid && pointInRing(px, py, b.rings[0]));
+          if (!inside(px, py) || wet || built || tables.some(([qx, qy]) => Math.hypot(qx - px, qy - py) < 2 * PX_PER_METRE)) continue;
+          tables.push([px, py]);
+          props.push({ kind: 'picnic', x: round(px), y: round(py), angle: +Math.atan2(ty, tx).toFixed(3) });
+        }
+      }
+    }
   }
 
   // Draw small areas over big ones of the same kind.

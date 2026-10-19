@@ -41,3 +41,22 @@ export const STREETS: Record<string, { walls: string[]; roofs: string[] }> = {
   // Old warehouses and timber-framed inns.
   'King Street': { walls: ['#8d4a36', '#e6e1d6', '#7a4434', '#d8cdb3'], roofs: ['#55595f', '#5d6168'] },
 };
+
+/**
+ * What's different on the ground from what OSM has (yet), from the owner's own
+ * knowledge of the streets (never from Google Maps): tags put on an OSM
+ * element (`way/…`) over its own; and for a street made pedestrian, bollards
+ * across it where the roads meet it (`bollards`), and the pubs' and bars'
+ * tables out along both sides in front of them, a way clear down the middle
+ * (`seating`).
+ */
+export interface Correction {
+  tags: Record<string, string>;
+  bollards?: boolean;
+  seating?: boolean;
+}
+
+export const CORRECTIONS: Record<string, Correction> = {
+  // King Street: pedestrianised (OSM still has it as a one-way street), its whole width (the old carriageway and pavements) paved; the streets across it are open.
+  'way/191322143': { tags: { highway: 'pedestrian', oneway: 'no', width: '11' }, bollards: true, seating: true },
+};

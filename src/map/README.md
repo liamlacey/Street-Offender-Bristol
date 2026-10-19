@@ -12,6 +12,7 @@ as the old. If the method changes, change this file in the same commit.
 | Heights of roofs and treetops | Environment Agency, **LIDAR Composite First Return DSM, 1 m** (WCS, coverage `…__Lidar_Composite_Elevation_FZ_DSM_1m`) | Open Government Licence v3.0 | Building heights, roof shapes, trees' heights, finding trees, walls' and hedges' heights, finding bus shelters |
 | Height of the bare ground | Environment Agency, **LIDAR Composite DTM, 1 m** (WCS, coverage `…__Lidar_Composite_Elevation_DTM_1m`) | Open Government Licence v3.0 | Heights above ground (with the DSM), the hills, retaining walls' heights, counting steps, steep banks |
 | Landmarks' and streets' colours | Written by hand in `landmarks.ts` | Ours | What OSM doesn't say about how places look |
+| Corrections | The owner's own knowledge of the streets, written by hand in `landmarks.ts` (`CORRECTIONS`) | Ours | What's different on the ground from OSM (yet): King Street pedestrianised |
 
 The full URLs are in `tools/build-map.ts`. The game credits both at the bottom of
 the screen ("© OpenStreetMap contributors · LIDAR © Environment Agency (OGL)"), and
@@ -59,6 +60,23 @@ All in `osm.ts`, `enrich.ts`, `lidar.ts` and `osgb.ts` (pure, tested).
 
 **Projection.** Flat, about the map's north-west corner: metres east and south,
 **8 px to the metre** (`PX_PER_METRE`), north up. The car is 4.75 m long.
+
+**Corrections** (`CORRECTIONS` in `landmarks.ts`): where the street isn't (yet) as
+OSM has it, from the owner's own knowledge (never from Google Maps), tags put on an
+OSM element over its own before anything's made of it, each with a note of why.
+**King Street** (`way/191322143`) is pedestrianised: OSM still has it as a one-way
+street, so it's made `highway=pedestrian`, two-way, 11 m wide (its old carriageway
+and pavements, all paved in its setts). The streets across it (King William
+Avenue) stay open. A street made pedestrian may also get:
+
+- **Bollards** across it where the roads meet it (not service roads or tracks), on its
+  side of each, 1.2 m beyond the road's edge: one every 1.6 m across it, 0.7 m in from
+  each side.
+- **The pubs' and bars' tables** (`amenity=pub/bar`, nodes or buildings, within 25 m of
+  its edge): three picnic tables in front of each, 2.4 m apart along the street and
+  2.6 m out from its middle on that side (a way 3.7 m wide left clear down the middle),
+  lying along it; none within 3 m of a road meeting it, over the water, in a building,
+  or within 2 m of another. People sit at them as at any picnic table.
 
 **Roads and paths** (`highway=*`; tunnels left out; one being built or mended,
 `highway=construction`, as what it'll be, `construction=*`: Pero's Bridge is shut
@@ -775,7 +793,8 @@ they're in the way of traffic and people too, when there are some.
 - `osm.ts`: reads OSM's XML and makes the map (`buildMap`): projection, roads,
   ground, lines, buildings, trees, props, crossings, surfaces. Tested in `osm.test.ts`.
 - `berths.ts`: where boats moor, and the ferry routes and stops.
-- `landmarks.ts`: landmarks' colours (and heights, roof shapes), and streets' looks.
+- `landmarks.ts`: landmarks' colours (and heights, roof shapes), and streets' looks;
+  and the corrections (`CORRECTIONS`: King Street pedestrianised).
 - `enrich.ts`, `lidar.ts`, `osgb.ts`: the LIDAR and the terrain. Tested in `lidar.test.ts`.
 - `bristol.json`: the map the game loads.
 - `../../tools/build-map.ts`: downloads, keeps and puts it all together.
