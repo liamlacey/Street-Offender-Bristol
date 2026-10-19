@@ -197,6 +197,14 @@ export class GameScene extends Phaser.Scene {
   private people!: People;
   private peopleLayer!: PeopleLayer;
   private loose: { body: LooseProp; image: Phaser.GameObjects.Image }[] = [];
+  /** The trees, props and loose things by where they are (so only those round the view are looked at each frame), and those shown last frame. */
+  private treeGrid!: Grid;
+  private propGrid!: Grid;
+  private raisedGrid!: Grid;
+  private shownTrees = new Set<number>();
+  private shownProps = new Set<number>();
+  private shownRaised = new Set<number>();
+  private shownLoose = new Set<number>();
   private looseByChunk = new Map<string, number[]>();
   private effects!: CarEffects;
   private skids!: SkidMarks;
@@ -281,6 +289,9 @@ export class GameScene extends Phaser.Scene {
     this.addProps();
     this.addTrees();
     this.addLights();
+    this.treeGrid = new Grid(this.trees.length, (i) => [this.trees[i].foot.x, this.trees[i].foot.y]);
+    this.propGrid = new Grid(this.props.length, (i) => [this.props[i].x, this.props[i].y]);
+    this.raisedGrid = new Grid(this.raised.length, (i) => [this.raised[i].x, this.raised[i].y]);
     this.traffic = new Traffic(map);
     this.boats = new Boats(map);
     this.people = new People(map, { seats: this.world.loose });
@@ -386,7 +397,8 @@ export class GameScene extends Phaser.Scene {
         .image(body.x, body.y, TEX.prop(body.kind))
         .setScale(1 / ART_SCALE)
         .setRotation(body.angle)
-        .setDepth(body.level === 1 ? DEPTH.onDeck : DEPTH.props);
+        .setDepth(body.level === 1 ? DEPTH.onDeck : DEPTH.props)
+        .setVisible(false);
       this.loose.push({ body, image });
       const key = chunkKey(Math.floor(body.x / CHUNK), Math.floor(body.y / CHUNK));
       const list = this.looseByChunk.get(key);
@@ -1309,7 +1321,10 @@ export class GameScene extends Phaser.Scene {
     const pad = 120;
     const { x: cx, y: cy } = this.shown;
     const crowns = this.world.map.trees;
-    for (const [i, t] of this.trees.entries()) {
+    // (Those round the view, by where they stand: a falling one's crown can be its height away.)
+    const now = new Set<number>();
+    for (const i of this.treeGrid.around(view, pad + 400, this.shownTrees)) {
+      const t = this.trees[i];
       const show = !t.gone && t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
       if (t.image.visible !== show) t.image.setVisible(show);
       // Its trunk, while it stands (once it's down, it's the stump and the trunk lying there instead).
@@ -1319,6 +1334,7 @@ export class GameScene extends Phaser.Scene {
         t.trunk.setVisible(trunk);
         t.bole.setVisible(trunk);
       }
+      if (show || trunk) now.add(i);
       if (trunk) {
         // From its foot up to where it goes into the crown, leaning out from the middle of the view as the rest does.
         const s0 = p.lift(t.z);
@@ -1355,25 +1371,44 @@ export class GameScene extends Phaser.Scene {
       }
       t.image.setPosition(x, y);
     }
+    this.shownTrees = now;
   }
 
   /** The street furniture near the view, standing on the hills. */
   private updateProps(view: Phaser.Geom.Rectangle): void {
     const p = this.perspective;
     const pad = 120;
-    for (const list of [this.props, this.raised] as { x: number; y: number; z: number; image: Phaser.GameObjects.Image; gone?: boolean }[][]) {
-      for (const t of list) {
+    // (A crane's jib reaches out from its foot: looked for further round.)
+    for (const [list, grid, shown, reach] of [
+      [this.props, this.propGrid, this.shownProps, pad],
+      [this.raised, this.raisedGrid, this.shownRaised, pad + 600],
+    ] as [{ x: number; y: number; z: number; image: Phaser.GameObjects.Image; gone?: boolean }[], Grid, Set<number>, number][]) {
+      const now = new Set<number>();
+      for (const i of grid.around(view, reach, shown)) {
+        const t = list[i];
         const show = !t.gone && t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
         if (t.image.visible !== show) t.image.setVisible(show);
         if (!show) continue;
+        now.add(i);
         const s = p.lift(t.z);
         t.image.setPosition(p.x(t.x, s), p.y(t.y, s));
       }
+      shown.clear();
+      for (const i of now) shown.add(i);
     }
-    for (const { body, image } of this.loose) {
+    // The loose things, from the chunks round the view (and those shown, or moving, already).
+    const loose = new Set(this.shownLoose);
+    for (let cx = Math.floor((view.left - pad) / CHUNK); cx <= Math.floor((view.right + pad) / CHUNK); cx++) {
+      for (let cy = Math.floor((view.top - pad) / CHUNK); cy <= Math.floor((view.bottom + pad) / CHUNK); cy++) for (const i of this.looseByChunk.get(chunkKey(cx, cy)) ?? []) loose.add(i);
+    }
+    this.shownLoose.clear();
+    for (const i of loose) {
+      const { body, image } = this.loose[i];
       if (body.gone) continue;
       const show = body.x > view.left - pad && body.x < view.right + pad && body.y > view.top - pad && body.y < view.bottom + pad;
       if (image.visible !== show) image.setVisible(show);
+      if (!show && !body.moved) continue;
+      this.shownLoose.add(i);
       if (!show) continue;
       const deck = body.level === 1 ? this.decks.over(body.x, body.y) : null;
       const s = p.lift(deck ? this.decks.height(deck.deck, deck.along) : this.groundAt(body.x, body.y));
@@ -1455,4 +1490,38 @@ function vehicleShape(v: { kind: VehicleKind }): Shape {
     shapes.set(v.kind, shape);
   }
   return shape;
+}
+
+/**
+ * Things (by their index in a list) by where they stand, in squares of CHUNK
+ * px: so only those round the view are looked at each frame, not all of
+ * them, however big the map.
+ */
+class Grid {
+  private readonly cells = new Map<number, number[]>();
+
+  constructor(n: number, at: (i: number) => [number, number]) {
+    for (let i = 0; i < n; i++) {
+      const [x, y] = at(i);
+      const k = Grid.key(Math.floor(x / CHUNK), Math.floor(y / CHUNK));
+      const list = this.cells.get(k);
+      if (list) list.push(i);
+      else this.cells.set(k, [i]);
+    }
+  }
+
+  private static key(cx: number, cy: number): number {
+    return (cx + 1024) * 4096 + (cy + 1024);
+  }
+
+  /** Those within `pad` px of the view, and any of `also` (those shown last time, to hide again). */
+  around(view: Phaser.Geom.Rectangle, pad: number, also: Set<number>): Set<number> {
+    const out = new Set(also);
+    for (let cx = Math.floor((view.left - pad) / CHUNK); cx <= Math.floor((view.right + pad) / CHUNK); cx++) {
+      for (let cy = Math.floor((view.top - pad) / CHUNK); cy <= Math.floor((view.bottom + pad) / CHUNK); cy++) {
+        for (const i of this.cells.get(Grid.key(cx, cy)) ?? []) out.add(i);
+      }
+    }
+    return out;
+  }
 }

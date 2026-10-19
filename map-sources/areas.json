@@ -21,6 +21,22 @@
         -0.5,
         0
       ]
+    },
+    {
+      "name": "kingsdown",
+      "about": "About 970 m by 945 m just north of the cathedral area: the University of Bristol and Royal Fort, Tyndall's Park, St Michael's Hill, Kingsdown, Cotham, and down to Lewins Mead and Christmas Steps.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.6075,
+        "maxlat": 51.4645,
+        "maxlon": -2.5935
+      },
+      "fetched": "2026-10-19",
+      "osmNewestEdit": "2026-10-19T19:14:12Z",
+      "lidarShift": [
+        -0.5,
+        0.5
+      ]
     }
   ]
 }

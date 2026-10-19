@@ -25,7 +25,7 @@ describe('people', () => {
     };
     expect(count(...parkStreet)).toBeGreaterThan(60);
     // A quiet corner of the map, by its edge.
-    expect(count(150, 7400)).toBeLessThan(count(...parkStreet) / 2);
+    expect(count(150, map.height - 165)).toBeLessThan(count(...parkStreet) / 2);
   });
 
   it('keep off the roads, but to cross at a crossing (or running), and do it in good time', () => {
