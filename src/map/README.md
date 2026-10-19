@@ -474,6 +474,51 @@ more than rolling), bumping into the walls, posts and other vehicles (and knocki
 them about too), waits 1.6 s, then drives gently back into its lane (reversing first if
 it's pointing the wrong way) and carries on. A parked car stays where it ends up.
 
+## Boats
+
+**Berths** (worked out when the map's built, `berths.ts`): along the quays mapped as
+moorings (`man_made=quay` with `mooring`, not `no`) and round the edges of the
+pontoons (`man_made=pier` with `floating=yes`, unless `mooring=no`). Along each
+edge, on whichever side the water's on (water areas, not a pontoon or a pier), a
+berth every boat's length, 0.6 m in from the edge's start and 0.8–2.6 m apart, the
+boat lying alongside 0.4 m off the edge; only where the whole hull's on the water
+and clear (by 0.5 m) of every other berth. What's moored goes by the mooring (and
+is the same every time, by where it is): `permit` (people living aboard)
+narrowboats, Dutch barges, cruisers and yachts; `guest` cruisers, yachts and
+narrowboats; `private` yachts, cruisers and dinghies; `commercial` the old tugs and
+barges; a pontoon whose `operator` is a ferry company, its spare ferries; anything
+else, a mix with dinghies. Where the edge left is too short for the kind picked,
+one that fits. Sizes (length × beam): narrowboat 17 × 2.1 m, barge 19 × 4, cruiser
+9 × 3, yacht 10 × 3.3, dinghy 4.2 × 1.7, tug 21 × 5.5, ferry 13 × 3.8.
+
+**Ferries:** each `route=ferry` relation (not disused) calls at its stops (members
+with a `stop` role, or nodes tagged `amenity=ferry_terminal`) in order; a ferry
+crossing mapped only as a `route=ferry` way runs between the terminals within 30 m
+of its ends. Only terminals that are on the map and not disused (a disused one's
+tag is `disused:amenity`) count, and a route needs two. Each stop's put alongside
+the nearest edge (water's or a pontoon's) within 40 m that a ferry fits against,
+clear of the other stops; a route with the same stops as one already kept (the
+other way, say) isn't kept twice. Berths overlapping a stop (within 2 m) are dropped.
+
+**In the game** (`src/world/boats.ts`): about 80% of the berths have a boat (the
+tugs and spare ferries always), and one ferry runs each route, waiting 25 s at each
+stop and going back along it from the end. About every 18 s one of the moored boats
+(not a tug or ferry) casts off for a free berth its size (or bigger) at least 80 m
+away, up to 5 at once. Where they can go is a grid over the water, 2 m a cell: the
+water areas less the pontoons, piers, and every berth and ferry stop (half a metre
+round). Bridges aren't in it: they're over the water, and the boats go under
+them (drawn under the decks). A way is found through it with A* (weighted 1.6, for
+speed), keeping 2 cells (about 3 m) from anything and costing more within 6 cells
+of it, so they keep to the middle; then pulled straight where the line's clear.
+Under way, a boat steers for a point 7 m ahead along its way, turning slower the
+longer it is and when it's barely moving, slowing for bends and as it gets there;
+it slows behind a boat ahead and keeps to starboard of one coming the other way.
+Speeds: narrowboats and barges 2.2 m/s, cruisers and yachts 2.9, dinghies 3.6,
+ferries 3.4 (each ±10%), about walking pace to a jog. It casts off and comes
+alongside along a smooth curve, out ahead and away from the side it's moored on.
+Its wake (two spreading lines of foam and churned water, 5 s long) is drawn behind
+it, and every boat rocks a little on the water.
+
 ## Damage
 
 What's on the map can be knocked down or broken by driving into it, except the
@@ -585,6 +630,7 @@ they're in the way of traffic and people too, when there are some.
 
 - `osm.ts`: reads OSM's XML and makes the map (`buildMap`): projection, roads,
   ground, lines, buildings, trees, props, crossings, surfaces. Tested in `osm.test.ts`.
+- `berths.ts`: where boats moor, and the ferry routes and stops.
 - `landmarks.ts`: landmarks' colours (and heights, roof shapes), and streets' looks.
 - `enrich.ts`, `lidar.ts`, `osgb.ts`: the LIDAR and the terrain. Tested in `lidar.test.ts`.
 - `bristol.json`: the map the game loads.
@@ -600,5 +646,7 @@ perspective: higher than the car is nearer the camera, so drawn pushed out from
 the middle of the view), `buildingLook.ts` and `Buildings.ts` (the buildings),
 `traffic.ts` (the traffic and the parked cars; tested in `traffic.test.ts`) and
 `parking.ts` (where the bays are, painted and parked in); the traffic's drawn by
-`src/scenes/TrafficLayer.ts` and `vehicleArt.ts`.
+`src/scenes/TrafficLayer.ts` and `vehicleArt.ts`; `boats.ts` (the boats; tested in
+`boats.test.ts`, with `src/map/berths.ts`), drawn by `src/scenes/BoatLayer.ts` and
+`boatArt.ts`.
 The car feels the gradient in `src/car/CarPhysics.ts`.

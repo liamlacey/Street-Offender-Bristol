@@ -7,6 +7,7 @@
  * `tools/build-map.ts` to make `src/map/bristol.json`.
  */
 
+import { type Berth, type FerryRoute, type MooringEdge, Water, ferryStop, findBerths, overlap } from './berths.ts';
 import { LANDMARKS, STREETS } from './landmarks.ts';
 import { type Arm, type Controller, type LightPoint, type Signal, trafficLights } from './signals.ts';
 
@@ -471,6 +472,9 @@ export interface GameMap {
   banks?: number[];
   /** The bus routes through the map (see BusRoute). */
   busRoutes?: BusRoute[];
+  /** Where boats moor, and the ferry routes (see berths.ts). */
+  berths?: Berth[];
+  ferries?: FerryRoute[];
 }
 
 /**
@@ -1280,6 +1284,8 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
   /** Slipways mapped as ways (their outline, or a line down them), and quays where boats moor. */
   const slipwayWays: { pts: Pts; closed: boolean }[] = [];
   const mooringQuays: Pts[] = [];
+  /** The edges boats moor along: those quays, and the pontoons. */
+  const mooringEdges: MooringEdge[] = [];
   /** How many ways out of each node along the roads: three or more is a junction (two's just where a street's mapped in pieces). */
   const branches = new Map<number, number>();
   /** Each road's way's nodes, by its index in `roads`. */
@@ -1317,8 +1323,13 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     if (t.man_made === 'quay' && t.mooring && t.mooring !== 'no') {
       const pts = pointsOf(way.nodes);
       if (pts) mooringQuays.push(pts);
+      if (pts) mooringEdges.push({ pts, closed, mooring: t.mooring, operator: t.operator });
     }
     const area = ownTags ? areaKind(t) : null;
+    if (area === 'pontoon' && closed && t.mooring !== 'no') {
+      const pts = pointsOf(way.nodes);
+      if (pts) mooringEdges.push({ pts, closed, mooring: t.mooring ?? 'yes', operator: t.operator });
+    }
     if (area && closed) {
       const ring = ringOf(way.nodes);
       if (ring) addArea(area, [ring], t);
@@ -1613,6 +1624,53 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
       props.push({ kind: 'mooring', x: round(bx), y: round(by) });
     }
   }
+  // The ferries' stops (alongside, where a ferry fits), and their routes; then the berths, clear of the stops.
+  const water = new Water(areas);
+  const ferries: FerryRoute[] = [];
+  const stopAt = new Map<number, [number, number, number] | null>();
+  const stopOf = (id: number) => {
+    if (!stopAt.has(id)) {
+      const n = data.nodes.get(id);
+      const live = n && n.tags.amenity === 'ferry_terminal';
+      const [x, y] = n ? [proj.x(n.lon), proj.y(n.lat)] : [0, 0];
+      stopAt.set(id, live && inside(x, y) ? ferryStop(x, y, water, PX_PER_METRE, [...stopAt.values()].filter((s) => !!s).map(([sx, sy, a]) => ({ x: sx, y: sy, angle: a, kind: 'ferry' as const }))) : null);
+    }
+    return stopAt.get(id) ?? null;
+  };
+  const addFerry = (name: string, ids: number[]) => {
+    const stops = ids.map(stopOf).filter((s) => !!s);
+    const unique = stops.filter((s, i) => stops.findIndex((o) => o[0] === s[0] && o[1] === s[1]) === i);
+    if (unique.length < 2) return;
+    const key = unique.map((s) => `${s[0]},${s[1]}`).sort().join(' ');
+    if (ferries.some((f) => f.stops.reduce<string[]>((k, v, i) => (i % 3 ? k : [...k, `${v},${f.stops[i + 1]}`]), []).sort().join(' ') === key)) return;
+    ferries.push({ name, stops: unique.flat() });
+  };
+  const terminals = [...data.nodes.values()].filter((n) => n.tags.amenity === 'ferry_terminal');
+  const inRoutes = new Set<number>();
+  for (const rel of data.relations.values()) {
+    if (rel.tags.route !== 'ferry' || rel.tags.disused) continue;
+    const ids = rel.members.filter((m) => m.type === 'node' && (m.role === 'stop' || m.role.startsWith('stop_') || data.nodes.get(m.ref)?.tags.amenity === 'ferry_terminal')).map((m) => m.ref);
+    for (const m of rel.members) if (m.type === 'way') inRoutes.add(m.ref);
+    addFerry(rel.tags.name ?? rel.tags.ref ?? 'Ferry', ids);
+  }
+  // Ferry crossings mapped only as a way: from the stop at one end to the stop at the other.
+  for (const way of data.ways.values()) {
+    if (way.tags.route !== 'ferry' || inRoutes.has(way.id) || way.nodes.length < 2) continue;
+    const ends = [way.nodes[0], way.nodes[way.nodes.length - 1]].map((id) => {
+      const e = data.nodes.get(id);
+      if (!e) return null;
+      let best: number | null = null;
+      let bestD = 30 * PX_PER_METRE;
+      for (const n of terminals) {
+        const d = Math.hypot(proj.x(n.lon) - proj.x(e.lon), proj.y(n.lat) - proj.y(e.lat));
+        if (d < bestD) [best, bestD] = [n.id, d];
+      }
+      return best;
+    });
+    if (ends[0] !== null && ends[1] !== null) addFerry(way.tags.name ?? 'Ferry', ends as number[]);
+  }
+  const stopBerths: Berth[] = ferries.flatMap((f) => f.stops.reduce<Berth[]>((out, v, i) => (i % 3 ? out : [...out, { x: v, y: f.stops[i + 1], angle: f.stops[i + 2], kind: 'ferry' }]), []));
+  const berths = findBerths(mooringEdges, water, PX_PER_METRE).filter((b) => inside(b.x, b.y) && !stopBerths.some((s) => overlap(s, b, PX_PER_METRE, 2 * PX_PER_METRE)));
   // Where the bus stops' signs and platforms are, beside the road.
   const stopsBeside: [number, number][] = [];
   // And where there's tactile paving (at crossings, and the dropped kerbs either side of them).
@@ -2129,6 +2187,8 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     ...(treeKinds.length ? { treeSpecies: treeKinds } : {}),
     ...(solar.length ? { solar } : {}),
     ...(busRoutes.length ? { busRoutes } : {}),
+    ...(berths.length ? { berths } : {}),
+    ...(ferries.length ? { ferries } : {}),
   };
 }
 

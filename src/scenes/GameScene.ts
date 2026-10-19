@@ -48,6 +48,8 @@ import { HudScene, RESET_EVENT, STREET_EVENT } from './HudScene';
 import { SkidMarks } from './SkidMarks';
 import { TrafficLayer } from './TrafficLayer';
 import { Traffic, VEHICLES, type Vehicle } from '../world/traffic';
+import { Boats } from '../world/boats';
+import { BoatLayer } from './BoatLayer';
 import { type Shape, STIFFNESS, type Wreck, hit as dentAt, newWreck, toBody, toWorld } from '../car/dents';
 import { paintWreck } from './dentArt';
 import { bodyLayout } from './vehicleArt';
@@ -59,6 +61,8 @@ const MAX_STEPS_PER_FRAME = 8;
 const DEPTH = {
   ground: 0,
   skids: 1,
+  /** On the water, under the bridges. */
+  boats: 1.5,
   props: 2,
   /** Garden walls, hedges, fences and railings. */
   walls: 2.2,
@@ -136,6 +140,8 @@ export class GameScene extends Phaser.Scene {
   private readonly wreck: Wreck = newWreck();
   private wreckShown = 0;
   private trafficLayer!: TrafficLayer;
+  private boats!: Boats;
+  private boatLayer!: BoatLayer;
   private loose: { body: LooseProp; image: Phaser.GameObjects.Image }[] = [];
   private looseByChunk = new Map<string, number[]>();
   private effects!: CarEffects;
@@ -208,6 +214,8 @@ export class GameScene extends Phaser.Scene {
     this.addTrees();
     this.addLights();
     this.traffic = new Traffic(map);
+    this.boats = new Boats(map);
+    this.boatLayer = new BoatLayer(this, this.boats, (x, y) => this.groundAt(x, y), DEPTH.boats);
     this.trafficLayer = new TrafficLayer(this, this.traffic, (x, y, level) => this.surfaceHeight(x, y, level), (x, y, reach) => this.decks.atEnd(x, y, reach), {
       ground: DEPTH.car - 0.05,
       onDeck: DEPTH.onDeck,
@@ -400,6 +408,7 @@ export class GameScene extends Phaser.Scene {
     this.updateLights(view);
     this.wallLayer.update(view, this.perspective);
     this.trafficLayer.update(view, this.perspective, this.level, this.time.now / 1000);
+    this.boatLayer.update(view, this.perspective, this.time.now / 1000);
     this.updateStreet(dt);
     const speed = Math.hypot(this.car.vx, this.car.vy);
     this.audio?.update({
@@ -551,6 +560,11 @@ export class GameScene extends Phaser.Scene {
       );
     } catch (e) {
       console.error('traffic:', e);
+    }
+    try {
+      this.boats.update(dt);
+    } catch (e) {
+      console.error('boats:', e);
     }
     for (const v of this.traffic.loose()) {
       const wall = collideBodyWithWalls(v, this.walls[v.level], 0.4, this.contact);
