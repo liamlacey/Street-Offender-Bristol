@@ -633,10 +633,17 @@ export class Traffic {
     this.byId.clear();
     for (const v of this.vehicles) this.byId.set(v.id, v);
     const obstacles = this.obstacles(player);
-    for (const v of this.vehicles) {
-      if (v.mode === 'drive') this.drive(v, dt, obstacles, light);
-      else if (v.mode === 'knocked') this.slide(v, dt);
-      else if (v.mode === 'rejoin') this.rejoin(v, dt, obstacles, view);
+    for (const v of [...this.vehicles]) {
+      try {
+        if (v.mode === 'drive') this.drive(v, dt, obstacles, light);
+        else if (v.mode === 'knocked') this.slide(v, dt);
+        else if (v.mode === 'rejoin') this.rejoin(v, dt, obstacles, view);
+        if (![v.x, v.y, v.angle, v.speed].every(Number.isFinite)) throw new Error('lost its way');
+      } catch (e) {
+        // Something's gone wrong with this one: it's taken off the road, and the rest drive on (the game mustn't stop).
+        console.error('traffic:', e);
+        this.remove(v);
+      }
     }
     for (const v of this.parked) if (v.mode === 'knocked') this.slide(v, dt);
     this.bump();
@@ -790,7 +797,7 @@ export class Traffic {
 
   /** Who goes first, when two are waiting for each other: the one already turning across the junction, then the bigger road. */
   private priority(v: Vehicle): number {
-    return (v.route[0].lane ? 0 : 10) + (v.route.find((p) => p.lane)?.lane?.rank ?? 0) - v.id * 1e-6;
+    return (v.route[0]?.lane ? 0 : 10) + (v.route.find((p) => p.lane)?.lane?.rank ?? 0) - v.id * 1e-6;
   }
 
   /** The way along its route `d` px from where it is. */
@@ -817,7 +824,8 @@ export class Traffic {
       if (o.id >= 0) {
         const other = o as Vehicle;
         if (other.mode === 'parked') continue;
-        if (other.route[0] === lane || (other.route[0].lane && other.route[0].lane.edge === lane.edge && other.route[0].lane.dir === lane.dir)) continue;
+        const head = other.route[0];
+        if (head === lane || (head?.lane && head.lane.edge === lane.edge && head.lane.dir === lane.dir)) continue;
       }
       const speed = Math.hypot(o.vx, o.vy);
       const coming = speed > 4 && (o.vx * dx + o.vy * dy) / (speed * Math.max(dist, 1)) > 0.3;
@@ -872,9 +880,10 @@ export class Traffic {
       this.pose(v);
       return;
     }
-    if (s > lane.length - 2 * M && v.route.length > 1) {
+    const after = v.route.slice(v.route.indexOf(lane) + 1);
+    if (s > lane.length - 2 * M && after.some((p) => p.lane)) {
       // Past the end of its lane: aim for the next.
-      v.route = v.route.slice(v.route.indexOf(lane) + 1);
+      v.route = after;
       return;
     }
     const [tx, ty] = pathAt(lane, Math.min(lane.length, s + Math.max(5 * M, v.length)));

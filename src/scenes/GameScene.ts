@@ -510,12 +510,17 @@ export class GameScene extends Phaser.Scene {
     const { controllers, signals } = this.world.map;
     const time = this.time.now / 1000;
     const car = this.car;
-    this.traffic.update(
-      dt,
-      { x: car.x, y: car.y, heading: car.heading, vx: car.vx, vy: car.vy, level: this.level, length: CAR_LENGTH, width: CAR_WIDTH },
-      { x0: view.left, y0: view.top, x1: view.right, y1: view.bottom },
-      (i) => (this.signalHeads[i]?.gone ? 'green' : lightAt(controllers[signals[i].controller], signals[i].controller, signals[i].group, time)),
-    );
+    // The game mustn't stop for the traffic: anything going wrong in it is logged, and the game goes on.
+    try {
+      this.traffic.update(
+        dt,
+        { x: car.x, y: car.y, heading: car.heading, vx: car.vx, vy: car.vy, level: this.level, length: CAR_LENGTH, width: CAR_WIDTH },
+        { x0: view.left, y0: view.top, x1: view.right, y1: view.bottom },
+        (i) => (this.signalHeads[i]?.gone ? 'green' : lightAt(controllers[signals[i].controller], signals[i].controller, signals[i].group, time)),
+      );
+    } catch (e) {
+      console.error('traffic:', e);
+    }
     for (const v of this.traffic.loose()) {
       collideBodyWithWalls(v, this.walls[v.level]);
       collideBodyWithStatic(v, this.posts[v.level]);

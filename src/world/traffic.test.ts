@@ -130,6 +130,25 @@ describe('driving', () => {
   });
 });
 
+describe('parked cars knocked into the road', () => {
+  it("don't stop the traffic (a car giving way next to one carries on)", () => {
+    const side = road('street', 80, [400, 0, 400, 400, 400, 800], {
+      lanes: [{ side: 1, kind: 'parking', width: 16, bays: 'parallel' }],
+      laneSpans: [0, 800],
+    });
+    const traffic = quiet(crossroads({ roads: [road('primary', 64, [0, 400, 400, 400, 800, 400]), side] }));
+    expect(traffic.parked.length).toBeGreaterThan(0);
+    for (const v of traffic.parked) {
+      v.vx = 30;
+      traffic.knock(v, 100);
+    }
+    const lane = traffic.lanes.find((l) => l.road === 1 && l.giveWay && l.pts[1] < 400)!;
+    const v = traffic.spawn(lane, lane.length - 60, 'hatch');
+    expect(() => run(traffic, 3)).not.toThrow();
+    expect(traffic.vehicles).toContain(v);
+  });
+});
+
 describe('parking', () => {
   it('puts the bays of a parking lane along the kerb, facing the way the traffic goes', () => {
     const street = road('street', 80, [0, 400, 800, 400], {
