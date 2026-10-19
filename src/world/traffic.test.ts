@@ -61,8 +61,9 @@ describe('driving', () => {
     const v = traffic.spawn(lane, 10, 'hatch');
     run(traffic, 2);
     expect(v.x).toBeGreaterThan(80);
-    expect(v.speed).toBeGreaterThan(60);
-    expect(v.speed).toBeLessThan(95);
+    // A main road: about 30 mph (13.4 m/s), never over it.
+    expect(v.speed).toBeGreaterThan(70);
+    expect(v.speed).toBeLessThanOrEqual(13.4 * 8 + 0.01);
   });
 
   it('drives at its own pace, and not quite steadily: no two alike, and never a fixed speed', () => {

@@ -169,10 +169,11 @@ interface Node {
 /** The roads traffic drives on: not service roads (car parks, driveways, yards), tracks, paths. */
 const DRIVEN: ReadonlySet<RoadKind> = new Set(['trunk', 'primary', 'secondary', 'tertiary', 'street']);
 const RANK: Partial<Record<RoadKind, number>> = { trunk: 5, primary: 4, secondary: 3, tertiary: 2, street: 1 };
-/** How fast it's driven, px/s (central Bristol is mostly 20 mph; the main roads a little quicker). */
-const SPEED: Partial<Record<RoadKind, number>> = { trunk: 13 * M, primary: 10 * M, secondary: 9.5 * M, tertiary: 9 * M, street: 8 * M };
+/** How fast it's usually driven, px/s (up to 30 mph on the main roads, a little under on the side streets); and never faster than MAX_SPEED (30 mph). */
+const SPEED: Partial<Record<RoadKind, number>> = { trunk: 13.4 * M, primary: 12.5 * M, secondary: 12 * M, tertiary: 11.5 * M, street: 10.5 * M };
+const MAX_SPEED = 13.4 * M;
 /** How many vehicles a lane carries, per 100 m, on a quiet stretch; more where there's more to go to (up to TRAFFIC_BUSIEST times as many). */
-const DENSITY: Partial<Record<RoadKind, number>> = { trunk: 2.2, primary: 2, secondary: 1.6, tertiary: 1.3, street: 0.6 };
+const DENSITY: Partial<Record<RoadKind, number>> = { trunk: 3.6, primary: 3.2, secondary: 2.6, tertiary: 2.1, street: 1 };
 const BUSIEST = 3;
 /** How fast each kind's driven, against the road's usual speed (before the driver's own pace). */
 const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85 };
@@ -419,16 +420,21 @@ const CLOSING = 0.9;
 /** How far it stays back: stopped (behind a car, and at a line), and the time behind a moving one, s. */
 const GAP = 2 * M;
 const AT_LINE = 0.5 * M;
-const HEADWAY = 1.3;
+const HEADWAY = 1.5;
 /** How long a driver takes to move off when it can (the lights change, the car ahead goes), seconds: the least, and up to how much more. */
 const REACT = 0.35;
 const REACT_MORE = 0.7;
 /** How far ahead it looks, px: at least, at most. */
 const LOOK_MIN = 14 * M;
 const LOOK_MAX = 70 * M;
-/** Giving way: what it watches for (how far from the junction), and how fast it noses out when it's clear. */
+/** Giving way: how far from the junction it starts watching, and how fast it noses out when it's clear. */
 const WATCH = 30 * M;
+/** It pulls out only if nothing coming will reach the junction within this long, seconds (looking up to SIGHT px away). */
+const CLEAR_TIME = 4.5;
+const SIGHT = 70 * M;
 const NOSE = 3 * M;
+/** Two turning into the same lane from different ways: within this far of it, the one further off lets the other in first. */
+const MERGE = 25 * M;
 /** Knocked: how long it waits before driving off again, seconds; and how quickly it slides to a stop. */
 export const PAUSE = 1.6;
 const SLIDE = 2.4;
@@ -463,13 +469,16 @@ export class Traffic {
   private started = false;
   private clock = 0;
   private readonly byId = new Map<number, Vehicle>();
+  private readonly entering = new Map<number, { v: Vehicle; d: number; via: Path }[]>();
   private readonly terrain: Terrain;
+  /** How many there should be round you now. */
+  target = 0;
 
   constructor(map: GameMap, options: TrafficOptions = {}) {
     ({ lanes: this.lanes, nodes: this.nodes } = buildLanes(map));
     this.terrain = new Terrain(map.terrain, map.pxPerMetre);
     this.rand = options.rand ?? Math.random;
-    this.max = options.max ?? 40;
+    this.max = options.max ?? 55;
     // The parked cars: most of the bays taken, more where it's busier.
     for (const space of parkingSpaces(map)) {
       if (this.rand() > space.taken) continue;
@@ -530,7 +539,13 @@ export class Traffic {
     v.route = [lane];
     v.s = s;
     this.plan(v);
-    v.speed = Math.min(lane.speed * v.pace, this.limitAhead(v));
+    v.speed = Math.min(lane.speed * v.pace, MAX_SPEED, this.limitAhead(v));
+    // Coming up behind another in its lane: no faster than it can follow it at.
+    for (const o of this.vehicles) {
+      if (o.route[0] !== lane || o.s <= s) continue;
+      const gap = o.s - s - (o.length + v.length) / 2 - GAP;
+      v.speed = Math.min(v.speed, o.speed + Math.sqrt(2 * BRAKE * Math.max(0, gap)) * 0.8);
+    }
     this.pose(v);
     this.vehicles.push(v);
     return v;
@@ -607,26 +622,26 @@ export class Traffic {
   }
 
   /** The point `d` px on (or back) from where it is along its way. */
-  private along(v: Vehicle, d: number): [number, number] {
+  private along(v: Vehicle, d: number): [number, number, number] {
     let s = v.s + d;
     if (s < 0) {
       if (v.back) {
         const [x, y] = pathAt(v.back, v.back.length + s);
-        return [x, y];
+        return [x, y, v.back.level];
       }
       const [x, y, ux, uy] = pathAt(v.route[0], 0);
-      return [x + ux * s, y + uy * s];
+      return [x + ux * s, y + uy * s, v.route[0].level];
     }
     for (const p of v.route) {
       if (s <= p.length) {
         const [x, y] = pathAt(p, s);
-        return [x, y];
+        return [x, y, p.level];
       }
       s -= p.length;
     }
     const last = v.route[v.route.length - 1];
     const [x, y, ux, uy] = pathAt(last, last.length);
-    return [x + ux * s, y + uy * s];
+    return [x + ux * s, y + uy * s, last.level];
   }
 
   /** The fastest it should be going now to slow comfortably, in time, for the bends and the slower roads ahead. */
@@ -641,7 +656,7 @@ export class Traffic {
         if (at < -v.length / 2) continue;
         limit = Math.min(limit, Math.sqrt(bends[k + 1] ** 2 + 2 * BRAKE * Math.max(0, at)));
       }
-      if (p.lane && d > 0) limit = Math.min(limit, Math.sqrt((p.lane.speed * v.pace) ** 2 + 2 * BRAKE * d));
+      if (p.lane && d > 0) limit = Math.min(limit, Math.sqrt(Math.min(p.lane.speed * v.pace, MAX_SPEED) ** 2 + 2 * BRAKE * d));
       d += p.length;
     }
     return limit;
@@ -656,6 +671,23 @@ export class Traffic {
     this.clock += dt;
     this.byId.clear();
     for (const v of this.vehicles) this.byId.set(v.id, v);
+    // Who's about to turn into which lane, and how far they have to go to get into it.
+    this.entering.clear();
+    for (const v of this.vehicles) {
+      if (v.mode !== 'drive') continue;
+      let d = -v.s;
+      for (let k = 0; k < v.route.length && d < MERGE; k++) {
+        const p = v.route[k];
+        const next = v.route[k + 1];
+        if (!p.lane && next?.lane) {
+          const list = this.entering.get(next.lane.id) ?? [];
+          list.push({ v, d: d + p.length, via: p });
+          this.entering.set(next.lane.id, list);
+          break;
+        }
+        d += p.length;
+      }
+    }
     const obstacles = this.obstacles(player);
     for (const v of [...this.vehicles]) {
       try {
@@ -677,7 +709,8 @@ export class Traffic {
   private obstacles(player: Player): Obstacle[] {
     const out: Obstacle[] = [{ id: -1, x: player.x, y: player.y, angle: player.heading, r: player.width / 2, length: player.length, vx: player.vx, vy: player.vy, level: player.level }];
     for (const v of this.vehicles) out.push(v);
-    for (const v of this.parked) out.push(v);
+    // Parked cars are by the kerb, out of the way: only those that have been knocked out of their bays count.
+    for (const v of this.parked) if (v.mode !== 'parked' || !v.space || Math.hypot(v.x - v.space.x, v.y - v.space.y) > 0.5 * M) out.push(v);
     return out;
   }
 
@@ -689,18 +722,24 @@ export class Traffic {
     let hold = GAP;
     let blocker: number | undefined;
     const front = v.length / 2;
-    const samples: [number, number, number][] = [];
+    // Points along the way ahead (and which level each is on: what's under a bridge isn't in the way of what's on it).
+    const samples: [number, number, number, number][] = [];
     for (let d = front - 4; d <= front + look; d += 6) samples.push([...this.along(v, d), d - front]);
     for (const o of obstacles) {
-      if (o.id === v.id || o.level !== v.level) continue;
+      if (o.id === v.id) continue;
       if (Math.abs(o.x - v.x) > look + 60 || Math.abs(o.y - v.y) > look + 60) continue;
-      // Waiting for each other: the one with the right of way goes.
-      if (o.id >= 0 && (o as Vehicle).behind === v.id && this.priority(v) > this.priority(o as Vehicle)) continue;
+      // Waiting for each other: the one that's in front goes (it can't be in the way of the one behind it); side by side, the one with the right of way.
+      if (o.id >= 0 && (o as Vehicle).behind === v.id) {
+        const itsAhead = (o.x - v.x) * Math.cos(v.angle) + (o.y - v.y) * Math.sin(v.angle);
+        const imAhead = (v.x - o.x) * Math.cos(o.angle) + (v.y - o.y) * Math.sin(o.angle);
+        if (imAhead > itsAhead + M || (Math.abs(imAhead - itsAhead) <= M && this.priority(v) > this.priority(o as Vehicle))) continue;
+      }
       const end = Math.max(0, o.length / 2 - o.r);
       const [cx, cy] = [Math.cos(o.angle), Math.sin(o.angle)];
       const reach = v.r + o.r * 0.85;
-      for (const [x, y, d] of samples) {
+      for (const [x, y, level, d] of samples) {
         if (d >= gap) break;
+        if (level !== o.level) continue;
         const t = Math.max(-end, Math.min(end, (x - o.x) * cx + (y - o.y) * cy));
         if (Math.hypot(x - o.x - cx * t, y - o.y - cy * t) > reach) continue;
         // It's in the way here.
@@ -743,6 +782,21 @@ export class Traffic {
       }
       d += p.length;
     }
+    // Turning into a lane another's turning into from another way, and it's nearer: in after it.
+    for (const list of this.entering.values()) {
+      const mine = list.find((e) => e.v === v);
+      if (!mine) continue;
+      for (const e of list) {
+        if (e.v === v || e.via === mine.via || e.d > mine.d || (e.d === mine.d && e.v.id > v.id)) continue;
+        const room = mine.d - e.d - front - e.v.length / 2;
+        if (room < gap) {
+          gap = Math.max(0, room);
+          lead = 0;
+          hold = GAP * 0.5;
+          blocker = e.v.id;
+        }
+      }
+    }
     if (v.ends) {
       let left = -v.s - front;
       for (const p of v.route) left += p.length;
@@ -762,6 +816,7 @@ export class Traffic {
     const [gx, gy] = this.terrain.slope(v.x, v.y);
     const grade = gx * Math.cos(v.angle) + gy * Math.sin(v.angle);
     cruise *= grade > 0 ? Math.max(0.45, 1 - CLIMB[v.kind] * grade) : 1 + Math.min(0.05, -grade * 0.3);
+    cruise = Math.min(cruise, MAX_SPEED);
     // ...and now and then it dawdles a moment (more often along a busy street).
     if (v.dawdle > 0) {
       v.dawdle -= dt;
@@ -794,9 +849,9 @@ export class Traffic {
     const jerk = urgent ? 40 * M : target > v.accel ? (v.accel < 0 ? JERK_OFF : JERK_ON * v.verve) : JERK_OFF;
     v.accel += Math.max(-jerk * dt, Math.min(jerk * dt, target - v.accel));
     v.speed = Math.max(0, v.speed + v.accel * dt);
+    if (gap < hold * 0.4 && v.speed > lead) v.speed = lead;
     // Stopped: the foot stays on the brake until it's time to go.
     if (v.speed === 0 && v.accel < 0) v.accel = 0;
-    if (gap < hold * 0.4 && v.speed > lead) v.speed = lead;
     v.braking = v.accel < -0.4 * M || (v.speed < 1 && want < 1);
     // Stuck behind the same thing a long while: it's not moving and nor are we (a knot at a junction): edge past.
     v.behind = blocker;
@@ -859,7 +914,7 @@ export class Traffic {
       const dx = node.x - o.x;
       const dy = node.y - o.y;
       const dist = Math.hypot(dx, dy);
-      if (dist > WATCH) continue;
+      if (dist > SIGHT) continue;
       // Queued behind us, or alongside on the same road: not in the way.
       if (o.id >= 0) {
         const other = o as Vehicle;
@@ -868,7 +923,7 @@ export class Traffic {
         if (head === lane || (head?.lane && head.lane.edge === lane.edge && head.lane.dir === lane.dir)) continue;
       }
       const speed = Math.hypot(o.vx, o.vy);
-      const coming = speed > 4 && (o.vx * dx + o.vy * dy) / (speed * Math.max(dist, 1)) > 0.3;
+      const coming = speed > 4 && (o.vx * dx + o.vy * dy) / (speed * Math.max(dist, 1)) > 0.3 && dist / speed < CLEAR_TIME;
       if (coming || dist < 6 * M) return false;
     }
     return true;
@@ -1017,19 +1072,21 @@ export class Traffic {
       expected += lane.density * Math.min(lane.length, 2 * near);
       candidates.push([lane, lane.density * lane.length]);
     }
-    const target = Math.min(this.max, Math.round(expected * 0.7));
+    const target = Math.min(this.max, Math.round(expected * 0.9));
+    this.target = target;
     // At the start, fill the streets (in view too); after, a few at a time, out of sight.
-    const tries = this.started ? 2 : target * 3;
+    const tries = this.started ? 6 : target * 4;
     for (let k = 0; k < tries && this.vehicles.length < target; k++) {
       const lane = pick(this.rand, candidates);
       if (!lane) break;
       const s = this.rand() * lane.length;
       const [x, y] = pathAt(lane, s);
       const dist = Math.hypot(x - player.x, y - player.y);
-      if (dist > near || dist < 10 * M) continue;
+      // Not right by you (at the start, not within 25 m: no one appears just ahead of you and has to brake hard).
+      if (dist > near || dist < (this.started ? 10 : 25) * M) continue;
       if (this.started && this.inView(x, y, view, 50)) continue;
-      if (this.vehicles.some((v) => Math.hypot(v.x - x, v.y - y) < 14 * M)) continue;
-      // Not just short of a red light's queue, or in the turn: room to stop.
+      // Room for it.
+      if (this.vehicles.some((v) => Math.hypot(v.x - x, v.y - y) < 7 * M)) continue;
       this.spawn(lane, s);
     }
     this.started = true;

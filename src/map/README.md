@@ -353,8 +353,8 @@ curve takes each lane on to the next across it. One-way streets are only driven 
 way.
 
 **Driving, by the law:**
-- Speed: the road's (trunk 13 m/s, primary 10, secondary 9.5, tertiary 9, streets
-  8: central Bristol's mostly 20 mph), slower along a busy street (0.5% per point of
+- Speed: the road's (trunk 13.4 m/s, primary 12.5, secondary 12, tertiary 11.5,
+  streets 10.5: up to 30 mph on the main roads, and never over 30 mph), slower along a busy street (0.5% per point of
   activity, at most 15%) or where its lanes are under 2.9 m wide (12%). Each driver
   has their own pace (0.8 to 1.2 of it, most near the middle; one in ten 12% quicker
   still), vans 7% and lorries 15% slower; and no one holds a steady speed: it swells
@@ -373,14 +373,19 @@ way.
   than 0.9 m/s per metre left; braking harder only when it must (up to 9 m/s²). It
   takes 0.35 to 1.05 s to move off when it can, so a queue at the lights moves off
   one after another.
-- Keeps 2 m plus 1.3 s behind whatever's in its way ahead (another vehicle, a parked
+- Keeps 2 m plus 1.5 s behind whatever's in its way ahead (another vehicle, a parked
   car knocked out into the road, you), looking ahead 14 m plus 3 s of travel (at
   most 70 m). Never drives into you on purpose; held up by you for 2.5 s, it honks.
 - Stops at the stop line on red, and red and amber; on amber, if it can stop
   comfortably. A knocked-down light is ignored.
 - Gives way at the end of a road onto a more major one (trunk > primary > secondary >
   tertiary > street), or where a give way line's painted (`highway=give_way`):
-  waits until nothing's coming to the junction within 30 m, or in it.
+  waits until nothing coming (looking up to 70 m) will reach the junction within
+  4.5 s, and nothing's in it.
+- Two turning into the same lane from different ways: within 25 m of it, the one
+  further off lets the other in first.
+- What's on a bridge isn't in the way of what's under it, and the other way round:
+  each point it looks at ahead is on the level of the road there.
 - At each junction it turns onto another road (never back the way it came unless the
   road ends), mostly the more major roads, mostly straight on; left from the kerb lane,
   right from the lane nearest the middle; indicating 30 m before.
@@ -391,9 +396,10 @@ way.
 **What drives:** small cars, hatchbacks, saloons, estates, SUVs, vans (18, 26, 14, 8,
 15, 14%) and, on secondary roads and bigger, lorries (5%); in the colours of Britain's
 cars (grey, black, white, blue, silver, red the most), vans mostly white. Each lane
-carries trunk 2.2, primary 2, secondary 1.6, tertiary 1.3, streets 0.6 vehicles per
-100 m, times 1 + activity ÷ 15 (at most 3 times). Up to 40 at once, within the view
-plus 30 m; new ones out of sight, and they go 40 m beyond that.
+carries trunk 3.6, primary 3.2, secondary 2.6, tertiary 2.1, streets 1 vehicles per
+100 m, times 1 + activity ÷ 15 (at most 3 times). Up to 55 at once, within the view
+plus 30 m; new ones out of sight (at least 7 m from any other, no faster than it can
+follow the one ahead at), and they go 40 m beyond that.
 
 **Parked cars:** in the car parks' bays (65% of them taken) and in the parking lanes'
 bays (55%, plus 1.2% per point of the street's activity, at most 92%; loading bays
