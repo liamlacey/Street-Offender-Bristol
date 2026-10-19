@@ -172,6 +172,8 @@ export class GameScene extends Phaser.Scene {
   private lookVX = 0;
   private lookVY = 0;
   private pace = 0;
+  /** The camera shaken by a jolt: for how long (s), how long it's been, and how far, map px. */
+  private shaking = { for: 0, t: 0, size: 0 };
   private surface: Surface = Surface.Road;
   /** Seconds since the car went into the harbour, or -1. */
   private sinking = -1;
@@ -439,7 +441,7 @@ export class GameScene extends Phaser.Scene {
     });
     if (this.bigHit > 0) {
       this.audio?.crash(this.bigHit);
-      if (this.bigHit > 220) this.cameras.main.shake(120, Math.min(0.012, this.bigHit / 40000));
+      if (this.bigHit > 220) this.shake(0.12, Math.min(7, this.bigHit / 68));
       this.bigHit = 0;
     }
   }
@@ -481,7 +483,7 @@ export class GameScene extends Phaser.Scene {
       const hump = this.humps.over(car, px, py);
       if (hump > 0) {
         this.audio?.crash(hump * 1.5);
-        if (hump > 25) this.cameras.main.shake(90, Math.min(0.004, hump / 12000));
+        if (hump > 25) this.shake(0.09, Math.min(2.4, hump / 20));
         this.hopPeak = Math.min(1, hump / 60);
         this.hopLeft = HOP_TIME;
       }
@@ -493,7 +495,7 @@ export class GameScene extends Phaser.Scene {
       const jolt = up || down ? this.kerbs.bump(car, up) : 0;
       if (jolt > 0) {
         this.audio?.crash(jolt * 2);
-        if (up && jolt > 16) this.cameras.main.shake(70, Math.min(0.003, jolt / 10000));
+        if (up && jolt > 16) this.shake(0.07, Math.min(1.8, jolt / 17));
       }
     }
 
@@ -814,6 +816,14 @@ export class GameScene extends Phaser.Scene {
     this.carSprite.setTexture(TEX.car).setAlpha(1).setTint(0xffffff);
   }
 
+  /** A jolt shakes the camera this long (s), this far (map px); a harder one takes over from a weaker. */
+  private shake(seconds: number, size: number): void {
+    const sh = this.shaking;
+    const left = sh.t < sh.for ? sh.size * (1 - sh.t / sh.for) ** 2 : 0;
+    if (size < left) return;
+    Object.assign(sh, { for: seconds, t: 0, size });
+  }
+
   /** Where the car's drawn: between where it was and where it is (straight there if it's jumped, put back after sinking, say). */
   private interpolate(f: number): void {
     const { car, prev } = this;
@@ -863,7 +873,17 @@ export class GameScene extends Phaser.Scene {
     const ahead = 0.45;
     [this.lookX, this.lookVX] = spring(this.lookX, this.lookVX, car.vx * ahead, 3.5, dt);
     [this.lookY, this.lookVY] = spring(this.lookY, this.lookVY, car.vy * ahead, 3.5, dt);
-    cam.centerOn(this.shown.x + this.lookX, this.shown.y + this.lookY);
+    // Shaken by a jolt: a quick, smooth wobble dying away, the same distance on the map whatever the screen.
+    let [sx, sy] = [0, 0];
+    const sh = this.shaking;
+    if (sh.t < sh.for) {
+      sh.t += dt;
+      const fade = Math.max(0, 1 - sh.t / sh.for) ** 2;
+      const w = sh.t * Math.PI * 2;
+      sx = sh.size * fade * (Math.sin(w * 13) * 0.65 + Math.sin(w * 21 + 1.3) * 0.35);
+      sy = sh.size * fade * (Math.sin(w * 15 + 2.1) * 0.65 + Math.sin(w * 23 + 0.4) * 0.35);
+    }
+    cam.centerOn(this.shown.x + this.lookX + sx, this.shown.y + this.lookY + sy);
   }
 
   /** How high the car is, px: on the ground, or on the deck of the bridge it's on. */
