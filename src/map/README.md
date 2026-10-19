@@ -353,10 +353,19 @@ curve takes each lane on to the next across it. One-way streets are only driven 
 way.
 
 **Driving, by the law:**
-- Speed (as driven, each driver within 12% of it): trunk 13 m/s, primary 10,
-  secondary 9.5, tertiary 9, streets 8 (central Bristol's mostly 20 mph); slower
-  for turns (no more sideways pull than 2.4 m/s²). Pulls away at 2.2 m/s², brakes at
-  3 (up to 9 in an emergency).
+- Speed (as driven, each driver within 12% of it, drifting 4% either way as they
+  drive): trunk 13 m/s, primary 10, secondary 9.5, tertiary 9, streets 8 (central
+  Bristol's mostly 20 mph). Slower round bends and turns: no more sideways pull than
+  2.2 m/s², the sharpness measured every 2 m over 8 m either side along a lane (so a
+  kink in the road's line is the gentle bend it is) and 1.5 to 4 m on a turn; it
+  slows in time, braking at 2.2 m/s², and is slowest at the sharpest part.
+- Driven smoothly: it eases towards the speed it wants (closing 1.6 of the
+  difference a second), pulling away at up to 2.2 m/s² (less as it gets up to
+  speed; some drivers brisker than others, 0.8 to 1.2 times), on and off the
+  accelerator and brake gradually (2.5 and 5 m/s³), rolling up to a stop no faster
+  than 0.9 m/s per metre left; braking harder only when it must (up to 9 m/s²). It
+  takes 0.35 to 1.05 s to move off when it can, so a queue at the lights moves off
+  one after another.
 - Keeps 2 m plus 1.3 s behind whatever's in its way ahead (another vehicle, a parked
   car knocked out into the road, you), looking ahead 14 m plus 3 s of travel (at
   most 70 m). Never drives into you on purpose; held up by you for 2.5 s, it honks.
@@ -369,7 +378,8 @@ way.
   road ends), mostly the more major roads, mostly straight on; left from the kerb lane,
   right from the lane nearest the middle; indicating 30 m before.
 - Two waiting for each other: the one already in the junction goes, then the one on
-  the more major road.
+  the more major road. Still knotted after 6 s (each waiting on the next, round in a
+  loop: not just a queue), one edges past.
 
 **What drives:** small cars, hatchbacks, saloons, estates, SUVs, vans (18, 26, 14, 8,
 15, 14%) and, on secondary roads and bigger, lorries (5%); in the colours of Britain's

@@ -92,7 +92,7 @@ describe('driving', () => {
     expect(v.x + v.length / 2).toBeLessThan(352);
     expect(v.x + v.length / 2).toBeGreaterThan(320);
     light = 'green';
-    run(traffic, 4, away, () => light);
+    run(traffic, 6, away, () => light);
     expect(v.x).toBeGreaterThan(400);
   });
 
@@ -105,7 +105,7 @@ describe('driving', () => {
     run(traffic, 1, you);
     expect(v.y + v.length / 2).toBeLessThan(side.pts[side.pts.length - 1] + 2);
     // Gone by: it goes.
-    run(traffic, 4);
+    run(traffic, 6);
     expect(v.y).toBeGreaterThan(400);
   });
 

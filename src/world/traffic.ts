@@ -76,6 +76,10 @@ export interface Vehicle extends Body {
   space?: Space;
   /** How long it is, px. */
   length: number;
+  /** How hard it's accelerating (braking, below 0), px/s²; seconds before it moves off (-1 while it can't, 0 once it has); how briskly it drives (about 1). */
+  accel: number;
+  react: number;
+  verve: number;
   /** Seconds it's been held up by you (it honks). */
   annoyed: number;
   /** Its way runs out (a one-way road off the map's edge): it stops at the end, and goes once out of sight. */
@@ -118,8 +122,9 @@ export interface Path {
   level: number;
   /** A lane (not a turn). */
   lane?: Lane;
-  /** A turn: how fast it can be taken, px/s, and which way it goes (-1 left, 1 right, 0 straight on). */
-  limit?: number;
+  /** Where it bends enough to slow for: distance along it, and how fast it can be taken there (px/s), ... */
+  bends?: number[];
+  /** A turn: which way it goes (-1 left, 1 right, 0 straight on). */
   turn?: -1 | 0 | 1;
 }
 
@@ -163,8 +168,28 @@ const DENSITY: Partial<Record<RoadKind, number>> = { trunk: 2.2, primary: 2, sec
 const BUSIEST = 3;
 /** A lane's width, if the road doesn't say, px. */
 const LANE = 3.2 * M;
-/** A turn's taken no faster than this sideways pull allows, px/s². */
-const CORNERING = 2.4 * M;
+/** Bends and turns are taken no faster than this sideways pull allows, px/s². */
+const CORNERING = 2.2 * M;
+
+/**
+ * Where a path bends enough to slow for, every 2 m along it: how sharply it
+ * turns over `window` px either side (so a kink in a road's line counts as the
+ * gentle bend it is), and so how fast it can be taken.
+ */
+function bendsOf(p: Path, window: number): number[] {
+  const out: number[] = [];
+  if (p.length < 4) return out;
+  for (let s = 0; s <= p.length; s += 2 * M) {
+    const [a, b] = [Math.max(0, s - window), Math.min(p.length, s + window)];
+    const [, , ax, ay] = pathAt(p, a + 0.01);
+    const [, , bx, by] = pathAt(p, b - 0.01);
+    const turn = Math.abs(Math.atan2(ax * by - ay * bx, ax * bx + ay * by));
+    if (turn < 0.08 || b - a < 1) continue;
+    const speed = Math.sqrt(CORNERING * ((b - a) / turn));
+    if (speed < 18 * M) out.push(Math.round(s), Math.round(speed * 10) / 10);
+  }
+  return out;
+}
 
 /** The way along a path at a distance: [x, y, ux, uy]. */
 export function pathAt(p: Path, s: number): [number, number, number, number] {
@@ -281,6 +306,7 @@ export function buildLanes(map: GameMap): { lanes: Lane[]; nodes: Node[] } {
         const offset = left - resLeft - (index + 0.5) * each;
         const pts = dir === 1 ? offsetLine(middle, offset) : reversed(offsetLine(middle, -offset));
         const path = makePath(pts.map(round1), r.bridge ? 1 : 0);
+        path.bends = bendsOf(path, 8 * M);
         const lane: Lane = {
           ...path,
           id: lanes.length,
@@ -334,7 +360,7 @@ export function buildLanes(map: GameMap): { lanes: Lane[]; nodes: Node[] } {
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
-/** The turn from the end of one lane to the start of the next: a smooth curve, and how fast it can be taken. */
+/** The turn from the end of one lane to the start of the next: a smooth curve, and where it's sharpest. */
 export function turnBetween(a: Lane, b: Lane): Path {
   const [ax, ay, aux, auy] = pathAt(a, a.length);
   const [bx, by, bux, buy] = pathAt(b, 0);
@@ -351,19 +377,34 @@ export function turnBetween(a: Lane, b: Lane): Path {
   const path = makePath(pts, a.level);
   const bend = Math.abs(Math.atan2(aux * buy - auy * bux, aux * bux + auy * buy));
   const cross = aux * buy - auy * bux;
-  path.limit = bend < 0.2 ? Infinity : Math.sqrt(CORNERING * (path.length / bend));
+  path.bends = bendsOf(path, Math.max(1.5 * M, Math.min(4 * M, path.length / 2)));
   path.turn = bend < 0.5 ? 0 : cross > 0 ? 1 : -1;
   return path;
 }
 
 // --- Driving ---
 
-/** Following: how hard it pulls away and brakes (comfortably; and at most), px/s²; how far it stays back (stopped, and in seconds). */
+/**
+ * Driving smoothly: how hard it pulls away at most, and brakes as it plans to
+ * (comfortably) and at most, px/s²; how quickly it gets on or off the
+ * accelerator and brake (never all at once), px/s³; how firmly it closes on the
+ * speed it wants (1/s); and how it eases into a stop: no faster than this
+ * (px/s) for each px it has left, so it rolls up to the line or the car ahead.
+ */
 const ACCEL = 2.2 * M;
-const BRAKE = 3 * M;
+const BRAKE = 2.2 * M;
 const HARDEST = 9 * M;
+const JERK_ON = 2.5 * M;
+const JERK_OFF = 5 * M;
+const GAIN = 1.6;
+const CLOSING = 0.9;
+/** How far it stays back: stopped (behind a car, and at a line), and the time behind a moving one, s. */
 const GAP = 2 * M;
+const AT_LINE = 0.5 * M;
 const HEADWAY = 1.3;
+/** How long a driver takes to move off when it can (the lights change, the car ahead goes), seconds: the least, and up to how much more. */
+const REACT = 0.35;
+const REACT_MORE = 0.7;
 /** How far ahead it looks, px: at least, at most. */
 const LOOK_MIN = 14 * M;
 const LOOK_MAX = 70 * M;
@@ -402,6 +443,8 @@ export class Traffic {
   private nextId = 0;
   private spawnTimer = 0;
   private started = false;
+  private clock = 0;
+  private readonly byId = new Map<number, Vehicle>();
 
   constructor(map: GameMap, options: TrafficOptions = {}) {
     ({ lanes: this.lanes, nodes: this.nodes } = buildLanes(map));
@@ -449,6 +492,9 @@ export class Traffic {
       braking: false,
       turning: 0,
       annoyed: 0,
+      accel: 0,
+      react: -1,
+      verve: 0.8 + this.rand() * 0.4,
     };
   }
 
@@ -459,8 +505,8 @@ export class Traffic {
     const v = this.make(kind, 0, 0, 0, lane.level);
     v.route = [lane];
     v.s = s;
-    v.speed = Math.min(lane.speed * v.pace, this.cornerSpeed(v, 0));
     this.plan(v);
+    v.speed = Math.min(lane.speed * v.pace, this.limitAhead(v));
     this.pose(v);
     this.vehicles.push(v);
     return v;
@@ -559,13 +605,18 @@ export class Traffic {
     return [x + ux * s, y + uy * s];
   }
 
-  /** The fastest it should be going now, to take the turns ahead at their speed. */
-  private cornerSpeed(v: Vehicle, from: number): number {
+  /** The fastest it should be going now to slow comfortably, in time, for the bends and the slower roads ahead. */
+  private limitAhead(v: Vehicle): number {
     let limit = Infinity;
-    let d = -v.s - from;
+    let d = -v.s;
     for (const p of v.route) {
       if (d > LOOK_MAX) break;
-      if (p.limit !== undefined && p.limit < Infinity) limit = Math.min(limit, Math.sqrt(p.limit ** 2 + 2 * BRAKE * Math.max(0, d)));
+      const bends = p.bends ?? [];
+      for (let k = 0; k + 1 < bends.length; k += 2) {
+        const at = d + bends[k];
+        if (at < -v.length / 2) continue;
+        limit = Math.min(limit, Math.sqrt(bends[k + 1] ** 2 + 2 * BRAKE * Math.max(0, at)));
+      }
       if (p.lane && d > 0) limit = Math.min(limit, Math.sqrt((p.lane.speed * v.pace) ** 2 + 2 * BRAKE * d));
       d += p.length;
     }
@@ -578,6 +629,9 @@ export class Traffic {
    * roads would have them, and go once they're well behind.
    */
   update(dt: number, player: Player, view: TrafficView, light: (signal: number) => Light): void {
+    this.clock += dt;
+    this.byId.clear();
+    for (const v of this.vehicles) this.byId.set(v.id, v);
     const obstacles = this.obstacles(player);
     for (const v of this.vehicles) {
       if (v.mode === 'drive') this.drive(v, dt, obstacles, light);
@@ -601,6 +655,7 @@ export class Traffic {
     // What's ahead: the nearest thing in the way (and how fast it's going our way), the lights, the junction to give way at, the road's end.
     let gap = Infinity;
     let lead = 0;
+    let hold = GAP;
     let blocker: number | undefined;
     const front = v.length / 2;
     const samples: [number, number, number][] = [];
@@ -640,6 +695,7 @@ export class Traffic {
           if (stop && at < gap) {
             gap = Math.max(0, at - 1);
             lead = 0;
+            hold = AT_LINE;
             blocker = undefined;
             stopped = true;
           }
@@ -649,6 +705,7 @@ export class Traffic {
           if (end < gap) {
             gap = Math.max(0, end - 0.5);
             lead = 0;
+            hold = AT_LINE;
             blocker = undefined;
           }
         }
@@ -658,27 +715,46 @@ export class Traffic {
     if (v.ends) {
       let left = -v.s - front;
       for (const p of v.route) left += p.length;
-      if (left < gap) gap = Math.max(0, left);
+      if (left < gap) {
+        gap = Math.max(0, left);
+        lead = 0;
+        hold = AT_LINE;
+      }
     }
 
-    // Up to its speed; keeping a couple of seconds behind what's ahead; braking in time to stop (or slow to its speed) short of it.
-    const want = Math.min(this.cornerSpeed(v, 0), (v.route.find((p) => p.lane)?.lane?.speed ?? 8 * M) * v.pace);
-    let a = ACCEL * (1 - (v.speed / Math.max(1, want)) ** 4);
+    // The speed it wants: its usual for the road (drifting a little, as a driver's does), slowing in time for the bends ahead...
+    const cruise = (v.route.find((p) => p.lane)?.lane?.speed ?? 8 * M) * v.pace * (1 + 0.04 * Math.sin(this.clock * 0.23 + v.id * 1.7));
+    let want = Math.min(cruise, this.limitAhead(v));
+    // ...and for what's ahead: dropping back to a couple of seconds behind a moving car, and rolling gently up to a stop.
+    let urgent = false;
     if (gap < Infinity) {
-      a = Math.min(a, ACCEL * (1 - ((GAP + v.speed * HEADWAY) / Math.max(gap, 0.1)) ** 2));
-      const room = gap - GAP * 0.6;
-      const need = v.speed > lead ? (v.speed ** 2 - lead ** 2) / (2 * Math.max(room, 0.1)) : 0;
-      if (need > BRAKE * 0.6) a = Math.min(a, -need * 1.1);
+      const room = gap - hold - lead * HEADWAY;
+      want = Math.min(want, room >= 0 ? Math.min(Math.sqrt(lead * lead + 2 * BRAKE * room), lead + CLOSING * room) : Math.max(0, lead + CLOSING * room));
+      // Left it late (something pulled out, the lights changed): brake as hard as it takes.
+      const need = v.speed > lead ? (v.speed ** 2 - lead ** 2) / (2 * Math.max(gap - hold * 0.5, 0.1)) : 0;
+      urgent = need > BRAKE * 1.4;
     }
-    a = Math.max(-HARDEST, Math.min(ACCEL, a));
-    v.braking = a < -0.5 * M || (v.speed < 2 && gap < 3 * M);
-    v.speed = Math.max(0, Math.min(v.speed + a * dt, Math.max(want, 0)));
-    // Nearly there: held, rather than creeping up.
-    if (gap < GAP * 0.6) v.speed = Math.min(v.speed, lead);
+    // Moving off: a moment to react first.
+    if (v.speed < 0.3 && want < 1) v.react = -1;
+    else if (v.speed < 0.3 && v.react < 0) v.react = REACT + this.rand() * REACT_MORE;
+    if (v.react > 0) {
+      v.react = Math.max(0, v.react - dt);
+      want = 0;
+    }
+    // Onto the accelerator or brake, and off it, smoothly: easing towards the speed it wants.
+    const top = ACCEL * v.verve * (1 - 0.4 * Math.min(1, v.speed / Math.max(cruise, 1)));
+    const target = urgent ? -Math.min(HARDEST, ((v.speed ** 2 - lead ** 2) / (2 * Math.max(gap - hold * 0.5, 0.1))) * 1.1) : Math.max(-BRAKE * 1.6, Math.min(top, (want - v.speed) * GAIN));
+    const jerk = urgent ? 40 * M : target > v.accel ? (v.accel < 0 ? JERK_OFF : JERK_ON * v.verve) : JERK_OFF;
+    v.accel += Math.max(-jerk * dt, Math.min(jerk * dt, target - v.accel));
+    v.speed = Math.max(0, v.speed + v.accel * dt);
+    // Stopped: the foot stays on the brake until it's time to go.
+    if (v.speed === 0 && v.accel < 0) v.accel = 0;
+    if (gap < hold * 0.4 && v.speed > lead) v.speed = lead;
+    v.braking = v.accel < -0.4 * M || (v.speed < 1 && want < 1);
     // Stuck behind the same thing a long while: it's not moving and nor are we (a knot at a junction): edge past.
     v.behind = blocker;
     v.annoyed = blocker === -1 && v.speed < 2 ? v.annoyed + dt : Math.min(0, v.annoyed + dt);
-    if (v.speed < 1 && blocker !== undefined && blocker >= 0 && !stopped) v.stuck += dt;
+    if (v.speed < 1 && blocker !== undefined && blocker >= 0 && !stopped && this.knotted(v)) v.stuck += dt;
     else v.stuck = 0;
     if (v.stuck > 6 && this.priority(v) >= 0) v.speed = NOSE;
     v.s += v.speed * dt;
@@ -699,6 +775,17 @@ export class Traffic {
       ahead += p.length;
     }
     this.pose(v);
+  }
+
+  /** Whether it's in a knot: waiting on one that's waiting on one ... that's waiting on it (not just in a queue). */
+  private knotted(v: Vehicle): boolean {
+    let id = v.behind;
+    for (let k = 0; k < 8; k++) {
+      if (id === undefined || id < 0) return false;
+      if (id === v.id) return true;
+      id = this.byId.get(id)?.behind;
+    }
+    return false;
   }
 
   /** Who goes first, when two are waiting for each other: the one already turning across the junction, then the bigger road. */
