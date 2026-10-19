@@ -10,6 +10,7 @@
  * Phaser), so it's tested; GameScene draws it.
  */
 
+import type { Wreck } from '../car/dents';
 import type { GameMap, Pts, Road, RoadKind } from '../map/osm';
 import type { Body } from '../physics/collisions';
 import type { Light } from './lights';
@@ -88,6 +89,8 @@ export interface Vehicle extends Body {
   verve: number;
   /** Seconds it's been held up by you (it honks). */
   annoyed: number;
+  /** Its dents, scratches and lost parts, once it's been hit. */
+  wreck?: Wreck;
   /** Its way runs out (a one-way road off the map's edge): it stops at the end, and goes once out of sight. */
   ends?: boolean;
 }
@@ -473,6 +476,8 @@ export class Traffic {
   private readonly terrain: Terrain;
   /** How many there should be round you now. */
   target = 0;
+  /** Vehicles that have bumped into each other since this was last emptied: where, and how hard (for their damage). */
+  readonly hits: { a: Vehicle; b: Vehicle; x: number; y: number; impulse: number }[] = [];
 
   constructor(map: GameMap, options: TrafficOptions = {}) {
     ({ lanes: this.lanes, nodes: this.nodes } = buildLanes(map));
@@ -1009,7 +1014,9 @@ export class Traffic {
       for (const b of all) {
         if (a === b || a.level !== b.level) continue;
         if (Math.abs(a.x - b.x) > (a.length + b.length) / 2 || Math.abs(a.y - b.y) > (a.length + b.length) / 2) continue;
-        const hit = collideBodies(a, b);
+        const at = { x: 0, y: 0 };
+        const hit = collideBodies(a, b, 0.3, at);
+        if (hit > 0) this.hits.push({ a, b, x: at.x, y: at.y, impulse: hit });
         if (hit > 15) {
           for (const v of [a, b]) {
             if (v.mode === 'drive' || v.mode === 'parked' || v.mode === 'rejoin') v.mode = 'knocked';
@@ -1107,7 +1114,7 @@ function pick<T>(rand: () => number, weighted: [T, number][]): T | undefined {
 }
 
 /** Two long bodies bumping: both move and both turn. Returns the impulse. */
-export function collideBodies(a: Body, b: Body, restitution = 0.3): number {
+export function collideBodies(a: Body, b: Body, restitution = 0.3, contactOut?: { x: number; y: number }): number {
   let strongest = 0;
   const hull = (body: Body) => {
     const end = Math.max(0, (body.length ?? 0) / 2 - body.r);
@@ -1148,7 +1155,10 @@ export function collideBodies(a: Body, b: Body, restitution = 0.3): number {
       b.vx -= nx * j * b.invMass;
       b.vy -= ny * j * b.invMass;
       b.spin -= rb * j * inertia(b);
-      strongest = Math.max(strongest, j);
+      if (j > strongest) {
+        strongest = j;
+        if (contactOut) Object.assign(contactOut, { x: px, y: py });
+      }
     }
   }
   return strongest;

@@ -388,6 +388,31 @@ export function createArt(scene: Phaser.Scene): void {
     ctx.stroke();
     circle(ctx, 6.6, 0.6, 0.7, '#417c31');
   });
+  // Off a car: a bumper (dark plastic), a wing mirror, a hubcap, a bit of a light's red lens.
+  canvasTexture(scene, TEX.debris('bumper'), 16, 3.2, (ctx) => {
+    roundRect(ctx, 0, 0.2, 16, 2.8, 1.2, '#262729');
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(1, 0.6, 14, 0.5);
+  });
+  canvasTexture(scene, TEX.debris('mirror'), 3, 2.4, (ctx) => {
+    roundRect(ctx, 0, 0, 3, 2.4, 0.8, '#2a2c2e');
+    ctx.fillStyle = 'rgba(180,210,230,0.8)';
+    ctx.fillRect(0.6, 0.5, 1.6, 1.2);
+  });
+  canvasTexture(scene, TEX.debris('hubcap'), 4.4, 4.4, (ctx) => {
+    circle(ctx, 2.2, 2.2, 2.1, '#9da2a6');
+    circle(ctx, 2.2, 2.2, 1.5, '#c9cdd0');
+    circle(ctx, 2.2, 2.2, 0.5, '#7d8286');
+  });
+  canvasTexture(scene, TEX.debris('lens'), 2.4, 2, (ctx) => {
+    ctx.fillStyle = 'rgba(214,52,44,0.9)';
+    ctx.beginPath();
+    ctx.moveTo(0.1, 1.8);
+    ctx.lineTo(1.2, 0.1);
+    ctx.lineTo(2.3, 1.5);
+    ctx.closePath();
+    ctx.fill();
+  });
   // A shard of broken glass, catching the light.
   canvasTexture(scene, TEX.debris('glass'), 3, 3, (ctx) => {
     ctx.fillStyle = 'rgba(200, 228, 240, 0.9)';

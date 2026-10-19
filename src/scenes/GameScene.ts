@@ -43,11 +43,14 @@ import { Wreckage } from './Wreckage';
 import { Kerbs } from '../world/kerbs';
 import { Humps } from '../world/humps';
 import { WallLayer } from '../world/WallLayer';
-import { type Debris, impactSpeed } from '../world/damage';
+import { type Debris, type DebrisKind, debris, impactSpeed } from '../world/damage';
 import { HudScene, RESET_EVENT, STREET_EVENT } from './HudScene';
 import { SkidMarks } from './SkidMarks';
 import { TrafficLayer } from './TrafficLayer';
-import { Traffic } from '../world/traffic';
+import { Traffic, VEHICLES, type Vehicle } from '../world/traffic';
+import { type Shape, STIFFNESS, type Wreck, hit as dentAt, newWreck, toBody, toWorld } from '../car/dents';
+import { paintWreck } from './dentArt';
+import { bodyLayout } from './vehicleArt';
 
 /** Physics runs at a fixed rate so handling feels the same at any frame rate. */
 const PHYSICS_DT = 1 / 120;
@@ -129,6 +132,9 @@ export class GameScene extends Phaser.Scene {
   private hopLeft = 0;
   private wallLayer!: WallLayer;
   private traffic!: Traffic;
+  /** Your car's damage, and the version of it its picture shows. */
+  private readonly wreck: Wreck = newWreck();
+  private wreckShown = 0;
   private trafficLayer!: TrafficLayer;
   private loose: { body: LooseProp; image: Phaser.GameObjects.Image }[] = [];
   private looseByChunk = new Map<string, number[]>();
@@ -460,21 +466,35 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Whatever the car's going into hard enough gives way first; then it bounces off what's left.
+    const [bvx, bvy] = [car.vx, car.vy];
     this.wreckage.hit(car, this.level);
+    // What gave way took speed off the car: a hit on its front, as hard as that.
+    const lost = Math.hypot(car.vx - bvx, car.vy - bvy);
+    if (lost > 0) {
+      const sp = Math.hypot(bvx, bvy) || 1;
+      this.dent(null, car.x + (bvx / sp) * (CAR_LENGTH / 2), car.y + (bvy / sp) * (CAR_LENGTH / 2), lost);
+    }
     const wall = collideCarWithWalls(car, this.walls[this.level], undefined, this.contact);
-    if (wall > 0) this.hit(wall);
+    if (wall > 0) {
+      this.hit(wall);
+      this.dent(null, this.contact.x, this.contact.y, wall);
+    }
     const post = collideCarWithStatic(car, this.posts[this.level], undefined, this.contact);
-    if (post > 0) this.hit(post);
+    if (post > 0) {
+      this.hit(post);
+      this.dent(null, this.contact.x, this.contact.y, post);
+    }
     // The traffic, and the parked cars: knocked about (and it stops a moment).
     for (const v of this.traffic.near(car.x, car.y, CAR_LENGTH + 80)) {
       if (v.level !== this.level) continue;
-      const bump = collideCarWithBody(car, v, CAR_BUMP);
+      const bump = collideCarWithBody(car, v, CAR_BUMP, this.contact);
       if (bump <= 0) continue;
       const fresh = v.mode === 'drive';
       this.traffic.knock(v, bump);
-      this.contact.x = (car.x + v.x) / 2;
-      this.contact.y = (car.y + v.y) / 2;
       this.hit(bump);
+      // Both dented where they met.
+      this.dent(v, this.contact.x, this.contact.y, bump);
+      this.dent(null, this.contact.x, this.contact.y, bump);
       // A good knock: a long blast of its horn, once it's stopped.
       if (fresh && bump > 120) this.time.delayedCall(700, () => this.audio?.horn(this.hearing(v.x, v.y), true));
     }
@@ -493,8 +513,9 @@ export class GameScene extends Phaser.Scene {
         image.destroy();
         continue;
       }
-      const knock = collideCarWithBody(car, body);
+      const knock = collideCarWithBody(car, body, undefined, this.contact);
       if (knock > 0) {
+        this.dent(null, this.contact.x, this.contact.y, knock);
         body.moved = true;
         if (knock > 60) this.audio?.knock();
       }
@@ -529,13 +550,61 @@ export class GameScene extends Phaser.Scene {
       console.error('traffic:', e);
     }
     for (const v of this.traffic.loose()) {
-      collideBodyWithWalls(v, this.walls[v.level]);
+      const wall = collideBodyWithWalls(v, this.walls[v.level], 0.4, this.contact);
+      if (wall > 0) this.dent(v, this.contact.x, this.contact.y, wall / v.invMass);
       collideBodyWithStatic(v, this.posts[v.level]);
     }
+    // Vehicles shunted into each other: both dented.
+    for (const h of this.traffic.hits) {
+      this.dent(h.a, h.x, h.y, h.impulse);
+      this.dent(h.b, h.x, h.y, h.impulse);
+    }
+    this.traffic.hits.length = 0;
     for (const v of this.traffic.vehicles) {
       if (v.annoyed > 2.5) {
         this.audio?.horn(this.hearing(v.x, v.y), Math.random() < 0.3);
         v.annoyed = -3 - Math.random() * 3;
+      }
+    }
+  }
+
+  /**
+   * Damage where a vehicle (or your car, for null) has been hit, at (x, y),
+   * this hard: dents and scratches there, and what comes off falls to the
+   * ground (a smashed light's glass, a mirror, a hubcap, the bumper).
+   */
+  private dent(v: Vehicle | null, x: number, y: number, impulse: number): void {
+    const body = v ? { x: v.x, y: v.y, angle: v.angle, vx: v.vx, vy: v.vy, level: v.level } : { x: this.car.x, y: this.car.y, angle: this.car.heading, vx: this.car.vx, vy: this.car.vy, level: this.level };
+    const shape = v ? vehicleShape(v) : PLAYER_SHAPE;
+    const wreck = v ? (v.wreck ??= newWreck()) : this.wreck;
+    const [u, w] = toBody(x, y, body.x, body.y, body.angle);
+    const out = dentAt(wreck, shape, u, w, impulse, this.time.now / 1000, Math.random);
+    for (const lost of out.lost) {
+      const [px, py] = toWorld(lost.u, lost.v, body.x, body.y, body.angle);
+      // Thrown off outwards a little, and on the way it was going.
+      const [ox, oy] = [(px - body.x) * 2, (py - body.y) * 2];
+      const drop = (kind: DebrisKind, count: number, spread: number) => {
+        for (const d of debris(kind, count, px, py, body.vx * 0.5 + ox, body.vy * 0.5 + oy, Math.random, spread)) this.addDebris(d, body.level);
+      };
+      switch (lost.part) {
+        case 'bumperFront':
+        case 'bumperRear':
+          drop('bumper', 1, 4);
+          drop('plastic', 3, 6);
+          break;
+        case 'mirrorLeft':
+        case 'mirrorRight':
+          drop('mirror', 1, 3);
+          drop('glass', 2, 3);
+          break;
+        case 'hubcap':
+          drop('hubcap', 1, 3);
+          break;
+        default:
+          drop('glass', 4, 4);
+          if (lost.part.startsWith('lightRear')) drop('lens', 3, 4);
+          this.effects.burst('glass', px, py, 6);
+          this.audio?.shatter('glass', impulse);
       }
     }
   }
@@ -638,6 +707,11 @@ export class GameScene extends Phaser.Scene {
 
   private drawCar(): void {
     const { x, y, heading } = this.car;
+    if (this.wreck.version !== this.wreckShown) {
+      this.wreckShown = this.wreck.version;
+      paintWreck(this, 'car-dented', { base: TEX.car, length: CAR_LENGTH, width: CAR_WIDTH, mirror: PLAYER_SHAPE.mirror }, this.wreck);
+      this.carSprite.setTexture('car-dented');
+    }
     // Off a speed hump: up and down again, nearer the camera at the top (a little bigger), its shadow further off.
     const phase = this.hopLeft > 0 ? 1 - this.hopLeft / HOP_TIME : 1;
     const hop = this.hopPeak * 4 * phase * (1 - phase);
@@ -807,4 +881,20 @@ export class GameScene extends Phaser.Scene {
 /** What a bridge's deck is to drive on: tarmac for a road bridge, paving or planks for a footbridge or jetty. */
 function deckSurface(road: Road): Surface {
   return VEHICLE_ROADS.has(road.kind) && road.kind !== 'track' ? Surface.Road : Surface.Pavement;
+}
+
+/** Your car, for its damage: its mirrors 15.75 px back from its nose, its windscreen 13.25. */
+const PLAYER_SHAPE: Shape = { length: CAR_LENGTH, width: CAR_WIDTH, stiffness: STIFFNESS.player, mirror: CAR_LENGTH / 2 - 15.75, screen: CAR_LENGTH / 2 - 13.25 };
+
+const shapes = new Map<string, Shape>();
+
+/** A kind of vehicle, for its damage. */
+function vehicleShape(v: Vehicle): Shape {
+  let shape = shapes.get(v.kind);
+  if (!shape) {
+    const k = VEHICLES[v.kind];
+    shape = { length: k.length, width: k.width, stiffness: STIFFNESS[v.kind], ...bodyLayout(v.kind) };
+    shapes.set(v.kind, shape);
+  }
+  return shape;
 }

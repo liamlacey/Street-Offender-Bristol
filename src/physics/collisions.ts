@@ -268,7 +268,7 @@ export function carTouches(car: CarState, grid: CircleGrid): boolean {
 }
 
 /** Car against a loose object; both move. Returns the impulse (0 if not touching). */
-export function collideCarWithBody(car: CarState, body: Body, material = CONE_HIT): number {
+export function collideCarWithBody(car: CarState, body: Body, material = CONE_HIT, contactOut?: ContactPoint): number {
   // Too far apart to touch.
   const reach = CAR_LENGTH / 2 + (body.length ?? 0) / 2 + body.r;
   if (Math.abs(car.x - body.x) > reach || Math.abs(car.y - body.y) > reach) return 0;
@@ -295,7 +295,10 @@ export function collideCarWithBody(car: CarState, body: Body, material = CONE_HI
       const bodySide = { v: body, invMass: body.invMass, invInertia, rx: bx - body.x + nx * body.r, ry: by - body.y + ny * body.r };
       const [impulse, slip] = resolve(carSide(car, rx, ry), bodySide, nx, ny, material);
       if (!body.length) body.spin -= slip / body.r; // a cone clipped off-centre spins as it flies
-      strongest = Math.max(strongest, impulse);
+      if (impulse > strongest) {
+        strongest = impulse;
+        if (contactOut) Object.assign(contactOut, { x: cx - nx * CAR_RADIUS, y: cy - ny * CAR_RADIUS });
+      }
     }
   }
   return strongest;
@@ -361,7 +364,7 @@ export function collideBodyWithStatic(body: Body, grid: CircleGrid, restitution 
 }
 
 /** Bounces a loose object (all of a long one's circles) off walls. */
-export function collideBodyWithWalls(body: Body, grid: SegmentGrid, restitution = 0.4): number {
+export function collideBodyWithWalls(body: Body, grid: SegmentGrid, restitution = 0.4, contactOut?: ContactPoint): number {
   let strongest = 0;
   for (const along of bodyHull(body)) {
     const cx = body.x + Math.cos(body.angle) * along;
@@ -381,7 +384,10 @@ export function collideBodyWithWalls(body: Body, grid: SegmentGrid, restitution 
       if (vn < 0) {
         body.vx -= (1 + restitution) * vn * nx;
         body.vy -= (1 + restitution) * vn * ny;
-        strongest = Math.max(strongest, -vn);
+        if (-vn > strongest) {
+          strongest = -vn;
+          if (contactOut) Object.assign(contactOut, { x: px, y: py });
+        }
       }
     }
   }

@@ -456,6 +456,31 @@ bounces off.
 | Fence | timber | 70 | Broken through (2.5 m, up to 5 m) into planks |
 | Railings | metal | 130 | Broken through (2.5 m, up to 5 m), bent bars |
 
+**Vehicles** (yours, the traffic, the parked cars; `src/car/dents.ts`, painted by
+`src/scenes/dentArt.ts`) are damaged where they're hit, by how hard: the impulse of the
+hit (it grows with the speed they came together at and the weight of what hit them;
+the same for both), divided by how sturdy the vehicle is (a small car 0.9, a car 1,
+an SUV or van 1.3, a lorry 2.2). Hitting a wall or a post is a hit as hard as you
+bounce; what gives way (a lamp post, a wall, a bench) is a hit on the front as hard as
+the speed it takes off you. Each hit lands on the side of the body nearest where they
+touched:
+
+| How hard | What it does there |
+| --- | --- |
+| 7 or more | Scratches along the edge (bare metal and primer), more and longer the harder |
+| 16 | Paint chipped off |
+| 28 | Dented (shaded in), bigger the harder |
+| 75 | Crumpled: the outline pushed in, its folds; from the front, the windscreen cracks |
+| 30, at a corner of an end | That light's smashed: its glass (and a rear light's red lens) on the road |
+| 22, from the side by the windscreen | The wing mirror comes off |
+| 45, from the side by a wheel | Half the time, its hubcap comes off |
+| An end that's taken 160 in all | Its bumper falls off |
+
+It all adds up, hit after hit (the bumper's off once its end has had enough), and stays.
+A car pressed against something is hit once, not over and over: hits within 0.15 s count
+only if half as hard again. A bumper on the road breaks into bits run over hard
+enough (90); a mirror smashes (50).
+
 **Broken again.** What's been broken breaks up further, hit again, and much
 more easily, being loose (nothing holds it to the ground any more) and smaller:
 each piece is weaker than what it broke off, down to bits too small to break.

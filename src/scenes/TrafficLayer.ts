@@ -2,7 +2,9 @@ import type * as Phaser from 'phaser';
 import type { Perspective } from '../world/perspective';
 import type { Traffic, Vehicle } from '../world/traffic';
 import { ART_SCALE } from './art';
-import { vehicleShadow, vehicleTexture } from './vehicleArt';
+import { forgetWreck, paintWreck } from './dentArt';
+import { VEHICLES } from '../world/traffic';
+import { bodyLayout, vehicleShadow, vehicleTexture } from './vehicleArt';
 
 /** How the traffic's drawn among everything else: on the ground and on the bridges, with you on one or the other. */
 export interface TrafficDepths {
@@ -20,7 +22,8 @@ export interface TrafficDepths {
  * and its indicators flashing before it turns.
  */
 export class TrafficLayer {
-  private readonly sprites = new Map<Vehicle, { body: Phaser.GameObjects.Image; shadow: Phaser.GameObjects.Image }>();
+  /** Each one in view: its picture and shadow, and which version of its damage the picture shows. */
+  private readonly sprites = new Map<Vehicle, { body: Phaser.GameObjects.Image; shadow: Phaser.GameObjects.Image; shown: number }>();
   private readonly lamps: [Phaser.GameObjects.Graphics, Phaser.GameObjects.Graphics];
 
   constructor(
@@ -49,8 +52,15 @@ export class TrafficLayer {
         if (!s) {
           const shadow = this.scene.add.image(0, 0, vehicleShadow(this.scene, v.kind)).setScale(1 / ART_SCALE).setTint(0x000000).setAlpha(0.33);
           const body = this.scene.add.image(0, 0, vehicleTexture(this.scene, v.kind, v.colour)).setScale(1 / ART_SCALE);
-          s = { body, shadow };
+          s = { body, shadow, shown: 0 };
           this.sprites.set(v, s);
+        }
+        // Damaged: its own picture, with its dents and scratches.
+        if (v.wreck && v.wreck.version !== s.shown) {
+          s.shown = v.wreck.version;
+          const key = `vehicle-dented-${v.id}`;
+          paintWreck(this.scene, key, { base: vehicleTexture(this.scene, v.kind, v.colour), length: VEHICLES[v.kind].length, width: VEHICLES[v.kind].width, mirror: bodyLayout(v.kind).mirror }, v.wreck);
+          s.body.setTexture(key);
         }
         const lift = perspective.lift(this.base(v.x, v.y, v.level));
         const [x, y] = [perspective.x(v.x, lift), perspective.y(v.y, lift)];
@@ -67,6 +77,7 @@ export class TrafficLayer {
       if (seen.has(v)) continue;
       s.body.destroy();
       s.shadow.destroy();
+      forgetWreck(this.scene, `vehicle-dented-${v.id}`);
       this.sprites.delete(v);
     }
   }

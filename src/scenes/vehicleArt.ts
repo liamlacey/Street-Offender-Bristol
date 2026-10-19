@@ -25,6 +25,14 @@ export function vehicleShadow(scene: Phaser.Scene, kind: VehicleKind): string {
   return key;
 }
 
+/** Where a kind's wing mirrors and windscreen are along it, from its middle, px (for its damage). */
+export function bodyLayout(kind: VehicleKind): { mirror: number; screen: number } {
+  const L = VEHICLES[kind].length;
+  if (kind === 'lorry') return { mirror: L / 2 - 4.9, screen: L / 2 - 3.3 };
+  const [, , screen, bonnet] = LAYOUT[kind].map((f) => f * L);
+  return { mirror: screen + 0.1 - L / 2, screen: (screen + bonnet) / 2 - L / 2 };
+}
+
 /** A colour lighter (k > 0) or darker (k < 0). */
 function shade(hex: string, k: number): string {
   const n = parseInt(hex.slice(1), 16);

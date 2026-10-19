@@ -135,7 +135,7 @@ export function gapFor(kind: WallKind, speed: number, weight = 1): number {
   return w.gap * Math.min(2, Math.max(1, (speed * weight) / w.strength));
 }
 
-export type DebrisKind = 'pump' | 'meter' | 'clockface' | 'post' | 'ring' | 'plastic' | 'arm' | 'log' | 'billet' | 'splinter' | 'plank' | 'foliage' | 'twig' | 'glass' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head';
+export type DebrisKind = 'pump' | 'meter' | 'clockface' | 'post' | 'ring' | 'plastic' | 'arm' | 'log' | 'billet' | 'splinter' | 'plank' | 'foliage' | 'twig' | 'glass' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head' | 'bumper' | 'mirror' | 'hubcap' | 'lens';
 
 /** A piece of what's broken, flying off: it ends up somewhere, in the way. */
 export interface Debris {
@@ -176,6 +176,11 @@ const PIECES: Record<DebrisKind, { r: number; length?: number; invMass: number }
   postbox: { r: 4, invMass: 1.6 },
   phonebox: { r: 5.5, length: 12, invMass: 1.3 },
   head: { r: 2.5, invMass: 10 },
+  // Off a car: a bumper, a wing mirror, a hubcap, bits of a light's lens.
+  bumper: { r: 1.6, length: 16, invMass: 6 },
+  mirror: { r: 1.4, invMass: 25 },
+  hubcap: { r: 2.2, invMass: 20 },
+  lens: { r: 0.8, invMass: 40 },
 };
 
 /**
@@ -273,6 +278,9 @@ export const BREAKUP: Partial<Record<DebrisKind | 'bench' | 'picnic' | 'gritbin'
   // A traffic light's head and a fallen phone box are smashed up: glass, and their frames.
   head: { material: 'glass', strength: 80, absorb: 0.05, into: [['glass', 5], ['rail', 1]] },
   phonebox: { material: 'glass', strength: 120, absorb: 0.25, into: [['glass', 10], ['rail', 3]] },
+  // A bumper off a car, run over: snapped into bits; a mirror, smashed.
+  bumper: { material: 'plastic', strength: 90, absorb: 0.04, into: [['plastic', 4]] },
+  mirror: { material: 'glass', strength: 50, absorb: 0.02, into: [['glass', 2], ['plastic', 1]] },
 };
 
 /**
