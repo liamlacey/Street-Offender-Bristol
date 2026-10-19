@@ -383,7 +383,18 @@ way.
   waits until nothing coming (looking up to 70 m) will reach the junction within
   4.5 s, and nothing's in it.
 - Two turning into the same lane from different ways: within 25 m of it, the one
-  further off lets the other in first.
+  further off lets the other in first (if the nearer one's on its way in, not waiting
+  at a line).
+- Not into a junction (where three or more roads meet) with no room on the far side:
+  it waits at the end of its lane until there's room for it beyond (nothing stopped,
+  or nearly, within its length and 3 m of the lane's start, or in the turn).
+- Waiting to pull out, it takes a smaller gap the longer it's waited (the 4.5 s down
+  to 2 s over 30 s), and traffic crawling under 2 m/s lets it out.
+- Oncoming, two squeeze past each other (needing only 80% of their widths between
+  them); on a narrow two-way street they keep over to the kerb (no nearer it than
+  1.1 m). Nose to nose in a knot, the one with less right of way backs off (1.2 m/s
+  for 3 s).
+- A road off the map's edge: driven on to its end, and gone.
 - What's on a bridge isn't in the way of what's under it, and the other way round:
   each point it looks at ahead is on the level of the road there.
 - At each junction it turns onto another road (never back the way it came unless the
@@ -400,6 +411,31 @@ carries trunk 3.6, primary 3.2, secondary 2.6, tertiary 2.1, streets 1 vehicles 
 100 m, times 1 + activity ÷ 15 (at most 3 times). Up to 55 at once, within the view
 plus 30 m; new ones out of sight (at least 7 m from any other, no faster than it can
 follow the one ahead at), and they go 40 m beyond that.
+
+**Buses** run the real bus routes (OSM's `route=bus` relations, as the `map` call
+returns them: every route with a way in the area). When the map's built, each route's
+ways become legs, in order: the map's road, and which way along it (towards the next
+way, or on from the one before); a gap where the route leaves the map's driveable
+roads (off the map, or along a way only buses use). Old-style routes mapped both ways
+in one relation (ways marked `forward` and `backward`) are left out: they can't be
+followed in order. Its stops are its `stop` members (where buses stop, on the road),
+or failing those its `platform` members (where people wait). Its number (`ref`) and
+colour (`colour`) are kept.
+- In the game a bus follows its route at each junction: onto the next road on it if
+  it's there (a road often runs on past where a route turns off it), or on along the
+  same road; where the route's broken, it looks up to four legs ahead. Off its route
+  for good (off the map), it drives on like anyone, and goes once out of sight.
+- At each stop on its way (within half the road's width and 7 m of its lane) it pulls
+  in, its front 4 m past the stop, and waits 5 to 12 s; it indicates left pulling in
+  and right pulling out.
+- It drives in the bus lane where there is one (over by 85% of its width; other
+  traffic passes it), and pulls 0.7 m in to the kerb at a stop. It moves back out
+  only when there's nothing alongside, easing off to let it by.
+- About one bus for every 250 m of route round you (counting a road once however many
+  routes share it: the square root of the length, times two), at most 8. Single-deckers
+  (12 m) and double-deckers (10.6 m), 45% and 55%; in the route's colour (blue if it
+  hasn't one), its number on its roof. A bus is 9 to 11 times your car's weight, and
+  three times as sturdy.
 
 **Parked cars:** in the car parks' bays (65% of them taken) and in the parking lanes'
 bays (55%, plus 1.2% per point of the street's activity, at most 92%; loading bays

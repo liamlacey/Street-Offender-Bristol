@@ -284,3 +284,27 @@ describe('roadActivity', () => {
     expect(isBusiness({ amenity: 'bench' })).toBe(false);
   });
 });
+
+describe('bus routes', () => {
+  // Two streets end to end, west to east, the second drawn east to west; a route along both, stopping on the first.
+  const xml = `<osm>
+ <node id="1" lat="51.4503" lon="-2.6008"/><node id="2" lat="51.4503" lon="-2.6000"/><node id="3" lat="51.4503" lon="-2.5992"/>
+ <node id="4" lat="51.4503" lon="-2.6004"><tag k="public_transport" v="stop_position"/></node>
+ <way id="10"><nd ref="1"/><nd ref="4"/><nd ref="2"/><tag k="highway" v="residential"/></way>
+ <way id="11"><nd ref="3"/><nd ref="2"/><tag k="highway" v="residential"/></way>
+ <relation id="50"><member type="way" ref="10" role=""/><member type="way" ref="11" role=""/><member type="node" ref="4" role="stop"/>
+  <tag k="type" v="route"/><tag k="route" v="bus"/><tag k="ref" v="8"/><tag k="colour" v="#016f45"/></relation>
+</osm>`;
+
+  it('keeps each route as its roads in order, which way along each, and its stops', () => {
+    const map = buildMap(parseOsm(xml), { bounds: { minlat: 51.4498, minlon: -2.6012, maxlat: 51.4508, maxlon: -2.5988 }, start: { lat: 51.4503, lon: -2.6 } });
+    const route = map.busRoutes![0];
+    expect(route.ref).toBe('8');
+    expect(route.colour).toBe('#016f45');
+    const first = map.roads.findIndex((r) => r.pts[0] < r.pts[r.pts.length - 2]);
+    const second = map.roads.findIndex((r) => r.pts[0] > r.pts[r.pts.length - 2]);
+    // Along the first as it's drawn; against the way the second is.
+    expect(route.legs).toEqual([first * 2, second * 2 + 1]);
+    expect(route.stops.length).toBe(2);
+  });
+});

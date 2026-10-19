@@ -469,6 +469,23 @@ export interface GameMap {
   solar?: number[];
   /** Steep banks (embankments, cuttings), measured by the LIDAR: x, y, which way's downhill (radians, as a hundredth), ... */
   banks?: number[];
+  /** The bus routes through the map (see BusRoute). */
+  busRoutes?: BusRoute[];
+}
+
+/**
+ * A bus route (OSM's `route=bus`): the roads it runs along, in order, and
+ * its stops. Each leg is a road's index times two, plus one if the bus goes
+ * along it against the way it's drawn; -1 where the route leaves the map's
+ * roads for a while (off the map, or along a way only buses use).
+ */
+export interface BusRoute {
+  /** Its number (`ref`), and its colour (`colour`), if mapped. */
+  ref: string;
+  colour?: string;
+  legs: number[];
+  /** Where it stops, in order: x, y, ... */
+  stops: number[];
 }
 
 /**
@@ -2029,6 +2046,50 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     if (best) station(best, null);
   }
 
+  // The bus routes: the roads each runs along, in order and which way along each, and its stops.
+  const busRoutes: BusRoute[] = [];
+  for (const rel of data.relations.values()) {
+    const t = rel.tags;
+    if (t.route !== 'bus' || t.disused) continue;
+    const members = rel.members.filter((m) => m.type === 'way');
+    // An old-style route mapped both ways at once (ways marked forward and backward) can't be followed in order.
+    if (members.some((m) => m.role === 'backward')) continue;
+    const ways = members.filter((m) => m.role === '' || m.role === 'forward');
+    const ends = (w: OsmWay) => [w.nodes[0], w.nodes[w.nodes.length - 1]];
+    const legs: number[] = [];
+    ways.forEach((m, i) => {
+      const road = roadIndexOfWay.get(m.ref);
+      const way = data.ways.get(m.ref);
+      if (road === undefined || !way || !VEHICLE_ROADS.has(roads[road].kind)) {
+        if (legs.length && legs[legs.length - 1] !== -1) legs.push(-1);
+        return;
+      }
+      // Which way along it: towards the next way, or on from the one before.
+      const [first, last] = ends(way);
+      const next = data.ways.get(ways[i + 1]?.ref ?? -1);
+      const prev = data.ways.get(ways[i - 1]?.ref ?? -1);
+      let forward = true;
+      if (next && !next.nodes.includes(last) && next.nodes.includes(first)) forward = false;
+      else if (!next && prev && !prev.nodes.includes(first) && prev.nodes.includes(last)) forward = false;
+      const leg = road * 2 + (forward ? 0 : 1);
+      if (legs[legs.length - 1] !== leg) legs.push(leg);
+    });
+    while (legs[legs.length - 1] === -1) legs.pop();
+    if (!legs.some((l) => l >= 0)) continue;
+    // Its stops: where the bus stops (on the road), or failing that, where people wait (beside it).
+    const isStop = (role: string) => role === 'stop' || role.startsWith('stop_');
+    let stopMembers = rel.members.filter((m) => m.type === 'node' && isStop(m.role));
+    if (!stopMembers.length) stopMembers = rel.members.filter((m) => m.type === 'node' && m.role.startsWith('platform'));
+    const stops: number[] = [];
+    for (const m of stopMembers) {
+      const n = data.nodes.get(m.ref);
+      if (!n) continue;
+      const [x, y] = [proj.x(n.lon), proj.y(n.lat)];
+      if (x >= 0 && y >= 0 && x <= width && y <= height) stops.push(round(x), round(y));
+    }
+    busRoutes.push({ ref: t.ref ?? '', ...(t.colour ? { colour: t.colour } : {}), legs, stops });
+  }
+
   // How busy each road is: what's along it to go to.
   const businesses: [number, number][] = [];
   for (const n of data.nodes.values()) if (isBusiness(n.tags)) businesses.push([proj.x(n.lon), proj.y(n.lat)]);
@@ -2067,6 +2128,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     ...(paint.length ? { paint } : {}),
     ...(treeKinds.length ? { treeSpecies: treeKinds } : {}),
     ...(solar.length ? { solar } : {}),
+    ...(busRoutes.length ? { busRoutes } : {}),
   };
 }
 

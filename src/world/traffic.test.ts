@@ -26,7 +26,7 @@ const green = (): Light => 'green';
 /** A traffic with nothing coming and going on its own: just what a test puts there. */
 function quiet(map: GameMap): Traffic {
   let seed = 7;
-  const traffic = new Traffic(map, { max: 0, rand: () => (seed = (seed * 16807) % 2147483647) / 2147483647 });
+  const traffic = new Traffic(map, { max: 0, buses: 0, rand: () => (seed = (seed * 16807) % 2147483647) / 2147483647 });
   return traffic;
 }
 
@@ -191,5 +191,44 @@ describe('parking', () => {
     const traffic = quiet(crossroads({ roads: [street] }));
     expect(traffic.parked.length).toBeGreaterThan(10);
     expect(traffic.parked.every((v) => v.mode === 'parked' && v.kind !== 'lorry')).toBe(true);
+  });
+});
+
+describe('buses', () => {
+  // A main road east-west, with a stop on it at x = 300; the route turns north up the side street at the crossroads.
+  const route = (extra: Partial<GameMap> = {}) =>
+    crossroads({ busRoutes: [{ ref: '8', colour: '#016f45', legs: [0, 3], stops: [300, 384] }], ...extra } as Partial<GameMap>);
+  const start = (traffic: Traffic) => {
+    const lane = traffic.lanes.find((l) => l.road === 0 && l.dir === 1 && l.pts[0] < 400)!;
+    return traffic.spawn(lane, 10, 'bus', { route: 0, leg: 0 });
+  };
+
+  it('stops at its stop a while, then carries on along its route', () => {
+    const traffic = quiet(route());
+    const bus = start(traffic);
+    expect(bus.bus!.stops.length).toBe(1);
+    run(traffic, 7);
+    expect(bus.speed).toBeLessThan(1);
+    expect(bus.bus!.dwell).toBeGreaterThan(0);
+    // Its front just past the stop.
+    expect(bus.x + bus.length / 2).toBeGreaterThan(300);
+    expect(bus.x + bus.length / 2).toBeLessThan(345);
+    run(traffic, 25);
+    expect(bus.bus!.served.has(0)).toBe(true);
+    // And it's turned up the side street (north: y going down), as its route does.
+    expect(bus.y).toBeLessThan(330);
+    expect(bus.bus!.leg).toBe(1);
+  });
+
+  it('drives in the bus lane, out of the way of the cars', () => {
+    const main = road('primary', 80, [0, 400, 800, 400], { lanes: [{ side: 1, kind: 'bus', width: 24 }], laneSpans: [0, 800] });
+    const traffic = quiet(crossroads({ roads: [main], busRoutes: [{ ref: '8', legs: [0], stops: [] }] } as Partial<GameMap>));
+    const lane = traffic.lanes.find((l) => l.dir === 1 && l.index === 0)!;
+    expect(lane.busLane).toBe(24);
+    const bus = traffic.spawn(lane, 10, 'double', { route: 0, leg: 0 });
+    run(traffic, 4);
+    // Over to the left (north) by most of the bus lane's width.
+    expect(bus.bus!.side).toBeGreaterThan(18);
+    expect(bus.y).toBeLessThan(lane.pts[1] - 15);
   });
 });

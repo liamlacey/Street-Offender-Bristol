@@ -18,6 +18,14 @@ export function vehicleTexture(scene: Phaser.Scene, kind: VehicleKind, colour: n
   return key;
 }
 
+/** A bus in its route's colour, its route's number on its roof. */
+export function busTexture(scene: Phaser.Scene, kind: VehicleKind, colour: string, ref: string): string {
+  const key = `bus-${kind}-${colour}-${ref}`;
+  const { length: L, width: W } = VEHICLES[kind];
+  canvasTexture(scene, key, L, W, (ctx) => bus(ctx, L, W, colour, ref, kind === 'double'));
+  return key;
+}
+
 export function vehicleShadow(scene: Phaser.Scene, kind: VehicleKind): string {
   const key = `vehicle-shadow-${kind}`;
   const { length: L, width: W } = VEHICLES[kind];
@@ -29,6 +37,7 @@ export function vehicleShadow(scene: Phaser.Scene, kind: VehicleKind): string {
 export function bodyLayout(kind: VehicleKind): { mirror: number; screen: number } {
   const L = VEHICLES[kind].length;
   if (kind === 'lorry') return { mirror: L / 2 - 4.9, screen: L / 2 - 3.3 };
+  if (kind === 'bus' || kind === 'double') return { mirror: L / 2 - 2, screen: L / 2 - 1.5 };
   const [, , screen, bonnet] = LAYOUT[kind].map((f) => f * L);
   return { mirror: screen + 0.1 - L / 2, screen: (screen + bonnet) / 2 - L / 2 };
 }
@@ -53,6 +62,7 @@ function draw(ctx: Ctx, kind: VehicleKind, L: number, W: number, colour: string)
     ctx.fillRect(x, W - 2.2, wheel, 2.2);
   }
   if (kind === 'lorry') return lorry(ctx, L, W, colour);
+  if (kind === 'bus' || kind === 'double') return bus(ctx, L, W, colour, '', kind === 'double');
   const boxy = kind === 'van' || kind === 'suv';
   const corner = boxy ? 3 : kind === 'small' ? 5.5 : 5;
   // The body, with a lighter top edge for the light.
@@ -102,7 +112,7 @@ function draw(ctx: Ctx, kind: VehicleKind, L: number, W: number, colour: string)
 }
 
 /** Along each kind, from the back, as fractions of its length: where the rear window starts, the roof, the windscreen, and the bonnet. */
-const LAYOUT: Record<Exclude<VehicleKind, 'lorry'>, [number, number, number, number]> = {
+const LAYOUT: Record<Exclude<VehicleKind, 'lorry' | 'bus' | 'double'>, [number, number, number, number]> = {
   small: [0.1, 0.22, 0.58, 0.72],
   hatch: [0.09, 0.2, 0.56, 0.7],
   saloon: [0.2, 0.31, 0.58, 0.71],
@@ -142,4 +152,61 @@ function lorry(ctx: Ctx, L: number, W: number, colour: string): void {
   ctx.fillRect(L - 6, -0.2, 2.2, 1.6);
   ctx.fillRect(L - 6, W - 1.4, 2.2, 1.6);
   lights(ctx, L, W);
+}
+
+/**
+ * A bus from above: mostly its roof (pale, with its hatches, and a
+ * single-decker's air conditioning pods), its sides in the route's colour,
+ * its windscreen at the front, and its route number painted big on the roof,
+ * reading from the back.
+ */
+function bus(ctx: Ctx, L: number, W: number, colour: string, ref: string, double: boolean): void {
+  // Wheels peeking out: two axles (three on a long single-decker).
+  ctx.fillStyle = '#151515';
+  for (const x of double ? [L * 0.16, L * 0.72] : [L * 0.15, L * 0.68]) {
+    ctx.fillRect(x, 0, 9, 2);
+    ctx.fillRect(x, W - 2, 9, 2);
+  }
+  roundRect(ctx, 0.3, 0.8, L - 0.6, W - 1.6, 3, '#1f2124');
+  // Its sides, in the route's colour.
+  roundRect(ctx, 0.8, 1.2, L - 1.6, W - 2.4, 2.6, colour);
+  // The roof.
+  roundRect(ctx, 2.2, 3.2, L - 5.5, W - 6.4, 2, double ? '#e3e5e7' : '#d6d9dc');
+  ctx.fillStyle = 'rgba(0,0,0,0.08)';
+  ctx.fillRect(2.2, W / 2 - 0.3, L - 5.5, 0.6);
+  // Hatches; a single-decker's air conditioning pods.
+  ctx.fillStyle = '#b9bdc1';
+  for (const f of double ? [0.25, 0.6] : [0.45]) ctx.fillRect(L * f, W / 2 - 3, 5, 6);
+  if (!double) {
+    roundRect(ctx, L * 0.12, 4.2, L * 0.22, W - 8.4, 1.5, '#c4c8cb');
+    roundRect(ctx, L * 0.62, 4.2, L * 0.16, W - 8.4, 1.5, '#c4c8cb');
+  }
+  // The windscreen, wrapping round the front; the back window.
+  roundRect(ctx, L - 3.2, 1.6, 2.4, W - 3.2, 1.2, '#1e2a36');
+  ctx.fillStyle = 'rgba(160,210,240,0.45)';
+  ctx.fillRect(L - 2.8, 2.5, 0.8, W - 5);
+  ctx.fillStyle = '#1e2a36';
+  ctx.fillRect(0.9, 3.5, 1.1, W - 7);
+  // Its number on the roof, in its colour.
+  if (ref) {
+    ctx.save();
+    ctx.translate(L * (double ? 0.78 : 0.86), W / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.fillStyle = colour;
+    ctx.font = `bold ${Math.min(W - 9, 28 / Math.max(2, ref.length))}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(ref, 0, 0);
+    ctx.restore();
+  }
+  // Mirrors out front, and the lights.
+  ctx.fillStyle = '#1f2124';
+  ctx.fillRect(L - 2.6, -0.4, 1.6, 1.6);
+  ctx.fillRect(L - 2.6, W - 1.2, 1.6, 1.6);
+  ctx.fillStyle = '#fff6c8';
+  ctx.fillRect(L - 1, 2.6, 0.8, 2.6);
+  ctx.fillRect(L - 1, W - 5.2, 0.8, 2.6);
+  ctx.fillStyle = '#8e1f1a';
+  ctx.fillRect(0.2, 2.6, 0.8, 2.6);
+  ctx.fillRect(0.2, W - 5.2, 0.8, 2.6);
 }

@@ -180,4 +180,4 @@ export function hit(w: Wreck, shape: Shape, u: number, v: number, impulse: numbe
 export const WHEELS = [-0.32, 0.27];
 
 /** How sturdy each kind is (a car's 1). */
-export const STIFFNESS: Record<string, number> = { small: 0.9, hatch: 1, saloon: 1.05, estate: 1.05, suv: 1.3, van: 1.3, lorry: 2.2, player: 1 };
+export const STIFFNESS: Record<string, number> = { small: 0.9, hatch: 1, saloon: 1.05, estate: 1.05, suv: 1.3, van: 1.3, lorry: 2.2, bus: 3, double: 3.2, player: 1 };

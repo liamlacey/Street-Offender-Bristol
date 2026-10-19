@@ -4,7 +4,7 @@ import type { Traffic, Vehicle } from '../world/traffic';
 import { ART_SCALE } from './art';
 import { forgetWreck, paintWreck } from './dentArt';
 import { VEHICLES } from '../world/traffic';
-import { bodyLayout, vehicleShadow, vehicleTexture } from './vehicleArt';
+import { bodyLayout, busTexture, vehicleShadow, vehicleTexture } from './vehicleArt';
 
 /** How the traffic's drawn among everything else: on the ground and on the bridges, with you on one or the other. */
 export interface TrafficDepths {
@@ -51,7 +51,7 @@ export class TrafficLayer {
         let s = this.sprites.get(v);
         if (!s) {
           const shadow = this.scene.add.image(0, 0, vehicleShadow(this.scene, v.kind)).setScale(1 / ART_SCALE).setTint(0x000000).setAlpha(0.33);
-          const body = this.scene.add.image(0, 0, vehicleTexture(this.scene, v.kind, v.colour)).setScale(1 / ART_SCALE);
+          const body = this.scene.add.image(0, 0, (v.bus ? busTexture(this.scene, v.kind, v.bus.colour, v.bus.ref) : vehicleTexture(this.scene, v.kind, v.colour))).setScale(1 / ART_SCALE);
           s = { body, shadow, shown: 0 };
           this.sprites.set(v, s);
         }
@@ -59,7 +59,7 @@ export class TrafficLayer {
         if (v.wreck && v.wreck.version !== s.shown) {
           s.shown = v.wreck.version;
           const key = `vehicle-dented-${v.id}`;
-          paintWreck(this.scene, key, { base: vehicleTexture(this.scene, v.kind, v.colour), length: VEHICLES[v.kind].length, width: VEHICLES[v.kind].width, mirror: bodyLayout(v.kind).mirror }, v.wreck);
+          paintWreck(this.scene, key, { base: (v.bus ? busTexture(this.scene, v.kind, v.bus.colour, v.bus.ref) : vehicleTexture(this.scene, v.kind, v.colour)), length: VEHICLES[v.kind].length, width: VEHICLES[v.kind].width, mirror: bodyLayout(v.kind).mirror }, v.wreck);
           s.body.setTexture(key);
         }
         const lift = perspective.lift(this.base(v.x, v.y, v.level));

@@ -11,7 +11,7 @@
  */
 
 import type { Wreck } from '../car/dents';
-import type { GameMap, Pts, Road, RoadKind } from '../map/osm';
+import type { BusRoute, GameMap, Pts, Road, RoadKind } from '../map/osm';
 import type { Body } from '../physics/collisions';
 import type { Light } from './lights';
 import { type Space, parkingSpaces } from './parking';
@@ -22,14 +22,14 @@ const M = 8;
 
 // --- The vehicles ---
 
-export type VehicleKind = 'small' | 'hatch' | 'saloon' | 'estate' | 'suv' | 'van' | 'lorry';
+export type VehicleKind = 'small' | 'hatch' | 'saloon' | 'estate' | 'suv' | 'van' | 'lorry' | 'bus' | 'double';
 
 /**
  * Each kind: how long and wide (px; real sizes, a tenth up, to match your car),
  * how heavy (your car's 1), how common in the traffic and parked, and which
  * colours it comes in.
  */
-export const VEHICLES: Record<VehicleKind, { length: number; width: number; mass: number; traffic: number; parked: number; paint: 'car' | 'van' | 'lorry' }> = {
+export const VEHICLES: Record<VehicleKind, { length: number; width: number; mass: number; traffic: number; parked: number; paint: 'car' | 'van' | 'lorry' | 'bus' }> = {
   small: { length: 3.7 * 1.1 * M, width: 1.65 * 1.1 * M, mass: 0.8, traffic: 0.18, parked: 0.22, paint: 'car' },
   hatch: { length: 4.1 * 1.1 * M, width: 1.75 * 1.1 * M, mass: 0.9, traffic: 0.26, parked: 0.27, paint: 'car' },
   saloon: { length: 4.7 * 1.1 * M, width: 1.82 * 1.1 * M, mass: 1, traffic: 0.14, parked: 0.14, paint: 'car' },
@@ -37,10 +37,15 @@ export const VEHICLES: Record<VehicleKind, { length: number; width: number; mass
   suv: { length: 4.6 * 1.1 * M, width: 1.92 * 1.1 * M, mass: 1.3, traffic: 0.15, parked: 0.17, paint: 'car' },
   van: { length: 5.3 * 1.1 * M, width: 2.0 * 1.1 * M, mass: 1.5, traffic: 0.14, parked: 0.12, paint: 'van' },
   lorry: { length: 8.5 * 1.1 * M, width: 2.5 * 1.1 * M, mass: 4, traffic: 0.05, parked: 0, paint: 'lorry' },
+  // Buses only run their routes (see BusService): a single-decker and a double-decker.
+  bus: { length: 12 * 1.1 * M, width: 2.55 * 1.1 * M, mass: 9, traffic: 0, parked: 0, paint: 'bus' },
+  double: { length: 10.6 * 1.1 * M, width: 2.55 * 1.1 * M, mass: 11, traffic: 0, parked: 0, paint: 'bus' },
 };
 
 /** The colours, about as common as on Britain's roads (grey, black and white the most); vans mostly white; lorries' cabs. */
-export const COLOURS: Record<'car' | 'van' | 'lorry', [string, number][]> = {
+export const COLOURS: Record<'car' | 'van' | 'lorry' | 'bus', [string, number][]> = {
+  // A bus whose route hasn't a colour mapped.
+  bus: [['#3b6db3', 1]],
   car: [
     ['#73787e', 22], ['#1d1e22', 18], ['#e8e9eb', 15], ['#22508f', 13], ['#b8bcc1', 10], ['#b21f24', 9],
     ['#5b1e2b', 3], ['#2f5d3a', 3], ['#e07a1f', 2], ['#8a6a4c', 2], ['#e2c23b', 1.5], ['#2a8fa3', 1.5],
@@ -87,12 +92,37 @@ export interface Vehicle extends Body {
   accel: number;
   react: number;
   verve: number;
+  /** Seconds left backing off out of a knot. */
+  backing: number;
+  /** Seconds it's been waiting to pull out at a give way. */
+  waiting: number;
   /** Seconds it's been held up by you (it honks). */
   annoyed: number;
   /** Its dents, scratches and lost parts, once it's been hit. */
   wreck?: Wreck;
-  /** Its way runs out (a one-way road off the map's edge): it stops at the end, and goes once out of sight. */
+  /** A bus: the route it's running. */
+  bus?: BusService;
+  /** Its way runs out (a road off the map's edge): it drives on to the end, and goes. */
   ends?: boolean;
+}
+
+/** A bus on its route. */
+export interface BusService {
+  /** Which of the map's routes, its number and colour. */
+  route: number;
+  ref: string;
+  colour: string;
+  /** How far along the route's legs it's planned its way. */
+  leg: number;
+  /** The stops coming up on its way (which lane or turn they're on, and how far along), and those it's been to. */
+  stops: { path: Path; s: number; index: number }[];
+  served: Set<number>;
+  /** Seconds left at the stop it's at (-1, not at one). */
+  dwell: number;
+  /** How far over to the kerb it is (into a bus lane, or pulled in at a stop), px; whether it's waiting for someone alongside to pass before it moves back out; and off its route (it goes, once out of sight). */
+  side: number;
+  yield: boolean;
+  lost: boolean;
 }
 
 /** Something on the road that's in the way: your car, or a vehicle. */
@@ -156,6 +186,8 @@ export interface Lane extends Path {
   stops: { s: number; signal: number }[];
   /** How busy the road is (see Road.activity). */
   activity: number;
+  /** How wide a bus lane there is on its left (buses drive in it), px; 0 for none. */
+  busLane: number;
   /** At its end, it gives way to the traffic on the road it joins. */
   giveWay: boolean;
 }
@@ -179,9 +211,9 @@ const MAX_SPEED = 13.4 * M;
 const DENSITY: Partial<Record<RoadKind, number>> = { trunk: 3.6, primary: 3.2, secondary: 2.6, tertiary: 2.1, street: 1 };
 const BUSIEST = 3;
 /** How fast each kind's driven, against the road's usual speed (before the driver's own pace). */
-const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85 };
+const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85, bus: 0.85, double: 0.82 };
 /** Up a hill, how much each kind slows for each 1 in 1 of it (a lorry labours; a car barely notices); and how strongly gravity holds it back pulling away. */
-const CLIMB: Record<VehicleKind, number> = { small: 0.8, hatch: 0.6, saloon: 0.5, estate: 0.5, suv: 0.5, van: 1.3, lorry: 3 };
+const CLIMB: Record<VehicleKind, number> = { small: 0.8, hatch: 0.6, saloon: 0.5, estate: 0.5, suv: 0.5, van: 1.3, lorry: 3, bus: 2.2, double: 2.4 };
 const GRAVITY = 9.81 * M;
 /** Dawdling: how often a driver slows a moment, a second (more often the busier the street), and for how long. */
 const DAWDLE = 0.003;
@@ -323,7 +355,8 @@ export function buildLanes(map: GameMap): { lanes: Lane[]; nodes: Node[] } {
       const resRight = r.oneway ? Math.min(reserved(-1), Math.max(0, left - right - resLeft - count * 2.6 * M)) : 0;
       const each = Math.min(LANE * 1.4, (left - right - resLeft - resRight) / count);
       for (let index = 0; index < count; index++) {
-        const offset = left - resLeft - (index + 0.5) * each;
+        // On a narrow two-way street, over to the kerb, room to pass (no nearer it than a car's half width and a little).
+        const offset = Math.max(left - resLeft - (index + 0.5) * each, r.oneway || count > 1 ? -Infinity : Math.min(left - resLeft - 1.1 * M, left * 0.6));
         const pts = dir === 1 ? offsetLine(middle, offset) : reversed(offsetLine(middle, -offset));
         const path = makePath(pts.map(round1), r.bridge ? 1 : 0);
         path.bends = bendsOf(path, 8 * M);
@@ -341,6 +374,7 @@ export function buildLanes(map: GameMap): { lanes: Lane[]; nodes: Node[] } {
           speed: (SPEED[r.kind] ?? 8 * M) * (1 - Math.min(0.15, (r.activity ?? 0) * 0.005)) * (each < 2.9 * M ? 0.88 : 1),
           rank: RANK[r.kind] ?? 1,
           activity: r.activity ?? 0,
+          busLane: index === 0 ? (r.lanes ?? []).filter((l) => l.kind === 'bus' && l.side === dir).reduce((w, l) => w + l.width, 0) : 0,
           density: ((DENSITY[r.kind] ?? 0.6) * Math.min(BUSIEST, 1 + (r.activity ?? 0) / 15)) / (100 * M),
           stops: [],
           giveWay: false,
@@ -436,6 +470,18 @@ const WATCH = 30 * M;
 const CLEAR_TIME = 4.5;
 const SIGHT = 70 * M;
 const NOSE = 3 * M;
+/** Buses: at most this many about at once, about one every BUS_EVERY px of route round you; how long one stays at a stop, s (at least, and up to how much more); how far beyond a stop its front stops, px. */
+const MAX_BUSES = 8;
+const BUS_EVERY = 250 * M;
+const DWELL = 5;
+const DWELL_MORE = 7;
+const STOP_PAST = 4 * M;
+/** How quickly a bus moves over to the kerb, or back out, px/s. */
+const SIDLE = 1.2 * M;
+
+/** Backing off, out of a knot nose to nose, px/s. */
+const BACK_OFF = 1.2 * M;
+
 /** Two turning into the same lane from different ways: within this far of it, the one further off lets the other in first. */
 const MERGE = 25 * M;
 /** Knocked: how long it waits before driving off again, seconds; and how quickly it slides to a stop. */
@@ -454,8 +500,9 @@ export interface TrafficView {
 }
 
 export interface TrafficOptions {
-  /** The most vehicles driving at once. */
+  /** The most vehicles driving at once, and buses. */
   max?: number;
+  buses?: number;
   rand?: () => number;
 }
 
@@ -467,6 +514,7 @@ export class Traffic {
   private readonly turns = new Map<string, Path>();
   private readonly rand: () => number;
   private readonly max: number;
+  private readonly maxBuses: number;
   private nextId = 0;
   private spawnTimer = 0;
   private started = false;
@@ -474,6 +522,9 @@ export class Traffic {
   private readonly byId = new Map<number, Vehicle>();
   private readonly entering = new Map<number, { v: Vehicle; d: number; via: Path }[]>();
   private readonly terrain: Terrain;
+  private readonly routes: BusRoute[];
+  private readonly roadWidths: number[];
+  private readonly routeLanes: { lane: Lane; leg: number }[][];
   /** How many there should be round you now. */
   target = 0;
   /** Vehicles that have bumped into each other since this was last emptied: where, and how hard (for their damage). */
@@ -482,8 +533,17 @@ export class Traffic {
   constructor(map: GameMap, options: TrafficOptions = {}) {
     ({ lanes: this.lanes, nodes: this.nodes } = buildLanes(map));
     this.terrain = new Terrain(map.terrain, map.pxPerMetre);
+    // The bus routes, and the lanes along each (and which of its legs each is on).
+    this.routes = map.busRoutes ?? [];
+    this.roadWidths = map.roads.map((r) => r.width);
+    const lanesOfRoad = new Map<number, Lane[]>();
+    for (const l of this.lanes) lanesOfRoad.set(l.road, [...(lanesOfRoad.get(l.road) ?? []), l]);
+    this.routeLanes = this.routes.map((r) =>
+      r.legs.flatMap((leg, k) => (leg < 0 ? [] : (lanesOfRoad.get(leg >> 1) ?? []).filter((l) => l.dir === (leg & 1 ? -1 : 1) && l.index === 0).map((lane) => ({ lane, leg: k })))),
+    );
     this.rand = options.rand ?? Math.random;
     this.max = options.max ?? 55;
+    this.maxBuses = options.buses ?? MAX_BUSES;
     // The parked cars: most of the bays taken, more where it's busier.
     for (const space of parkingSpaces(map)) {
       if (this.rand() > space.taken) continue;
@@ -530,6 +590,8 @@ export class Traffic {
       braking: false,
       turning: 0,
       annoyed: 0,
+      waiting: 0,
+      backing: 0,
       accel: 0,
       react: -1,
       verve: 0.8 + this.rand() * 0.4,
@@ -537,12 +599,17 @@ export class Traffic {
   }
 
   /** A vehicle starting `s` along a lane, at the lane's speed. */
-  spawn(lane: Lane, s: number, kind?: VehicleKind): Vehicle {
+  spawn(lane: Lane, s: number, kind?: VehicleKind, bus?: { route: number; leg: number }): Vehicle {
     const major = lane.rank >= 3;
-    kind ??= pick(this.rand, (Object.keys(VEHICLES) as VehicleKind[]).map((k) => [k, k === 'lorry' && !major ? 0 : VEHICLES[k].traffic]))!;
+    kind ??= bus ? (this.rand() < 0.55 ? 'double' : 'bus') : pick(this.rand, (Object.keys(VEHICLES) as VehicleKind[]).map((k) => [k, k === 'lorry' && !major ? 0 : VEHICLES[k].traffic]))!;
     const v = this.make(kind, 0, 0, 0, lane.level);
     v.route = [lane];
     v.s = s;
+    if (bus) {
+      const r = this.routes[bus.route];
+      v.bus = { route: bus.route, ref: r.ref, colour: r.colour ?? COLOURS.bus[0][0], leg: bus.leg, stops: [], served: new Set(), dwell: -1, side: 0, yield: false, lost: false };
+      this.findStops(v, lane);
+    }
     this.plan(v);
     v.speed = Math.min(lane.speed * v.pace, MAX_SPEED, this.limitAhead(v));
     // Coming up behind another in its lane: no faster than it can follow it at.
@@ -563,7 +630,7 @@ export class Traffic {
     while (ahead < LOOK_MAX + 20 * M) {
       const last = v.route[v.route.length - 1];
       if (!last.lane) break;
-      const next = this.next(last.lane);
+      const next = v.bus && !v.bus.lost ? this.busNext(v, last.lane) : this.next(last.lane);
       if (!next) {
         v.ends = true;
         break;
@@ -571,6 +638,7 @@ export class Traffic {
       const turn = this.turn(last.lane, next);
       if (turn.length > 0.5) v.route.push(turn);
       v.route.push(next);
+      if (v.bus) this.findStops(v, next);
       ahead += turn.length + next.length;
     }
   }
@@ -580,6 +648,48 @@ export class Traffic {
     let t = this.turns.get(k);
     if (!t) this.turns.set(k, (t = turnBetween(a, b)));
     return t;
+  }
+
+  /**
+   * A bus's way on from the end of a lane: along its route (onto the next road
+   * on it if it's here, or on along the same one; looking a few legs ahead
+   * where the route's broken).
+   * Off its route (it's left the map's roads), it drives on as anyone would.
+   */
+  private busNext(v: Vehicle, a: Lane): Lane | null {
+    const bus = v.bus!;
+    const legs = this.routes[bus.route].legs;
+    const out = this.nodes[a.to].out.map((i) => this.lanes[i]).filter((l) => l.edge !== a.edge);
+    // The next road on the route first, if it's here (a road often runs on past where the route turns off it); then on along this one.
+    const order = [...Array.from({ length: Math.max(0, Math.min(legs.length, bus.leg + 5) - bus.leg - 1) }, (_, i) => bus.leg + 1 + i), bus.leg];
+    for (const k of order) {
+      const leg = legs[k];
+      if (leg < 0) continue;
+      const on = out.filter((l) => l.road === leg >> 1 && l.dir === (leg & 1 ? -1 : 1));
+      if (!on.length) continue;
+      bus.leg = k;
+      return on.sort((p, q) => p.index - q.index)[0];
+    }
+    bus.lost = true;
+    return this.next(a);
+  }
+
+  /** The stops on a bus's route along a lane it's going to drive (in the order it'll come to them). */
+  private findStops(v: Vehicle, lane: Lane): void {
+    const bus = v.bus!;
+    const stops = this.routes[bus.route].stops;
+    const reach = this.roadWidth(lane) / 2 + 7 * M;
+    const found: { path: Path; s: number; index: number }[] = [];
+    for (let i = 0; i < stops.length / 2; i++) {
+      if (bus.served.has(i) || bus.stops.some((q) => q.index === i)) continue;
+      const { s, d } = nearestOn(lane, stops[i * 2], stops[i * 2 + 1]);
+      if (d < reach && s > 1 && s < lane.length - 1) found.push({ path: lane, s, index: i });
+    }
+    bus.stops.push(...found.sort((p, q) => p.s - q.s));
+  }
+
+  private roadWidth(lane: Lane): number {
+    return this.roadWidths[lane.road];
   }
 
   /** Which lane to take on from the end of one: never back the way it came unless the road ends. */
@@ -620,6 +730,11 @@ export class Traffic {
     v.x = x;
     v.y = y;
     if (Math.hypot(fx - bx, fy - by) > 1) v.angle = Math.atan2(fy - by, fx - bx);
+    // A bus over to the kerb (in its lane, or pulled in at a stop): left of the way it's going.
+    if (v.bus?.side) {
+      v.x += Math.sin(v.angle) * v.bus.side;
+      v.y -= Math.cos(v.angle) * v.bus.side;
+    }
     v.vx = Math.cos(v.angle) * v.speed;
     v.vy = Math.sin(v.angle) * v.speed;
     v.spin = 0;
@@ -730,6 +845,8 @@ export class Traffic {
     // Points along the way ahead (and which level each is on: what's under a bridge isn't in the way of what's on it).
     const samples: [number, number, number, number][] = [];
     for (let d = front - 4; d <= front + look; d += 6) samples.push([...this.along(v, d), d - front]);
+    // A bus over in its bus lane looks along it, not the lane beside it.
+    if (v.bus?.side) for (const p of samples) [p[0], p[1]] = [p[0] + Math.sin(v.angle) * v.bus.side, p[1] - Math.cos(v.angle) * v.bus.side];
     for (const o of obstacles) {
       if (o.id === v.id) continue;
       if (Math.abs(o.x - v.x) > look + 60 || Math.abs(o.y - v.y) > look + 60) continue;
@@ -737,11 +854,14 @@ export class Traffic {
       if (o.id >= 0 && (o as Vehicle).behind === v.id) {
         const itsAhead = (o.x - v.x) * Math.cos(v.angle) + (o.y - v.y) * Math.sin(v.angle);
         const imAhead = (v.x - o.x) * Math.cos(o.angle) + (v.y - o.y) * Math.sin(o.angle);
-        if (imAhead > itsAhead + M || (Math.abs(imAhead - itsAhead) <= M && this.priority(v) > this.priority(o as Vehicle))) continue;
+        // (Head on, neither goes: they'd meet. Only a knot gets one edging past: see `stuck`.)
+        const headOn = Math.cos(o.angle - v.angle) < -0.7;
+        if (!headOn && (imAhead > itsAhead + M || (Math.abs(imAhead - itsAhead) <= M && this.priority(v) > this.priority(o as Vehicle)))) continue;
       }
       const end = Math.max(0, o.length / 2 - o.r);
       const [cx, cy] = [Math.cos(o.angle), Math.sin(o.angle)];
-      const reach = v.r + o.r * 0.85;
+      // Oncoming, they squeeze past each other (mirrors in); the same way, it's kept well clear of.
+      const reach = Math.cos(o.angle - v.angle) < -0.7 ? (v.r + o.r) * 0.8 : v.r + o.r * 0.85;
       for (const [x, y, level, d] of samples) {
         if (d >= gap) break;
         if (level !== o.level) continue;
@@ -758,6 +878,7 @@ export class Traffic {
     // The lights, and the junctions to give way at, and the end of the way.
     let d = -v.s - front;
     let stopped = false;
+    let waiting = false;
     for (const p of v.route) {
       if (d > look) break;
       const lane = p.lane;
@@ -777,6 +898,7 @@ export class Traffic {
         }
         const end = d + lane.length;
         if (lane.giveWay && end < WATCH && end > -1 && !this.clearAt(v, lane, obstacles)) {
+          if (v.speed < 1) waiting = true;
           if (end < gap) {
             gap = Math.max(0, end - 0.5);
             lead = 0;
@@ -787,12 +909,81 @@ export class Traffic {
       }
       d += p.length;
     }
+    // Not into a junction with no room on the far side (it'd block it): wait at the end of the lane till there is.
+    {
+      let d = -v.s - front;
+      for (let k = 0; k + 1 < v.route.length && d < look; k++) {
+        const p = v.route[k];
+        const exit = v.route[k + 1];
+        if (p.lane && !exit.lane && v.route[k + 2]?.lane && this.nodes[p.lane.to].degree >= 3) {
+          const end = d + p.length;
+          if (end > -1 && end < gap && !this.roomIn(v, exit, v.route[k + 2].lane!)) {
+            gap = Math.max(0, end - 0.5);
+            lead = 0;
+            hold = AT_LINE;
+            blocker = undefined;
+          }
+          break;
+        }
+        d += p.length;
+      }
+    }
+    // A bus: pulling in at its next stop, and waiting there a while for people to get on and off.
+    let atStop = false;
+    if (v.bus) {
+      const bus = v.bus;
+      let d = -v.s - front;
+      const next = bus.stops[0];
+      for (const p of v.route) {
+        if (!next || d > look + STOP_PAST) break;
+        if (p === next.path) {
+          const at = d + next.s + STOP_PAST;
+          if (at < -2 * M) {
+            // Missed it (it came on at the stop, or couldn't stop in time): on to the next.
+            bus.served.add(next.index);
+            bus.stops.shift();
+          } else if (bus.dwell < 0 && at < 1 * M && v.speed < 1) {
+            bus.dwell = DWELL + this.rand() * DWELL_MORE;
+          } else if (at < gap && bus.dwell !== 0) {
+            gap = Math.max(0, at);
+            lead = 0;
+            hold = AT_LINE * 0.5;
+            blocker = undefined;
+          }
+          atStop = at < 30 * M;
+          break;
+        }
+        d += p.length;
+      }
+      if (bus.dwell > 0) {
+        bus.dwell = Math.max(0, bus.dwell - dt);
+        gap = 0;
+        lead = 0;
+        hold = AT_LINE * 0.5;
+      } else if (bus.dwell === 0) {
+        // Off again.
+        if (next) bus.served.add(next.index);
+        bus.stops.shift();
+        bus.dwell = -1;
+      }
+      // Over to the kerb: in a bus lane, or pulled in to a stop (through a turn, as it was).
+      const lane = v.route[0].lane;
+      let want = lane ? (lane.busLane ? lane.busLane * 0.85 : atStop || bus.dwell > 0 ? 0.7 * M : 0) : bus.side;
+      // Moving back out into the traffic: only when there's no one alongside (easing off to let them by).
+      if (want < bus.side && this.alongside(v, obstacles)) {
+        want = bus.side;
+        bus.yield = true;
+      } else bus.yield = false;
+      bus.side += Math.max(-SIDLE * dt, Math.min(SIDLE * dt, want - bus.side));
+    }
     // Turning into a lane another's turning into from another way, and it's nearer: in after it.
     for (const list of this.entering.values()) {
       const mine = list.find((e) => e.v === v);
       if (!mine) continue;
       for (const e of list) {
         if (e.v === v || e.via === mine.via || e.d > mine.d || (e.d === mine.d && e.v.id > v.id)) continue;
+        // Only one that's on its way in (not one waiting at a line, or held up: that'd be waiting on each other).
+        if (e.v.speed < 1.5 * M && e.v.route[0] !== e.via) continue;
         const room = mine.d - e.d - front - e.v.length / 2;
         if (room < gap) {
           gap = Math.max(0, room);
@@ -802,17 +993,7 @@ export class Traffic {
         }
       }
     }
-    if (v.ends) {
-      let left = -v.s - front;
-      for (const p of v.route) left += p.length;
-      if (left < gap) {
-        gap = Math.max(0, left);
-        lead = 0;
-        hold = AT_LINE;
-      }
-    }
 
-    // The speed it wants: its usual for the road (drifting a little, as a driver's does), slowing in time for the bends ahead...
     // The speed it likes: the road's, at its own pace, never quite steady (it swells and eases off a little as it drives)...
     const lane = v.route.find((p) => p.lane)?.lane;
     const [w1, p1, w2, p2] = v.wander;
@@ -822,6 +1003,7 @@ export class Traffic {
     const grade = gx * Math.cos(v.angle) + gy * Math.sin(v.angle);
     cruise *= grade > 0 ? Math.max(0.45, 1 - CLIMB[v.kind] * grade) : 1 + Math.min(0.05, -grade * 0.3);
     cruise = Math.min(cruise, MAX_SPEED);
+    if (v.bus?.yield) cruise *= 0.6;
     // ...and now and then it dawdles a moment (more often along a busy street).
     if (v.dawdle > 0) {
       v.dawdle -= dt;
@@ -858,22 +1040,35 @@ export class Traffic {
     // Stopped: the foot stays on the brake until it's time to go.
     if (v.speed === 0 && v.accel < 0) v.accel = 0;
     v.braking = v.accel < -0.4 * M || (v.speed < 1 && want < 1);
+    v.waiting = waiting ? v.waiting + dt : 0;
     // Stuck behind the same thing a long while: it's not moving and nor are we (a knot at a junction): edge past.
     v.behind = blocker;
     v.annoyed = blocker === -1 && v.speed < 2 ? v.annoyed + dt : Math.min(0, v.annoyed + dt);
     if (v.speed < 1 && blocker !== undefined && blocker >= 0 && !stopped && this.knotted(v)) v.stuck += dt;
     else v.stuck = 0;
-    if (v.stuck > 6 && this.priority(v) >= 0) v.speed = NOSE;
+    // Knotted: nose to nose, the one with less right of way backs off a few metres; any other way, one edges past.
+    const other = blocker !== undefined ? this.byId.get(blocker) : undefined;
+    const headOn = other !== undefined && Math.cos(other.angle - v.angle) < -0.7;
+    if (v.stuck > 3 && headOn && this.priority(v) < this.priority(other)) v.backing = 3;
+    else if (v.stuck > 6 && !headOn && this.priority(v) >= 0) v.speed = NOSE;
+    if (v.backing > 0) {
+      v.backing -= dt;
+      v.speed = 0;
+      v.s = Math.max(0, v.s - BACK_OFF * dt);
+      v.stuck = 0;
+    }
     v.s += v.speed * dt;
     while (v.route.length > 1 && v.s > v.route[0].length) {
       v.s -= v.route[0].length;
       v.back = v.route.shift()!;
     }
     this.plan(v);
-    // The way it's turning next, its indicator on as it comes up.
+    // The way it's turning next, its indicator on as it comes up (a bus pulling in to a stop, or out from one).
     v.turning = 0;
+    if (v.bus && (v.bus.dwell > 0 && v.bus.dwell < 2)) v.turning = 1;
+    else if (v.bus && atStop && v.bus.dwell < 0) v.turning = -1;
     let ahead = -v.s;
-    for (const p of v.route) {
+    for (const p of v.turning ? [] : v.route) {
       if (ahead > 30 * M) break;
       if (p.turn) {
         v.turning = p.turn;
@@ -911,6 +1106,32 @@ export class Traffic {
     return pathAt(last, last.length);
   }
 
+  /** Whether anything's beside a bus on the side it'd move out into (its offside, the lane it's pulled in from). */
+  private alongside(v: Vehicle, obstacles: Obstacle[]): boolean {
+    const [cx, cy] = [Math.cos(v.angle), Math.sin(v.angle)];
+    const side = v.bus!.side;
+    for (const o of obstacles) {
+      if (o.id === v.id || o.level !== v.level) continue;
+      const [dx, dy] = [o.x - v.x, o.y - v.y];
+      const along = dx * cx + dy * cy;
+      // How far to its right (the way it'd move out: away from the kerb, on its left).
+      const right = -(dx * cy - dy * cx);
+      if (Math.abs(along) < (v.length + o.length) / 2 + 1 * M && right > 0 && right < side + v.r + o.r + 0.5 * M) return true;
+    }
+    return false;
+  }
+
+  /** Whether there's room for a vehicle on a lane, past the turn into it: nothing stopped (or nearly) within its length and a gap of its start, or in the turn. */
+  private roomIn(v: Vehicle, turn: Path, lane: Lane): boolean {
+    const need = v.length + GAP * 1.5;
+    for (const o of this.vehicles) {
+      if (o === v || o.mode !== 'drive' || o.speed > 2 * M) continue;
+      if (o.route[0] === turn) return false;
+      if (o.route[0] === lane && o.s - o.length / 2 < need) return false;
+    }
+    return true;
+  }
+
   /** Whether it's clear to go at the end of a lane that gives way: nothing coming to the junction, or in it. */
   private clearAt(v: Vehicle, lane: Lane, obstacles: Obstacle[]): boolean {
     const node = this.nodes[lane.to];
@@ -928,8 +1149,11 @@ export class Traffic {
         if (head === lane || (head?.lane && head.lane.edge === lane.edge && head.lane.dir === lane.dir)) continue;
       }
       const speed = Math.hypot(o.vx, o.vy);
-      const coming = speed > 4 && (o.vx * dx + o.vy * dy) / (speed * Math.max(dist, 1)) > 0.3 && dist / speed < CLEAR_TIME;
-      if (coming || dist < 6 * M) return false;
+      // Coming: on its way to the junction, there within the time it takes to pull out (less the longer it's waited: it takes a smaller gap; and traffic crawling in a queue lets it out).
+      const time = CLEAR_TIME * Math.max(0.45, 1 - v.waiting / 30);
+      const coming = speed > 2 * M && (o.vx * dx + o.vy * dy) / (speed * Math.max(dist, 1)) > 0.3 && dist / speed < time;
+      // Something stopped by the junction isn't coming: if it's in the way, it's seen as that (and waited behind).
+      if (coming || (dist < 6 * M && speed > 1.5 * M)) return false;
     }
     return true;
   }
@@ -1063,7 +1287,8 @@ export class Traffic {
     const far = near + 40 * M;
     for (let i = this.vehicles.length - 1; i >= 0; i--) {
       const v = this.vehicles[i];
-      const gone = v.route.length === 1 && v.s >= v.route[0].length - 0.5 && v.mode === 'drive' && !this.inView(v.x, v.y, view, 60);
+      // At the end of its way (off the edge of the map: it drives off it), or a bus off its route once out of sight.
+      const gone = v.mode === 'drive' && ((v.route.length === 1 && v.s >= v.route[0].length - 0.5) || (v.bus?.lost && !this.inView(v.x, v.y, view, 60)));
       if (gone || Math.hypot(v.x - player.x, v.y - player.y) > far) this.vehicles.splice(i, 1);
     }
     this.spawnTimer -= dt;
@@ -1096,7 +1321,37 @@ export class Traffic {
       if (this.vehicles.some((v) => Math.hypot(v.x - x, v.y - y) < 7 * M)) continue;
       this.spawn(lane, s);
     }
+    this.spawnBuses(player, view, near);
     this.started = true;
+  }
+
+  /** Buses on the routes round you: about one every BUS_EVERY px of them, coming into being out of sight on one of them, partway along. */
+  private spawnBuses(player: Player, view: TrafficView, near: number): void {
+    const buses = this.vehicles.filter((v) => v.bus).length;
+    const candidates: [{ route: number; lane: Lane; leg: number }, number][] = [];
+    let length = 0;
+    this.routeLanes.forEach((lanes, route) => {
+      for (const { lane, leg } of lanes) {
+        const [x0, y0] = [lane.pts[0], lane.pts[1]];
+        if (Math.hypot(x0 - player.x, y0 - player.y) > near + lane.length) continue;
+        candidates.push([{ route, lane, leg }, lane.length]);
+        length += lane.length;
+      }
+    });
+    // Routes share roads (a dozen along the main streets): a bus for every so much road, not route.
+    const target = Math.min(this.maxBuses, Math.round(Math.sqrt(length / BUS_EVERY) * 2));
+    for (let k = 0; k < (this.started ? 2 : target * 4) && this.vehicles.filter((v) => v.bus).length < Math.max(target, buses); k++) {
+      if (this.vehicles.filter((v) => v.bus).length >= target) break;
+      const c = pick(this.rand, candidates);
+      if (!c) break;
+      const s = this.rand() * c.lane.length;
+      const [x, y] = pathAt(c.lane, s);
+      const dist = Math.hypot(x - player.x, y - player.y);
+      if (dist > near || dist < (this.started ? 10 : 25) * M) continue;
+      if (this.started && this.inView(x, y, view, 50)) continue;
+      if (this.vehicles.some((v) => Math.hypot(v.x - x, v.y - y) < 14 * M)) continue;
+      this.spawn(c.lane, s, undefined, { route: c.route, leg: c.leg });
+    }
   }
 }
 
