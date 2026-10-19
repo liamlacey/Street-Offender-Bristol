@@ -899,8 +899,11 @@ export class Traffic {
     this.populate(dt, player, view);
   }
 
+  /** People out in the road (crossing it, or running): stopped for, like anything else in the way. */
+  pedestrians: Obstacle[] = [];
+
   private obstacles(player: Player): Obstacle[] {
-    const out: Obstacle[] = [{ id: -1, x: player.x, y: player.y, angle: player.heading, r: player.width / 2, length: player.length, vx: player.vx, vy: player.vy, level: player.level }];
+    const out: Obstacle[] = [{ id: -1, x: player.x, y: player.y, angle: player.heading, r: player.width / 2, length: player.length, vx: player.vx, vy: player.vy, level: player.level }, ...this.pedestrians];
     for (const v of this.vehicles) out.push(v);
     // Parked cars are by the kerb, out of the way: only those that have been knocked out of their bays count.
     for (const v of this.parked) if (v.mode !== 'parked' || !v.space || Math.hypot(v.x - v.space.x, v.y - v.space.y) > 0.5 * M) out.push(v);

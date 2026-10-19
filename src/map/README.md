@@ -474,7 +474,54 @@ more than rolling), bumping into the walls, posts and other vehicles (and knocki
 them about too), waits 1.6 s, then drives gently back into its lane (reversing first if
 it's pointing the wrong way) and carries on. A parked car stays where it ends up.
 
-## Boats
+## People
+
+**Where they go** (worked out when the map's built: `venues`): the businesses counted for
+the traffic (shops, cafés, bars and the like: each one's node, or its outline's middle),
+and the sights (`tourism=attraction/museum/gallery/viewpoint/artwork/aquarium/zoo/
+theme_park`, `historic=monument/memorial/ship/castle/ruins/archaeological_site/building/
+church`, `amenity=theatre/arts_centre/fountain`).
+
+**In the game** (`src/world/people.ts`), on the ground only (not on the bridges):
+
+- **Where they walk**: the footways, steps, cycleways and pedestrian streets, and the
+  pavements along the roads that have them (down the middle of each, 1.2 m in from the
+  kerb), each cut wherever it runs onto a carriageway (within 0.1 m of its edge): people
+  keep off the roads. At the end of one, on along another that starts within 6 m (if the
+  way there keeps off the roads), or back.
+- **How many**: along each walk, for every 10 m, 1 on a quiet pavement, more on busier
+  streets (0.7 + 0.25 × the road's `activity`, at most 4), 2.5 on a pedestrian street,
+  0.9 on a footway, 0.3 on a cycleway; and the spots where they stand (below). Round the
+  view (30 m beyond it) there are 0.5 people for each of those (at most 160), coming into
+  being out of sight, gone 55 m beyond it.
+- **Where they stand** (in groups of 2 to 5, facing in, or on their own facing the way the
+  spot faces, for half a minute to two and a half): outside each business, on the nearest
+  walk within 16 m, a little towards it (weight 1.6, a quarter of them in groups); at each
+  sight, on the nearest walk within 30 m (4, always in groups); by the water, 1.5 m back
+  from each mooring bollard and life ring, looking out over it (0.7); and in the parks,
+  gardens, lawns, pitches, playgrounds and squares (at least 150 m²), one spot per 500 m²
+  (up to 30; 1.6 in a square, 0.8 elsewhere), half in groups, and many of those not in a
+  group wander about it instead (to somewhere 5 to 30 m away in it, a while there, on).
+- **Crossing**: walking past a crossing's kerb (on the pavement either side of it), half
+  the time they cross: at one with lights, when all the traffic lights by it (within
+  30 m, its controller's) show red; at a zebra or a plain crossing, when there's a gap
+  (nothing within 6 m, and nothing coming that would get there within 2 s, 3.5 s at a plain
+  one); and give up after 40 s. Across at a little faster than they walk; the traffic
+  stops for anyone in the road (crossing, running, diving or down there).
+- **Buses**: 1 to 3 wait at each bus stop near the view (on the walk nearest it); when a
+  bus is waiting at the stop (within 20 m), they walk to its door (front, kerb side) and
+  get on; 0 to 3 get off each bus at each stop.
+- **Danger**: you going over 11 m/s within 7 m of them, or driving along a pavement (over
+  5 m/s, within 15 m): they run (4.2 m/s) away from you, roads or not (but not into the
+  water or a wall), for 4 to 7 s, then go back to walking. A crash (or someone knocked
+  down) sends everyone within 22 m (18 m) running.
+- **Jumping out of the way**: a car coming straight at them (over 4 m/s, getting there in
+  0.15 to 0.9 s, its path within 1.2 m of them): each frame there's a 12% chance they see
+  it, and dive sideways (6 m/s) away from it, then run.
+- **Knocked down**: a vehicle going into them faster than 1.2 m/s (slower, they're nudged
+  aside) throws them the way it was going; faster than 6.7 m/s (15 mph) and they stay
+  down; slower, they're up in 2.5 to 4.5 s and on their way.
+
 
 **Ships moored for good, mapped as buildings** (`building=ship` or `boat`: the Thekla, the
 Balmoral, Under the Stars) stay buildings (their outline and measured height), with a deck

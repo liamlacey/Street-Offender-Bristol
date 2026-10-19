@@ -474,6 +474,8 @@ export interface GameMap {
   busRoutes?: BusRoute[];
   /** Where boats moor, and the ferry routes (see berths.ts). */
   berths?: Berth[];
+  /** Where people go: x, y, what (0 a shop, café, bar or the like; 1 a sight: a museum, gallery, monument, statue, viewpoint), ... */
+  venues?: number[];
   ferries?: FerryRoute[];
 }
 
@@ -2160,6 +2162,26 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     businesses.push([(sx * 2) / pts.length, (sy * 2) / pts.length]);
   }
   roadActivity(roads, businesses);
+  // Where people go, and gather: the businesses, and the sights.
+  const venues: number[] = [];
+  for (const [x, y] of businesses) if (inside(x, y)) venues.push(round(x), round(y), 0);
+  const centre = (way: OsmWay) => {
+    const pts = pointsOf(way.nodes);
+    if (!pts) return null;
+    let [sx, sy] = [0, 0];
+    for (let k = 0; k < pts.length; k += 2) [sx, sy] = [sx + pts[k], sy + pts[k + 1]];
+    return [(sx * 2) / pts.length, (sy * 2) / pts.length] as const;
+  };
+  for (const n of data.nodes.values()) {
+    if (!isSight(n.tags)) continue;
+    const [x, y] = [proj.x(n.lon), proj.y(n.lat)];
+    if (inside(x, y)) venues.push(round(x), round(y), 1);
+  }
+  for (const way of data.ways.values()) {
+    if (!isSight(way.tags)) continue;
+    const c = centre(way);
+    if (c && inside(c[0], c[1])) venues.push(round(c[0]), round(c[1]), 1);
+  }
 
   // Draw small areas over big ones of the same kind.
   areas.sort((a, b) => AREA_ORDER[a.kind] - AREA_ORDER[b.kind] || Math.abs(ringArea(b.rings[0])) - Math.abs(ringArea(a.rings[0])));
@@ -2189,6 +2211,7 @@ export function buildMap(data: OsmData, { bounds, start }: BuildOptions): GameMa
     ...(busRoutes.length ? { busRoutes } : {}),
     ...(berths.length ? { berths } : {}),
     ...(ferries.length ? { ferries } : {}),
+    ...(venues.length ? { venues } : {}),
   };
 }
 
@@ -2258,6 +2281,13 @@ const BUSY_AMENITIES = new Set([
   'car_rental', 'car_wash', 'fuel', 'community_centre', 'conference_centre', 'courthouse', 'townhall',
 ]);
 const BUSY_TOURISM = new Set(['hotel', 'hostel', 'guest_house', 'apartment', 'museum', 'gallery', 'attraction', 'aquarium']);
+
+/** A sight, where people gather to look: a museum, a gallery, an attraction, a viewpoint, a monument, a statue or other artwork. */
+export function isSight(t: Tags): boolean {
+  if (t.tourism && ['attraction', 'museum', 'gallery', 'viewpoint', 'artwork', 'aquarium', 'zoo', 'theme_park'].includes(t.tourism)) return true;
+  if (t.historic && ['monument', 'memorial', 'ship', 'castle', 'ruins', 'archaeological_site', 'building', 'church'].includes(t.historic)) return true;
+  return t.amenity === 'theatre' || t.amenity === 'arts_centre' || t.amenity === 'fountain';
+}
 
 export function isBusiness(t: Tags): boolean {
   if (t.shop && t.shop !== 'vacant' && t.shop !== 'no') return true;
