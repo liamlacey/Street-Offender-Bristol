@@ -175,6 +175,25 @@ export class CarAudio {
     }
   }
 
+  /** A car alarm's beep, `volume` 0 to 1 (by how near it is). */
+  beep(volume: number): void {
+    if (volume < 0.03) return;
+    const t = this.ctx.currentTime;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.05 * volume, t + 0.01);
+    gain.gain.setValueAtTime(0.05 * volume, t + 0.16);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    gain.connect(this.out);
+    const osc = this.ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(1250, t);
+    osc.frequency.setValueAtTime(950, t + 0.1);
+    osc.connect(gain);
+    osc.start(t);
+    osc.stop(t + 0.22);
+  }
+
   /** The hollow knock of a bench or bin sent flying. */
   knock(): void {
     this.tone(260, this.ctx.currentTime, 0.09, 0.18, 'triangle');

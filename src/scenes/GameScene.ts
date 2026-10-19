@@ -561,10 +561,23 @@ export class GameScene extends Phaser.Scene {
     }
     this.traffic.hits.length = 0;
     for (const v of this.traffic.vehicles) {
-      if (v.annoyed > 2.5) {
-        this.audio?.horn(this.hearing(v.x, v.y), Math.random() < 0.3);
+      if (v.annoyed > 2.5 || v.honk) {
+        this.audio?.horn(this.hearing(v.x, v.y), v.honk ? v.mode === 'chase' || Math.random() < 0.5 : Math.random() < 0.3);
         v.annoyed = -3 - Math.random() * 3;
+        v.honk = false;
       }
+    }
+    // Smoke from wrecked engines (yours too); car alarms beeping.
+    const seen = (x: number, y: number) => x > view.left - 40 && x < view.right + 40 && y > view.top - 40 && y < view.bottom + 40;
+    for (const v of [...this.traffic.vehicles, ...this.traffic.parked]) {
+      if (!seen(v.x, v.y)) continue;
+      if ((v.broken || (v.limping && v.wreck && v.wreck.taken.front > 60)) && Math.random() < dt * (v.broken ? 9 : 4)) {
+        this.effects.smokeAt(v.x + Math.cos(v.angle) * v.length * 0.35, v.y + Math.sin(v.angle) * v.length * 0.35);
+      }
+      if (v.alarm > 0 && Math.floor(v.alarm * 2.2) !== Math.floor((v.alarm + dt) * 2.2)) this.audio?.beep(this.hearing(v.x, v.y));
+    }
+    if (this.wreck.taken.front > 120 && Math.random() < dt * 6) {
+      this.effects.smokeAt(this.car.x + Math.cos(this.car.heading) * 12, this.car.y + Math.sin(this.car.heading) * 12);
     }
   }
 
@@ -579,6 +592,11 @@ export class GameScene extends Phaser.Scene {
     const wreck = v ? (v.wreck ??= newWreck()) : this.wreck;
     const [u, w] = toBody(x, y, body.x, body.y, body.angle);
     const out = dentAt(wreck, shape, u, w, impulse, this.time.now / 1000, Math.random);
+    if (v) {
+      this.traffic.hurt(v);
+      // A parked car knocked hard enough sets its alarm off.
+      if (v.space && impulse > ALARM_AT && v.alarm <= 0) v.alarm = ALARM_FOR;
+    }
     for (const lost of out.lost) {
       const [px, py] = toWorld(lost.u, lost.v, body.x, body.y, body.angle);
       // Thrown off outwards a little, and on the way it was going.
@@ -887,6 +905,10 @@ function deckSurface(road: Road): Surface {
 }
 
 /** Your car, for its damage: its mirrors 15.75 px back from its nose, its windscreen 13.25. */
+/** A parked car's alarm: knocked this hard, it goes off for this long, seconds. */
+const ALARM_AT = 15;
+const ALARM_FOR = 12;
+
 const PLAYER_SHAPE: Shape = { length: CAR_LENGTH, width: CAR_WIDTH, stiffness: STIFFNESS.player, mirror: CAR_LENGTH / 2 - 15.75, screen: CAR_LENGTH / 2 - 13.25 };
 
 const shapes = new Map<string, Shape>();

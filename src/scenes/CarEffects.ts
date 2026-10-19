@@ -33,6 +33,8 @@ export class CarEffects {
   private readonly leaves: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly splinters: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly glass: Phaser.GameObjects.Particles.ParticleEmitter;
+  /** Smoke from a wrecked engine. */
+  private readonly fumes: Phaser.GameObjects.Particles.ParticleEmitter;
   private lastMark: ({ x: number; y: number } | null)[] = [null, null, null, null];
 
   constructor(
@@ -89,6 +91,16 @@ export class CarEffects {
         emitting: false,
       })
       .setDepth(depth + 0.2);
+    this.fumes = scene.add
+      .particles(0, 0, TEX.puff, {
+        lifespan: { min: 1200, max: 2200 },
+        speed: { min: 6, max: 22 },
+        scale: { start: 0.6, end: 2.8 },
+        alpha: { start: 0.5, end: 0 },
+        tint: [0x5d5d5d, 0x777777, 0x3f3f3f],
+        emitting: false,
+      })
+      .setDepth(depth + 0.25);
     const bits = (tint: number[], lifespan: number, speed: number) =>
       scene.add
         .particles(0, 0, TEX.spark, {
@@ -170,6 +182,11 @@ export class CarEffects {
 
   sparksAt(x: number, y: number, strength: number): void {
     this.sparks.emitParticleAt(x, y, Math.min(14, Math.floor(strength / 25)));
+  }
+
+  /** A puff of smoke from a wrecked engine at (x, y). */
+  smokeAt(x: number, y: number): void {
+    this.fumes.emitParticleAt(x, y, 1);
   }
 
   splashAt(x: number, y: number, count: number): void {

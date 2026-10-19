@@ -232,7 +232,90 @@ describe('buses', () => {
     const bus = traffic.spawn(lane, 10, 'double', { route: 0, leg: 0 });
     run(traffic, 4);
     // Over to the left (north) by most of the bus lane's width.
-    expect(bus.bus!.side).toBeGreaterThan(18);
+    expect(bus.side).toBeGreaterThan(18);
     expect(bus.y).toBeLessThan(lane.pts[1] - 15);
+  });
+});
+
+describe('changing lanes and overtaking', () => {
+  it('moves over into the kerb lane in good time to turn left', () => {
+    // A two-lane one-way road east, turning left (north) at its end into a street: the only way on.
+    const map = crossroads({
+      width: 1600,
+      roads: [road('primary', 64, [0, 800, 1200, 800], { oneway: true, lanesAcross: [2, 0] }), road('street', 48, [1200, 800, 1200, 0])],
+    } as Partial<GameMap>);
+    const traffic = quiet(map);
+    const outer = traffic.lanes.find((l) => l.road === 0 && l.index === 1)!;
+    const v = traffic.spawn(outer, 20, 'hatch');
+    let kerb = false;
+    for (let t = 0; t < 12 && !kerb; t += 0.25) {
+      run(traffic, 0.25, { ...away, x: v.x, y: 1500 });
+      kerb = v.route[0].lane?.index === 0 && v.x < 1150;
+    }
+    expect(kerb).toBe(true);
+  });
+
+  it('pulls out past a broken-down car on a two-way street when nothing is coming, and back in', () => {
+    const map = crossroads({ width: 2000, roads: [road('street', 56, [0, 400, 2000, 400])] } as Partial<GameMap>);
+    const traffic = quiet(map);
+    const east = traffic.lanes.find((l) => l.dir === 1)!;
+    const broken = traffic.spawn(east, 600, 'hatch');
+    broken.broken = true;
+    broken.mode = 'parked';
+    broken.speed = 0;
+    const v = traffic.spawn(east, 100, 'hatch');
+    let closest = Infinity;
+    for (let t = 0; t < 20; t += 1 / 60) {
+      traffic.update(1 / 60, { ...away, x: v.x, y: 900 }, { x0: v.x - 400, y0: 0, x1: v.x + 400, y1: 800 }, green);
+      closest = Math.min(closest, Math.hypot(v.x - broken.x, v.y - broken.y));
+    }
+    expect(v.x).toBeGreaterThan(broken.x + 100);
+    expect(closest).toBeGreaterThan(broken.r + v.r);
+    expect(Math.abs(v.side)).toBeLessThan(2);
+    expect(traffic.stats.overtakes).toBe(1);
+  });
+});
+
+describe('damage and tempers', () => {
+  it('limps along when badly damaged, and breaks down when wrecked', () => {
+    const traffic = quiet(crossroads());
+    const lane = traffic.lanes.find((l) => l.road === 0 && l.dir === 1 && l.pts[0] < 400)!;
+    const v = traffic.spawn(lane, 10, 'hatch');
+    v.wreck = { taken: { front: 90, rear: 0, left: 0, right: 0 }, marks: [], lost: [], version: 1, last: 0, lastForce: 0 };
+    traffic.hurt(v);
+    expect(v.limping && !v.broken).toBe(true);
+    v.wreck.taken.front = 200;
+    traffic.hurt(v);
+    expect(v.broken).toBe(true);
+    expect(v.mode).toBe('parked');
+  });
+
+  it('brakes and swerves when you come at it fast', () => {
+    const traffic = quiet(crossroads());
+    const lane = traffic.lanes.find((l) => l.road === 0 && l.dir === 1 && l.pts[0] < 400)!;
+    const v = traffic.spawn(lane, 60, 'hatch');
+    run(traffic, 1);
+    const speed = v.speed;
+    // You, head on in its lane, 25 m off and closing at 30 m/s.
+    const you = { ...away, x: v.x + 200, y: v.y, heading: Math.PI, vx: -240, vy: 0 };
+    for (let t = 0; t < 0.4; t += 1 / 60) traffic.update(1 / 60, { ...you, x: you.x + you.vx * t }, view, green);
+    expect(v.speed).toBeLessThan(speed - 15);
+    expect(Math.abs(v.side)).toBeGreaterThan(2);
+  });
+
+  it('loses its temper hit hard, and comes after you, then calms down', () => {
+    const traffic = quiet(crossroads());
+    const lane = traffic.lanes.find((l) => l.road === 0 && l.dir === 1 && l.pts[0] < 400)!;
+    const v = traffic.spawn(lane, 60, 'hatch');
+    v.angry = 8;
+    v.vx = 0;
+    v.vy = 0;
+    traffic.knock(v, 100);
+    const you = { ...away, x: 400, y: 600 };
+    run(traffic, 7, you);
+    expect(v.mode).toBe('chase');
+    expect(Math.hypot(v.x - you.x, v.y - you.y)).toBeLessThan(150);
+    run(traffic, 6, you);
+    expect(v.mode === 'rejoin' || v.mode === 'drive').toBe(true);
   });
 });

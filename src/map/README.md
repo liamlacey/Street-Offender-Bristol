@@ -397,6 +397,32 @@ stop beyond that too (half their widths together ÷ the tangent of the angle, at
   1.1 m). Nose to nose in a knot, the one with less right of way backs off (1.2 m/s
   for 3 s, if there's room behind it; if not, after 10 s it edges past). Oncoming
   along another road (two one-way roads drawn close where they join) isn't in the way.
+- Lane changes, where a road has two or more lanes each way: into the lane for the
+  turn ahead (the kerb lane to turn left, the one nearest the middle to turn right),
+  between 150 m and 10 m before it; and out from behind something slow (going under
+  60% of its speed) or stopped in the road into the lane beside, if that's moving
+  better (nothing within the gap it has now plus 8 m), not within 25 m of a junction.
+  Only into a gap: nothing alongside, nor closing from behind within 2 m plus 2 s of
+  the difference in speed, nor just ahead. It moves over at 2 m/s, indicating, turning
+  a little the way it's going, and not again for 3 to 6 s.
+- Overtaking, on a two-way road with a lane each way: past something stuck in the
+  road (a bus at a stop, a broken-down or knocked car, one stood still for no reason
+  for 2 s), within 18 m of it, out into the other lane when nothing's coming that'd
+  reach it before it's past (and 25 m clear of the junction ahead); back in once past
+  and clear alongside. Something coming before it's alongside: it pulls back in.
+- Queueing anyway (under 3 m/s, or close behind a car going under 2 m/s), seven drivers
+  in ten stop short of a side road where someone's been waiting more than 4 s to pull
+  out, and let them out.
+- Badly damaged (any side's taken more than 75, see Damage), it limps along at 55% of
+  its speed with its hazards on, smoking if it's the front; wrecked (more than 150),
+  it's broken down where it is, smoking, hazards flashing, and others go round it.
+  Your car smokes too, its front wrecked. A parked car knocked hard enough (15) sets its
+  alarm off for 12 s: beeping, its hazards flashing.
+- You coming at it fast (closing at more than 6 m/s, near enough to hit it within
+  1.3 s): it brakes hard and swerves (1.3 m to its left, or 0.8 m to its right, away
+  from you), and honks. Hit hard by you (70), one driver in four (not a bus or a
+  lorry) loses their temper: after the knock, they come after you for 12 to 22 s
+  (up to 15 m/s, honking), then calm down and find their way back onto the road.
 - A road off the map's edge: driven on to its end, and gone.
 - Standing still 25 s, not for a red light or behind you (anywhere along the queue it's
   in): a knot; out of sight, it's taken off the road.

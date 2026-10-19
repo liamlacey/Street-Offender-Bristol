@@ -84,7 +84,9 @@ export class TrafficLayer {
 
   /** Brake lights (red, at the back corners) and an indicator (amber, front and back on the side it's turning). */
   private drawLamps(g: Phaser.GameObjects.Graphics, v: Vehicle, x: number, y: number, blink: boolean): void {
-    if (v.mode === 'parked') return;
+    // Hazard lights: limping, broken down, or a parked car's alarm going off (flashing quicker).
+    const hazards = v.limping || v.broken || v.alarm > 0;
+    if (v.mode === 'parked' && !hazards) return;
     const [cx, cy] = [Math.cos(v.angle), Math.sin(v.angle)];
     // Left of the way it's pointing (y down): (sin, -cos).
     const [lx, ly] = [cy, -cx];
@@ -94,10 +96,12 @@ export class TrafficLayer {
       g.fillStyle(0xff2a1f, 0.95);
       for (const k of [-1, 1]) g.fillCircle(x - cx * back + lx * side * k, y - cy * back + ly * side * k, 1.5);
     }
-    if (v.turning && blink) {
-      const k = v.turning === -1 ? 1 : -1;
+    const flash = v.alarm > 0 ? (this.scene.time.now / 1000) % 0.5 < 0.25 : blink;
+    if ((v.turning || hazards) && flash) {
       g.fillStyle(0xffa424, 1);
-      for (const along of [back, -back]) g.fillCircle(x + cx * along + lx * (side + 0.6) * k, y + cy * along + ly * (side + 0.6) * k, 1.3);
+      for (const k of hazards ? [1, -1] : [v.turning === -1 ? 1 : -1]) {
+        for (const along of [back, -back]) g.fillCircle(x + cx * along + lx * (side + 0.6) * k, y + cy * along + ly * (side + 0.6) * k, 1.3);
+      }
     }
   }
 }
