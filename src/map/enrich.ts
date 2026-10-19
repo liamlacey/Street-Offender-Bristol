@@ -7,7 +7,7 @@
  */
 
 import { type HeightGrid, type Raster, bestShift, findTrees, heightAt, heightGrid, quantile, sample } from './lidar.ts';
-import { DECK_STEP, type GameMap, shipsInParts, Projection, type Road, type Pts, type TerrainData, VEHICLE_ROADS, pointInRing, ridgeAxis, ringArea } from './osm.ts';
+import { DECK_STEP, type GameMap, Projection, type Road, type Pts, type TerrainData, VEHICLE_ROADS, pointInRing, ridgeAxis, ringArea } from './osm.ts';
 import { toNationalGrid } from './osgb.ts';
 
 export interface LidarReport {
@@ -179,7 +179,6 @@ export function addLidar(map: GameMap, dsm: Raster, dtm: Raster): LidarReport {
   report.stepsCounted = countSteps(map, dtm, grid);
   report.banks = findBanks(map, dtm, grid, blocked, g);
   map.terrain = terrainOf(map, dtm, grid, dsm);
-  shipsInParts(map);
   return report;
 }
 

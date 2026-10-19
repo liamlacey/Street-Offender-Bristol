@@ -52,6 +52,8 @@ export interface BuildingLook {
   texture: { lines: number[]; colour: number; width: number } | null;
   /** Solar panels on the roof: each four corners, x, y, ... (added once the buildings are known). */
   panels: number[][];
+  /** A ship's or a barge's deck painted on its roof: patches (each four corners, x, y, ...) and lines, in their colours, over the roof. */
+  deck: { colour: number; quads: number[][]; lines: number[]; width: number }[];
 }
 
 /** How each roof material's drawn: lines along the ridge (courses of tiles), down the slope (a metal roof's seams), or both (glazing bars); how far apart, px; how dark. */
@@ -179,6 +181,7 @@ function palette(kind: string): { walls: number[]; roofs: number[] } {
     case 'industrial':
     case 'warehouse':
       return { walls: [0x8a6a52, 0x7f8790, 0x9c8a74], roofs: [0x6d747a, 0x8a8f92, 0x5b6268] };
+    case 'boat':
     case 'ship':
       return { walls: [0x1f2a3a, 0x2c2c2c, 0x5a1f1f], roofs: [0x9a7a54] };
     case 'roof':
@@ -201,7 +204,8 @@ export function buildingLook(b: Building, triangulate: Triangulate): BuildingLoo
   const { walls: wallChoices, roofs: roofChoices } = palette(b.kind);
   const wallColour = parseColour(b.wall) ?? pick(wallChoices, 0);
   // A petrol station's canopy: white, with a red fascia round its edge.
-  const roofColour = b.fuel ? 0xecece8 : parseColour(b.roof) ?? pick(roofChoices, 1);
+  // A ship's deck is grey steel; a barge's, dark.
+  const roofColour = b.fuel ? 0xecece8 : parseColour(b.roof) ?? (b.kind === 'ship' ? 0x9a9fa3 : b.kind === 'boat' ? 0x3b3f44 : pick(roofChoices, 1));
   const outer = b.rings[0];
   let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
   for (let i = 0; i < outer.length; i += 2) {
@@ -308,7 +312,68 @@ export function buildingLook(b: Building, triangulate: Triangulate): BuildingLoo
     canopy: b.kind === 'roof',
     texture,
     panels: [],
+    deck: b.kind === 'ship' || b.kind === 'boat' ? deckOf(b) : [],
   };
+}
+
+/**
+ * A boat moored for good and mapped as a building (`building=ship`, `boat`:
+ * the Thekla, Under the Stars), its deck painted on its roof. Along it from
+ * the stern (0) to the bow (1), the narrower end, and across it (-1 to 1):
+ * a ship's grey deck, its white deckhouses (one with a darker roof), its hatch,
+ * and its rusty foredeck; a barge's dark deck, benches across its stern and
+ * blue covers over the rest, in sections. Its edge, a dark gunwale.
+ */
+function deckOf(b: Building): BuildingLook['deck'] {
+  const outer = b.rings[0];
+  if (outer.length < 8) return [];
+  const { ox, oy, ux, uy, t0, t1, half } = ridgeAxis(outer);
+  const len = t1 - t0;
+  const widthNear = (end: number) => {
+    let w = 0;
+    for (let i = 0; i < outer.length; i += 2) {
+      const [dx, dy] = [outer[i] - ox, outer[i + 1] - oy];
+      if (Math.abs(dx * ux + dy * uy - end) < len * 0.12) w = Math.max(w, Math.abs(-dx * uy + dy * ux));
+    }
+    return w;
+  };
+  const stern0 = widthNear(t0) >= widthNear(t1);
+  const at = (f: number, s: number): [number, number] => {
+    const t = stern0 ? t0 + len * f : t1 - len * f;
+    return [ox + ux * t - uy * s * half, oy + uy * t + ux * s * half];
+  };
+  const quad = (f0: number, f1: number, s0: number, s1: number) => [...at(f0, s0), ...at(f1, s0), ...at(f1, s1), ...at(f0, s1)];
+  const across = (f: number, s0 = -0.8, s1 = 0.8) => [...at(f, s0), ...at(f, s1)];
+  const gunwale = (colour: number) => {
+    const lines: number[] = [];
+    for (let i = 0; i < outer.length; i += 2) {
+      const j = (i + 2) % outer.length;
+      lines.push(outer[i], outer[i + 1], outer[j], outer[j + 1]);
+    }
+    return { colour, quads: [], lines, width: 1.6 };
+  };
+  if (b.kind === 'ship') {
+    return [
+      // Its rusty, red-painted foredeck, and a hatch aft.
+      { colour: 0xa24a3c, quads: [quad(0.8, 0.93, -0.55, 0.55)], lines: [], width: 0 },
+      { colour: 0x6d7175, quads: [quad(0.06, 0.15, -0.35, 0.35)], lines: [], width: 0 },
+      // The deckhouses: white, one with a darker roof, and their edges.
+      { colour: 0xeceae4, quads: [quad(0.2, 0.68, -0.62, 0.62), quad(0.7, 0.77, -0.4, 0.4)], lines: [], width: 0 },
+      { colour: 0x7b7f84, quads: [quad(0.3, 0.46, -0.5, 0.5)], lines: [], width: 0 },
+      { colour: 0xb9bcbe, quads: [], lines: [...across(0.2, -0.62, 0.62), ...across(0.68, -0.62, 0.62), ...across(0.56, -0.5, 0.5)], width: 0.8 },
+      gunwale(0x3a3f45),
+    ];
+  }
+  // A barge: benches across its stern, blue covers over the rest, in sections, with their seams.
+  const benches: number[] = [];
+  for (let f = 0.05; f < 0.28; f += 0.045) benches.push(...across(f, -0.7, 0.7));
+  return [
+    { colour: 0x2e2a26, quads: [], lines: benches, width: 2.2 },
+    { colour: 0x3c68a3, quads: [quad(0.31, 0.6, -0.86, 0.86), quad(0.62, 0.9, -0.8, 0.8)], lines: [], width: 0 },
+    { colour: 0x4876b3, quads: [quad(0.31, 0.6, -0.86, 0), quad(0.62, 0.9, -0.8, 0)], lines: [], width: 0 },
+    { colour: 0x2c4f7f, quads: [], lines: [...across(0.31, -0.86, 0.86), ...across(0.61, -0.86, 0.86), ...across(0.9, -0.8, 0.8), ...at(0.31, 0), ...at(0.9, 0)], width: 0.8 },
+    gunwale(0x222a33),
+  ];
 }
 
 function triangles(outer: Pts, holes: Pts[], triangulate: Triangulate): number[] {

@@ -712,57 +712,6 @@ export function ridgeAxis(outer: Pts, across = false): { ox: number; oy: number;
   return { ox: c.x - uy * mid, oy: c.y + ux * mid, ux, uy, t0, t1, half: (s1 - s0) / 2 };
 }
 
-/**
- * The boats mapped as buildings (`building=ship`, `building=boat`: the
- * Thekla, the Balmoral, Under the Stars), drawn as boats rather than blocks
- * as tall as their highest point: the hull, low on the water, its deck on top
- * (a ship's 2 m up, a barge's 1.2 m); and on it, aft of the middle, a ship's
- * white superstructure (inset from the sides, up to the height the LIDAR
- * found), or a barge's canopy (open underneath, blue, 2.3 m over its deck,
- * over most of its length). Which end's the bow is the narrower. Their
- * heights are then as given here (not measured again).
- */
-export function shipsInParts(map: GameMap): void {
-  const px = map.pxPerMetre;
-  const added: Building[] = [];
-  for (const b of map.buildings) {
-    if ((b.kind !== 'ship' && b.kind !== 'boat') || !b.drawn || b.rings.length !== 1) continue;
-    const outer = b.rings[0];
-    const { ox, oy, ux, uy, t0, t1, half } = ridgeAxis(outer);
-    const len = t1 - t0;
-    if (len < 6 * px) continue;
-    // Which end's narrower (the bow): the widest the hull is near each end.
-    const widthNear = (end: number) => {
-      let w = 0;
-      for (let i = 0; i < outer.length; i += 2) {
-        const [dx, dy] = [outer[i] - ox, outer[i + 1] - oy];
-        if (Math.abs(dx * ux + dy * uy - end) < len * 0.12) w = Math.max(w, Math.abs(-dx * uy + dy * ux));
-      }
-      return w;
-    };
-    // From the stern (0) to the bow (1).
-    const sternAt0 = widthNear(t0) >= widthNear(t1);
-    const at = (f: number) => (sternAt0 ? t0 + len * f : t1 - len * f);
-    const ship = b.kind === 'ship';
-    const deck = Math.round((ship ? 2 : 1.2) * px);
-    const box = (f0: number, f1: number, inset: number): Pts => {
-      const [a, c] = [at(f0), at(f1)];
-      const w = half * inset;
-      return [a, -w, c, -w, c, w, a, w].reduce<number[]>((pts, v, i, all) => (i % 2 ? pts : [...pts, ox + ux * v - uy * all[i + 1], oy + uy * v + ux * all[i + 1]]), []).map((v) => Math.round(v * 10) / 10);
-    };
-    const top = b.top;
-    // The hull, with its deck: what you hit.
-    Object.assign(b, { top: deck, roofShape: 'flat', heightFrom: 'tag', wall: b.wall ?? (ship ? '#2e3540' : '#27303b'), roof: b.roof ?? (ship ? '#8e877a' : '#6b5843') });
-    if (ship) {
-      added.push({ id: b.id, name: b.name, rings: [box(0.18, 0.68, 0.72)], top: Math.max(deck + Math.round(2.6 * px), top), bottom: deck, kind: 'yes', wall: '#e9e7e0', roof: '#c3c6c8', roofShape: 'flat', solid: false, drawn: true, heightFrom: 'tag' });
-    } else {
-      added.push({ id: b.id, name: b.name, rings: [box(0.08, 0.88, 0.86)], top: deck + Math.round(2.6 * px), bottom: deck + Math.round(2.3 * px), kind: 'roof', wall: '#3d5f8f', roof: '#3f6699', roofShape: 'flat', solid: false, drawn: true, heightFrom: 'tag' });
-    }
-  }
-  map.buildings.push(...added);
-  map.buildings.sort((a, b) => a.top - b.top);
-}
-
 /** Clips a closed ring to a rectangle (Sutherland-Hodgman). */
 export function clipRing(pts: Pts, x0: number, y0: number, x1: number, y1: number): Pts {
   let out = pts;

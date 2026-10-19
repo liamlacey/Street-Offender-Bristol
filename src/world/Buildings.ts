@@ -128,6 +128,18 @@ export class Buildings {
         g.lineStyle(width * sTop, colour, 0.8 * alpha);
         for (let i = 0; i + 3 < lines.length; i += 4) g.lineBetween(tx + lines[i] * sTop, ty + lines[i + 1] * sTop, tx + lines[i + 2] * sTop, ty + lines[i + 3] * sTop);
       }
+      for (const d of look.deck) {
+        g.fillStyle(d.colour, alpha);
+        for (const q of d.quads) {
+          const [ax, ay, bx, by, cx2, cy2, dx, dy] = q.map((v, i) => (i % 2 ? ty : tx) + v * sTop);
+          g.fillTriangle(ax, ay, bx, by, cx2, cy2);
+          g.fillTriangle(ax, ay, cx2, cy2, dx, dy);
+        }
+        if (d.lines.length) {
+          g.lineStyle(d.width * sTop, d.colour, alpha);
+          for (let i = 0; i + 3 < d.lines.length; i += 4) g.lineBetween(tx + d.lines[i] * sTop, ty + d.lines[i + 1] * sTop, tx + d.lines[i + 2] * sTop, ty + d.lines[i + 3] * sTop);
+        }
+      }
       for (const p of look.panels) {
         // Dark blue cells in a silver frame.
         const q = p.map((v, i) => (i % 2 ? ty : tx) + v * sTop);

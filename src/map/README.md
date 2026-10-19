@@ -477,15 +477,9 @@ it's pointing the wrong way) and carries on. A parked car stays where it ends up
 ## Boats
 
 **Ships moored for good, mapped as buildings** (`building=ship` or `boat`: the Thekla, the
-Balmoral, Under the Stars; `shipsInParts` in `osm.ts`, once the LIDAR's measured them): not
-a block as tall as their highest point, but a boat. Its hull, low on the water (its deck
-2 m up for a ship, 1.2 m for a barge), its outline as mapped, is what you hit; the narrower
-end is its bow. On a ship, a white superstructure (light grey roof), from 18% to 68% of the
-way from stern to bow and 72% of its beam, up to the height the LIDAR found (at least 2.6 m
-over the deck); on a barge, a blue canopy (open underneath) from 8% to 88% of its length and
-86% of its beam, 2.3 m over its deck. Their heights are then left as they are. Nothing moors
-where they lie, and the boats under way go round them.
-
+Balmoral, Under the Stars) stay buildings (their outline and measured height), with a deck
+painted on the roof (see `src/world/buildingLook.ts`); nothing moors where they lie, and the
+boats under way go round them.
 
 **Berths** (worked out when the map's built, `berths.ts`): along the quays mapped as
 moorings (`man_made=quay` with `mooring`, not `no`) and round the edges of the
