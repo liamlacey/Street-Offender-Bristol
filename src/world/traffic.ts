@@ -92,6 +92,9 @@ export interface Vehicle extends Body {
   accel: number;
   react: number;
   verve: number;
+  /** Stopped at a red light; seconds it's been standing still. */
+  atLight: boolean;
+  still: number;
   /** Seconds left backing off out of a knot. */
   backing: number;
   /** Seconds it's been waiting to pull out at a give way. */
@@ -221,7 +224,7 @@ const DAWDLE_BUSY = 0.0015;
 /** A lane's width, if the road doesn't say, px. */
 const LANE = 3.2 * M;
 /** Bends and turns are taken no faster than this sideways pull allows, px/s². */
-const CORNERING = 2.2 * M;
+const CORNERING = 3 * M;
 
 /**
  * Where a path bends enough to slow for, every 2 m along it: how sharply it
@@ -330,9 +333,28 @@ export function buildLanes(map: GameMap): { lanes: Lane[]; nodes: Node[] } {
   }
   // How far back from each junction the lanes stop: clear of the roads across it.
   const clear = nodes.map(() => 0);
+  const away: { width: number; ux: number; uy: number }[][] = nodes.map(() => []);
   for (const e of edges) {
     for (const n of [e.a, e.b]) if (nodes[n].degree >= 3) clear[n] = Math.max(clear[n], e.road.width / 2 + 1.2 * M);
+    // Which way each leaves its junctions.
+    const p = e.pts;
+    const k = p.length;
+    for (const [n, x0, y0, x1, y1] of [[e.a, p[0], p[1], p[2], p[3]], [e.b, p[k - 2], p[k - 1], p[k - 4], p[k - 3]]]) {
+      const len = Math.hypot(x1 - x0, y1 - y0) || 1;
+      away[n].push({ width: e.road.width, ux: (x1 - x0) / len, uy: (y1 - y0) / len });
+    }
   }
+  // Where two roads leave a junction at a sharp angle, their carriageways overlap for a way out from it: the lanes stop beyond that.
+  away.forEach((list, n) => {
+    if (nodes[n].degree < 3) return;
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const angle = Math.acos(Math.max(-1, Math.min(1, list[i].ux * list[j].ux + list[i].uy * list[j].uy)));
+        if (angle > 1.4 || angle < 0.05) continue;
+        clear[n] = Math.max(clear[n], Math.min(25 * M, (list[i].width + list[j].width) / 2 / Math.tan(angle)) + 1.2 * M);
+      }
+    }
+  });
 
   const lanes: Lane[] = [];
   edges.forEach((e, edge) => {
@@ -441,33 +463,33 @@ export function turnBetween(a: Lane, b: Lane): Path {
 // --- Driving ---
 
 /**
- * Driving smoothly: how hard it pulls away at most, and brakes as it plans to
- * (comfortably) and at most, px/s²; how quickly it gets on or off the
- * accelerator and brake (never all at once), px/s³; how firmly it closes on the
- * speed it wants (1/s); and how it eases into a stop: no faster than this
- * (px/s) for each px it has left, so it rolls up to the line or the car ahead.
+ * Driving like people do in town: pulling away briskly, and braking late and
+ * firmly (as it plans to, and at most), px/s²; quick on and off the accelerator
+ * and brake, but never all at once, px/s³; how firmly it closes on the speed it
+ * wants (1/s); and how it comes to a stop: no faster than this (px/s) for each
+ * px it has left, so it still rolls the last bit up to the line or the car ahead.
  */
-const ACCEL = 2.2 * M;
-const BRAKE = 2.2 * M;
+const ACCEL = 3.4 * M;
+const BRAKE = 3.4 * M;
 const HARDEST = 9 * M;
-const JERK_ON = 2.5 * M;
-const JERK_OFF = 5 * M;
-const GAIN = 1.6;
-const CLOSING = 0.9;
+const JERK_ON = 6 * M;
+const JERK_OFF = 12 * M;
+const GAIN = 2.2;
+const CLOSING = 1.3;
 /** How far it stays back: stopped (behind a car, and at a line), and the time behind a moving one, s. */
 const GAP = 2 * M;
 const AT_LINE = 0.5 * M;
-const HEADWAY = 1.5;
+const HEADWAY = 1.3;
 /** How long a driver takes to move off when it can (the lights change, the car ahead goes), seconds: the least, and up to how much more. */
-const REACT = 0.35;
-const REACT_MORE = 0.7;
+const REACT = 0.25;
+const REACT_MORE = 0.5;
 /** How far ahead it looks, px: at least, at most. */
 const LOOK_MIN = 14 * M;
 const LOOK_MAX = 70 * M;
 /** Giving way: how far from the junction it starts watching, and how fast it noses out when it's clear. */
 const WATCH = 30 * M;
 /** It pulls out only if nothing coming will reach the junction within this long, seconds (looking up to SIGHT px away). */
-const CLEAR_TIME = 4.5;
+const CLEAR_TIME = 3.2;
 const SIGHT = 70 * M;
 const NOSE = 3 * M;
 /** Buses: at most this many about at once, about one every BUS_EVERY px of route round you; how long one stays at a stop, s (at least, and up to how much more); how far beyond a stop its front stops, px. */
@@ -479,6 +501,8 @@ const STOP_PAST = 4 * M;
 /** How quickly a bus moves over to the kerb, or back out, px/s. */
 const SIDLE = 1.2 * M;
 
+/** Standing still this long, seconds, not for a red light or you: a knot (out of sight, it's undone). */
+const GRIDLOCK = 25;
 /** Backing off, out of a knot nose to nose, px/s. */
 const BACK_OFF = 1.2 * M;
 
@@ -592,9 +616,11 @@ export class Traffic {
       annoyed: 0,
       waiting: 0,
       backing: 0,
+      atLight: false,
+      still: 0,
       accel: 0,
       react: -1,
-      verve: 0.8 + this.rand() * 0.4,
+      verve: 0.8 + this.rand() * 0.5,
     };
   }
 
@@ -861,7 +887,11 @@ export class Traffic {
       const end = Math.max(0, o.length / 2 - o.r);
       const [cx, cy] = [Math.cos(o.angle), Math.sin(o.angle)];
       // Oncoming, they squeeze past each other (mirrors in); the same way, it's kept well clear of.
-      const reach = Math.cos(o.angle - v.angle) < -0.7 ? (v.r + o.r) * 0.8 : v.r + o.r * 0.85;
+      const oncoming = Math.cos(o.angle - v.angle) < -0.7;
+      // Oncoming along another road: the other carriageway (two one-way roads drawn close where they join), not in the way.
+      const theirs = o.id >= 0 ? (o as Vehicle).route[0]?.lane : undefined;
+      if (oncoming && theirs && v.route[0].lane && theirs.road !== v.route[0].lane.road) continue;
+      const reach = oncoming ? (v.r + o.r) * 0.8 : v.r + o.r * 0.85;
       for (const [x, y, level, d] of samples) {
         if (d >= gap) break;
         if (level !== o.level) continue;
@@ -1017,7 +1047,9 @@ export class Traffic {
     let urgent = false;
     if (gap < Infinity) {
       const room = gap - hold - lead * HEADWAY;
-      want = Math.min(want, room >= 0 ? Math.min(Math.sqrt(lead * lead + 2 * BRAKE * room), lead + CLOSING * room) : Math.max(0, lead + CLOSING * room));
+      // (A brisk driver brakes later, and harder.)
+      const brake = BRAKE * v.verve;
+      want = Math.min(want, room >= 0 ? Math.min(Math.sqrt(lead * lead + 2 * brake * room), lead + CLOSING * room) : Math.max(0, lead + CLOSING * room));
       // Left it late (something pulled out, the lights changed): brake as hard as it takes.
       const need = v.speed > lead ? (v.speed ** 2 - lead ** 2) / (2 * Math.max(gap - hold * 0.5, 0.1)) : 0;
       urgent = need > BRAKE * 1.4;
@@ -1032,7 +1064,7 @@ export class Traffic {
     // Onto the accelerator or brake, and off it, smoothly: easing towards the speed it wants.
     // Pulling away: less briskly as it gets up to speed, and up a hill.
     const top = Math.max(ACCEL * 0.35, ACCEL * v.verve * (1 - 0.4 * Math.min(1, v.speed / Math.max(cruise, 1))) - GRAVITY * Math.max(0, grade) * 0.5);
-    const target = urgent ? -Math.min(HARDEST, ((v.speed ** 2 - lead ** 2) / (2 * Math.max(gap - hold * 0.5, 0.1))) * 1.1) : Math.max(-BRAKE * 1.6, Math.min(top, (want - v.speed) * GAIN));
+    const target = urgent ? -Math.min(HARDEST, ((v.speed ** 2 - lead ** 2) / (2 * Math.max(gap - hold * 0.5, 0.1))) * 1.1) : Math.max(-BRAKE * 1.6 * v.verve, Math.min(top, (want - v.speed) * GAIN));
     const jerk = urgent ? 40 * M : target > v.accel ? (v.accel < 0 ? JERK_OFF : JERK_ON * v.verve) : JERK_OFF;
     v.accel += Math.max(-jerk * dt, Math.min(jerk * dt, target - v.accel));
     v.speed = Math.max(0, v.speed + v.accel * dt);
@@ -1041,6 +1073,8 @@ export class Traffic {
     if (v.speed === 0 && v.accel < 0) v.accel = 0;
     v.braking = v.accel < -0.4 * M || (v.speed < 1 && want < 1);
     v.waiting = waiting ? v.waiting + dt : 0;
+    v.atLight = stopped;
+    v.still = v.speed < 1 ? v.still + dt : 0;
     // Stuck behind the same thing a long while: it's not moving and nor are we (a knot at a junction): edge past.
     v.behind = blocker;
     v.annoyed = blocker === -1 && v.speed < 2 ? v.annoyed + dt : Math.min(0, v.annoyed + dt);
@@ -1049,8 +1083,9 @@ export class Traffic {
     // Knotted: nose to nose, the one with less right of way backs off a few metres; any other way, one edges past.
     const other = blocker !== undefined ? this.byId.get(blocker) : undefined;
     const headOn = other !== undefined && Math.cos(other.angle - v.angle) < -0.7;
-    if (v.stuck > 3 && headOn && this.priority(v) < this.priority(other)) v.backing = 3;
-    else if (v.stuck > 6 && !headOn && this.priority(v) >= 0) v.speed = NOSE;
+    if (v.stuck > 3 && headOn && this.priority(v) < this.priority(other) && this.roomBehind(v)) v.backing = 3;
+    else if ((v.stuck > 6 && !headOn) || (v.stuck > 10 && headOn && this.priority(v) < this.priority(other))) v.speed = NOSE;
+    if (v.backing > 0 && !this.roomBehind(v)) v.backing = 0;
     if (v.backing > 0) {
       v.backing -= dt;
       v.speed = 0;
@@ -1104,6 +1139,34 @@ export class Traffic {
     }
     const last = v.route[v.route.length - 1];
     return pathAt(last, last.length);
+  }
+
+  /**
+   * Whether a vehicle that's been standing still a long while is in a knot
+   * that won't untie: not queued for a red light, or behind you. (Out of sight,
+   * it's taken off the road, and the knot's undone.)
+   */
+  private gridlocked(v: Vehicle): boolean {
+    let o: Vehicle | undefined = v;
+    for (let k = 0; k < 30 && o; k++) {
+      if (o.atLight || o.behind === -1 || o.bus?.dwell) return false;
+      if (o.behind === undefined) return !o.atLight && o.waiting === 0 ? o.still > GRIDLOCK : false;
+      o = this.byId.get(o.behind);
+    }
+    return true;
+  }
+
+  /** Whether there's room to back up a few metres: nothing close behind. */
+  private roomBehind(v: Vehicle): boolean {
+    const [cx, cy] = [Math.cos(v.angle), Math.sin(v.angle)];
+    for (const o of [...this.vehicles, ...this.parked]) {
+      if (o === v || o.level !== v.level) continue;
+      const [dx, dy] = [o.x - v.x, o.y - v.y];
+      const behind = -(dx * cx + dy * cy);
+      const across = Math.abs(dx * cy - dy * cx);
+      if (behind > 0 && behind < (v.length + o.length) / 2 + 4 * M && across < (v.r + o.r) * 0.9) return false;
+    }
+    return true;
   }
 
   /** Whether anything's beside a bus on the side it'd move out into (its offside, the lane it's pulled in from). */
@@ -1289,7 +1352,7 @@ export class Traffic {
       const v = this.vehicles[i];
       // At the end of its way (off the edge of the map: it drives off it), or a bus off its route once out of sight.
       const gone = v.mode === 'drive' && ((v.route.length === 1 && v.s >= v.route[0].length - 0.5) || (v.bus?.lost && !this.inView(v.x, v.y, view, 60)));
-      if (gone || Math.hypot(v.x - player.x, v.y - player.y) > far) this.vehicles.splice(i, 1);
+      if (gone || Math.hypot(v.x - player.x, v.y - player.y) > far || (v.still > GRIDLOCK && this.gridlocked(v) && !this.inView(v.x, v.y, view, 80))) this.vehicles.splice(i, 1);
     }
     this.spawnTimer -= dt;
     if (this.spawnTimer > 0 && this.started) return;

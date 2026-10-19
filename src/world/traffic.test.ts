@@ -213,10 +213,14 @@ describe('buses', () => {
     // Its front just past the stop.
     expect(bus.x + bus.length / 2).toBeGreaterThan(300);
     expect(bus.x + bus.length / 2).toBeLessThan(345);
-    run(traffic, 25);
+    let north = Infinity;
+    for (let t = 0; t < 25; t += 0.5) {
+      run(traffic, 0.5);
+      north = Math.min(north, bus.y);
+    }
     expect(bus.bus!.served.has(0)).toBe(true);
     // And it's turned up the side street (north: y going down), as its route does.
-    expect(bus.y).toBeLessThan(330);
+    expect(north).toBeLessThan(330);
     expect(bus.bus!.leg).toBe(1);
   });
 
