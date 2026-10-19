@@ -112,6 +112,9 @@ export interface Person {
   picnic: Picnic | null;
   /** Which level they're on: 0 the ground, 1 a bridge's deck. */
   level: number;
+  /** Lying under a vehicle (its id, or null): how far along it they were, px (for its wheels going over them). */
+  under: number | null;
+  underAlong: number;
   /** Off the ground, toppling over a car that hit them: how high, px, and how fast going up; and how fast they're turning over, radians a second. */
   z: number;
   vz: number;
@@ -206,7 +209,13 @@ export class People {
   /** Who's where (by 4 m cells), each frame. */
   private readonly close = new Map<string, Person[]>();
   /** People hit since the scene last looked: who, and how hard (px/s). */
-  readonly hits: { person: Person; speed: number }[] = [];
+  /**
+   * People hit since the scene last looked: who, how hard (px/s), by what
+   * (a mover's id: -1 is you), and how: knocked down (`hit`), or lying there
+   * and driven over (`over`), a wheel going over them; and how much of its
+   * speed it lost (0 to 1).
+   */
+  readonly hits: { person: Person; speed: number; by?: number; how: 'hit' | 'over'; loss: number }[] = [];
 
   /** The benches and picnic tables people sit at, and the picnics on the grass. */
   private readonly seats: Seat[];
@@ -499,6 +508,8 @@ export class People {
       seatAt: [0, 0, 0, 0],
       picnic: null,
       level: 0,
+      under: null,
+      underAlong: 0,
       z: 0,
       vz: 0,
       spin: 0,
@@ -680,7 +691,7 @@ export class People {
       const moved = Math.hypot(s.x - p.seatAt[2], s.y - p.seatAt[3]);
       if (s.gone || moved > 0.4 * M) {
         p.seat = null;
-        if (Math.hypot(s.vx, s.vy) > 3 * M) this.knock(p, s, Math.hypot(s.vx, s.vy));
+        if (Math.hypot(s.vx, s.vy) > 3 * M) this.knock(p, { vx: s.vx, vy: s.vy }, Math.hypot(s.vx, s.vy));
         else this.rejoin(p);
         return;
       }
@@ -1017,14 +1028,17 @@ export class People {
       p.angle += p.spin * dt;
       if (p.z <= 0) {
         p.z = 0;
-        p.vz = p.vz < -3 * M ? -p.vz * 0.2 : 0;
-        p.spin *= 0.3;
+        p.vz = p.vz < -3.5 * M ? -p.vz * 0.12 : 0;
+        p.spin *= 0.2;
+        // Coming down heavily: most of the way they were going is lost.
+        p.vx *= 0.45;
+        p.vy *= 0.45;
       }
       p.speed = Math.hypot(p.vx, p.vy);
       return;
     }
     // On the ground: a short slide to a stop.
-    const k = Math.exp(-(p.mode === 'dive' ? 3 : 6) * dt);
+    const k = Math.exp(-(p.mode === 'dive' ? 3 : 9) * dt);
     p.vx *= k;
     p.vy *= k;
     p.spin = 0;
@@ -1087,6 +1101,10 @@ export class People {
         const across = -rx * uy + ry * ux;
         if (Math.abs(along) > v.length / 2 + R || Math.abs(across) > v.width / 2 + R) continue;
         const rel = Math.hypot(v.vx - p.vx, v.vy - p.vy);
+        if (p.mode === 'down') {
+          this.runOver(p, v, along, across, rel);
+          continue;
+        }
         if (rel < 1.2 * M) {
           // Just nudged: out of the way.
           const out = across >= 0 ? 1 : -1;
@@ -1094,32 +1112,68 @@ export class People {
           p.y += ux * out * 1;
           continue;
         }
-        if (p.mode === 'down' && rel < 3 * M) continue;
         this.knock(p, v, rel);
       }
+      // Out from under it.
+      if (p.under !== null && !all.some((v) => v.id === p.under && Math.abs((p.x - v.x) * Math.cos(v.angle) + (p.y - v.y) * Math.sin(v.angle)) <= v.length / 2 + R)) p.under = null;
+    }
+  }
+
+  /**
+   * Lying in a vehicle's way: it goes over them (they're too heavy to be
+   * shoved along), each axle bumping over them as it reaches them, which
+   * slows it a little; they're barely moved. Hurt, if it's going at any speed.
+   */
+  private runOver(p: Person, v: Mover, along: number, across: number, speed: number): void {
+    const [ux, uy] = [Math.cos(v.angle), Math.sin(v.angle)];
+    if (p.under !== v.id) {
+      p.under = v.id;
+      p.underAlong = along;
+      return;
+    }
+    // The axles, a little in from each end; going forward, the front reaches them first (and in reverse, the back).
+    const axle = v.length * 0.32;
+    const was = p.underAlong;
+    p.underAlong = along;
+    for (const a of [axle, -axle]) {
+      if ((was - a > 0) === (along - a > 0)) continue;
+      // A wheel over them: a shove the way it's going (a little), and to the side, away from its middle.
+      const out = across >= 0 ? 1 : -1;
+      p.vx += ux * Math.min(speed, 4 * M) * 0.08 - uy * out * 0.4 * M;
+      p.vy += uy * Math.min(speed, 4 * M) * 0.08 + ux * out * 0.4 * M;
+      if (speed > HURT * 0.6) p.hurt = true;
+      p.timer = Math.max(p.timer, DOWN[0]);
+      // As a speed hump would: more off it the faster it's going, from a crawl to about a tenth.
+      const loss = Math.min(0.1, 0.02 + speed / (40 * M) * 0.08);
+      this.hits.push({ person: p, speed, by: v.id, how: 'over', loss });
     }
   }
 
   /** Knocked down by a vehicle going `speed` px/s: thrown, and down for a moment, or for good. */
-  knock(p: Person, v: { vx: number; vy: number }, speed: number): void {
+  knock(p: Person, v: { vx: number; vy: number; id?: number }, speed: number): void {
     if (p.mode !== 'down' && p.mode !== 'flee' && p.mode !== 'dive') p.was = p.mode;
     p.mode = 'down';
     p.stop = -1;
     p.seat = null;
     p.picnic = null;
-    // Slow, they're pushed over in front of it; faster, scooped up over the bonnet and roof, turning
-    // over, to land not far from where they were hit (it's gone on under them), a little the way it was going.
-    const f = speed < 4 * M ? 0.9 : Math.max(0.15, 0.9 - (speed - 4 * M) / (6 * M) * 0.75);
-    const [vx, vy] = [v.vx * f + (this.rand() - 0.5) * 0.6 * M, v.vy * f + (this.rand() - 0.5) * 0.6 * M];
-    p.vx = vx;
-    p.vy = vy;
+    p.under = null;
+    // A grown person's a dead weight, not a skittle. Slow, they're pushed over in front of it, a
+    // little to the side; faster, scooped up onto the bonnet and rolled over the roof, turning over
+    // slowly, to come down heavily not far from where they were hit (it's gone on under them).
+    const f = speed < 4 * M ? 0.55 : Math.max(0.12, 0.55 - ((speed - 4 * M) / (6 * M)) * 0.43);
+    const v0 = Math.hypot(v.vx, v.vy) || 1;
+    const side = this.rand() < 0.5 ? 1 : -1;
+    const shove = speed < 4 * M ? 0.5 * M : 0.2 * M;
+    p.vx = v.vx * f - (v.vy / v0) * side * shove;
+    p.vy = v.vy * f + (v.vx / v0) * side * shove;
     p.z = 0;
-    p.vz = speed < 4 * M ? 0 : Math.min(6 * M, 1.5 * M + (speed - 4 * M) * 0.4);
-    p.spin = p.vz ? (this.rand() < 0.5 ? 1 : -1) * (4 + this.rand() * 4) : 0;
+    p.vz = speed < 4 * M ? 0 : Math.min(5.6 * M, 1.2 * M + (speed - 4 * M) * 0.35);
+    p.spin = p.vz ? side * (2.5 + this.rand() * 2) : 0;
     p.angle = Math.atan2(v.vy, v.vx) + (this.rand() - 0.5) * 0.6;
     if (speed > HURT) p.hurt = true;
     p.timer = DOWN[0] + this.rand() * (DOWN[1] - DOWN[0]);
-    this.hits.push({ person: p, speed });
+    // What hit them loses some of its speed to them (a car's 15 times their weight, but they're thrown at its speed, near enough), and to the knock.
+    this.hits.push({ person: p, speed, by: v.id, how: 'hit', loss: speed < 1.2 * M ? 0 : Math.min(0.2, 0.06 + speed / (40 * M) * 0.06) });
   }
 
   /** Walks towards (x, y) at `speed`; whether they're there (within `near` px). */

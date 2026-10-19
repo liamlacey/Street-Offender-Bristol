@@ -771,9 +771,27 @@ export class GameScene extends Phaser.Scene {
       console.error('people:', e);
     }
     for (const h of this.people.hits) {
-      this.audio?.knock();
+      // What hit them (or went over them) loses some speed to it: you feel it.
+      if (h.by === -1) {
+        car.vx *= 1 - h.loss;
+        car.vy *= 1 - h.loss;
+        if (h.how === 'hit') {
+          this.audio?.knock();
+          if (h.speed > 4 * 8) this.shake(0.1, Math.min(1.6, h.speed / 90));
+        } else {
+          // A wheel over them: a thud and a lurch, like a hump.
+          this.audio?.crash(Math.min(60, 12 + h.speed * 0.15));
+          this.hopPeak = Math.min(0.5, 0.15 + h.speed / 500);
+          this.hopLeft = HOP_TIME;
+          this.shake(0.07, Math.min(1.2, 0.3 + h.speed / 160));
+        }
+      } else {
+        const v = h.by === undefined ? undefined : this.traffic.vehicles.find((o) => o.id === h.by);
+        if (v?.mode === 'drive') v.speed *= 1 - h.loss;
+        if (h.how === 'hit') this.audio?.knock();
+      }
       // Everyone near runs from it.
-      this.people.scareAround(h.person.x, h.person.y, 8 * 8, h.person.level);
+      if (h.how === 'hit') this.people.scareAround(h.person.x, h.person.y, 8 * 8, h.person.level);
     }
     this.people.hits.length = 0;
     // Those out in the road, for the traffic to stop for.

@@ -94,6 +94,29 @@ describe('people', () => {
     expect(Math.hypot(b.x - bx, b.y - by)).toBeLessThan(5 * 8);
   });
 
+  it('lying in the road, are driven over (a bump for each axle), and barely moved', () => {
+    const [x, y] = parkStreet;
+    const people = new People(map, { rand: seeded(11) });
+    people.populate(viewAt(x, y), true);
+    const p = people.people[0];
+    people.knock(p, { vx: 1, vy: 0 }, 2 * 8);
+    for (let t = 0; t < 1; t += 1 / 30) people.update(1 / 30, viewAt(x, y), still(-1e6, -1e6), [], () => 'red', () => true);
+    people.hits.length = 0;
+    const [px, py] = [p.x, p.y];
+    // You, at 9 m/s, straight over them.
+    const car: Mover = { x: px - 60, y: py, angle: 0, length: 38, width: 18, vx: 72, vy: 0, id: -1 };
+    for (let t = 0; t < 1.6; t += 1 / 60) {
+      car.x += car.vx / 60;
+      people.update(1 / 60, viewAt(x, y), car, [], () => 'red', () => true);
+    }
+    const over = people.hits.filter((h) => h.how === 'over' && h.by === -1);
+    expect(over).toHaveLength(2);
+    expect(over.every((h) => h.loss > 0 && h.loss <= 0.1)).toBe(true);
+    expect(people.hits.some((h) => h.how === 'hit')).toBe(false);
+    expect(p.mode).toBe('down');
+    expect(Math.hypot(p.x - px, p.y - py)).toBeLessThan(1 * 8);
+  });
+
   it('jump out of the way of a car coming straight at them', () => {
     const [x, y] = parkStreet;
     let dived = 0;
