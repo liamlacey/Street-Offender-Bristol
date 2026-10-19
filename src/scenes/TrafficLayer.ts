@@ -6,6 +6,9 @@ import { forgetWreck, paintWreck } from './dentArt';
 import { VEHICLES } from '../world/traffic';
 import { bodyLayout, busTexture, vehicleShadow, vehicleTexture } from './vehicleArt';
 
+/** How much bigger than life the cyclists are drawn (as the people are). */
+const BIKE_SIZE = 1.4;
+
 /** How the traffic's drawn among everything else: on the ground and on the bridges, with you on one or the other. */
 export interface TrafficDepths {
   /** You on the ground: those on the ground (just under your car), and those up on a bridge. */
@@ -71,10 +74,12 @@ export class TrafficLayer {
         const [x, y] = [perspective.x(v.x, lift), perspective.y(v.y, lift)];
         const onDeck = up(v);
         const d = depthOf(onDeck);
-        s.body.setPosition(x, y).setRotation(v.angle).setDepth(d);
+        // (A cyclist drawn as big as the people are, a little bigger than life, to be made out on a phone.)
+        const big = v.kind === 'bike' ? BIKE_SIZE : 1;
+        s.body.setPosition(x, y).setRotation(v.angle).setDepth(d).setScale(big / ART_SCALE);
         // Taller, the further its shadow falls.
         const fall = v.kind === 'lorry' ? 1.8 : v.kind === 'van' || v.kind === 'suv' ? 1.3 : v.kind === 'bike' ? 0.7 : 1;
-        s.shadow.setPosition(x + 2.5 * fall, y + 3.5 * fall).setRotation(v.angle).setDepth(d - 0.02);
+        s.shadow.setPosition(x + 2.5 * fall, y + 3.5 * fall).setRotation(v.angle).setDepth(d - 0.02).setScale(big / ART_SCALE);
         if (v.kind !== 'bike') this.drawLamps(this.lamps[onDeck ? 1 : 0], v, x, y, time);
       }
     }

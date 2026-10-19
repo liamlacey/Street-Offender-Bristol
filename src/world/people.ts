@@ -129,6 +129,8 @@ export interface Mover {
   id: number;
   /** Which level it's on (0, the ground, if not given). */
   level?: number;
+  /** A bike: it weaves round people (they're only brushed aside), and isn't dived away from. */
+  bike?: boolean;
 }
 
 export interface PeopleView {
@@ -147,6 +149,8 @@ interface Walk {
   road: number;
   /** 0 on the ground, 1 over a bridge. */
   level: number;
+  /** A cycle path (bikes come along it). */
+  cycle?: boolean;
 }
 
 /** Somewhere people stand: outside a shop, by the water, at a sight, in a square; in a group or not, facing which way. */
@@ -295,13 +299,14 @@ export class People {
         if (r.pavement !== 'right') add(offsetLine(r.pts, off), busy, i, level);
         if (r.pavement !== 'left') add(offsetLine(r.pts, -off), busy, i, level);
       } else if (r.kind === 'pedestrian') add(r.pts, 2.5, -1, level);
-      else if (r.kind === 'footway' || r.kind === 'steps' || r.kind === 'cycleway') add(r.pts, r.kind === 'cycleway' ? 0.3 : 0.9, -1, level);
+      else if (r.kind === 'footway' || r.kind === 'steps' || r.kind === 'cycleway') add(r.pts, r.kind === 'cycleway' ? 0.3 : 0.9, r.kind === 'cycleway' ? -2 : -1, level);
     });
   }
 
   private addWalk(pts: Pts, busy: number, road: number, level: number): void {
     const k = this.walks.length;
-    this.walks.push({ pts, busy, road, level });
+    // (-2: a cycle path.)
+    this.walks.push({ pts, busy, road: Math.max(-1, road), level, ...(road === -2 ? { cycle: true } : {}) });
     const n = pts.length;
     for (const [end, x, y] of [[0, pts[0], pts[1]], [1, pts[n - 2], pts[n - 1]]] as const) {
       const list = this.ends.get(key(x, y)) ?? [];
@@ -728,7 +733,7 @@ export class People {
       const d = Math.hypot(p.x - player.x, p.y - player.y);
       const onPavement = pspeed > 5 * M && d < 5 * M && !this.inRoad(player.x, player.y, undefined, plevel);
       if ((pspeed > 8 * M && d < 3.5 * M) || onPavement) this.scare(p, player.x, player.y);
-      if ((p.mode as Mode) !== 'dive') this.dodge(p, player, pspeed);
+      if ((p.mode as Mode) !== 'dive' && !player.bike) this.dodge(p, player, pspeed);
     }
     // Who's where, for stepping round each other.
     this.close.clear();
@@ -1074,6 +1079,13 @@ export class People {
         const across = -rx * uy + ry * ux;
         if (Math.abs(along) > v.length / 2 + R || Math.abs(across) > v.width / 2 + R) continue;
         const rel = Math.hypot(v.vx - p.vx, v.vy - p.vy);
+        // A bike brushes past (it's slowed for them, and weaves round): they're just nudged aside.
+        if (v.bike) {
+          const out = across >= 0 ? 1 : -1;
+          p.x += -uy * out * 1;
+          p.y += ux * out * 1;
+          continue;
+        }
         if (p.mode === 'down') {
           this.runOver(p, v, along, across, rel);
           continue;
@@ -1170,9 +1182,11 @@ export class People {
     return false;
   }
 
-  /** Those out in the road (crossing, or running): for the traffic to stop for. */
+  /** Those out in the road (crossing, or running), or walking along a cycle path: for the traffic (and the bikes) to stop for. */
   inTheRoad(): Person[] {
-    return this.people.filter((p) => p.mode === 'cross' || p.mode === 'flee' || p.mode === 'dive' || (p.mode === 'down' && this.inRoad(p.x, p.y, undefined, p.level)));
+    return this.people.filter(
+      (p) => p.mode === 'cross' || p.mode === 'flee' || p.mode === 'dive' || (p.mode === 'down' && this.inRoad(p.x, p.y, undefined, p.level)) || (p.mode === 'walk' && !!this.walks[p.line]?.cycle),
+    );
   }
 }
 

@@ -767,7 +767,7 @@ export class GameScene extends Phaser.Scene {
     for (const v of [...this.traffic.vehicles, ...this.traffic.parked]) {
       if (Math.abs(v.x - car.x) > view.width + 400 || Math.abs(v.y - car.y) > view.height + 400) continue;
       if (v.mode === 'parked' && v.vx === 0 && v.vy === 0) continue;
-      movers.push({ x: v.x, y: v.y, angle: v.angle, length: v.length, width: v.r * 2, vx: v.mode === 'drive' ? Math.cos(v.angle) * v.speed : v.vx, vy: v.mode === 'drive' ? Math.sin(v.angle) * v.speed : v.vy, id: v.id, dwelling: !!v.bus && v.bus.dwell > 0, level: v.level });
+      movers.push({ x: v.x, y: v.y, angle: v.angle, length: v.length, width: v.r * 2, vx: v.mode === 'drive' ? Math.cos(v.angle) * v.speed : v.vx, vy: v.mode === 'drive' ? Math.sin(v.angle) * v.speed : v.vy, id: v.id, dwelling: !!v.bus && v.bus.dwell > 0, level: v.level, bike: v.kind === 'bike' });
     }
     const light = (i: number) => (this.signalHeads[i]?.gone ? 'green' : lightAt(controllers[signals[i].controller], signals[i].controller, signals[i].group, time));
     // Open ground: not the water, not a building's (or a wall's) way; up on a bridge, its deck, inside the parapets.

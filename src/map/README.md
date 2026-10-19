@@ -480,11 +480,17 @@ it's pointing the wrong way) and carries on. A parked car stays where it ends up
 **Cyclists** (`'bike'` in the traffic, so they keep to the same rules as everything
 else: the lights, giving way, queueing):
 
-- 10% of what comes into being, in the kerb lane only: three times as likely on a road
-  with a cycle lane, 60% as likely on a primary or trunk road. They keep to the kerb
+- 18% of what comes into being on the roads, in the kerb lane only: three times as
+  likely on a road with a cycle lane, 60% as likely on a primary or trunk road. They keep to the kerb
   lane at junctions (but to turn right), never change lanes or overtake, and ride at
   5.3 m/s on the flat (each at their own pace, as drivers do, and never faster than the
   road's speed), pulling away less than half as briskly as a car, and much slower uphill.
+- **On the cycle paths** (`highway=cycleway`): a network of their own (two-way, each
+  way 0.6 m either side of the path's middle, and not joined to the roads), with 0.9
+  bikes each way per 100 m, and nothing else on it. They stop for anyone walking
+  along it; anyone they brush past is only nudged aside (and doesn't dive away).
+- Drawn 1.4 times life size, as the people are (bigger than life), to be made out on a
+  phone; their collisions are life size.
 - **Where in the road:** along the middle of the cycle lane on their left (from
   `cycleway*=lane`), or of a bus lane bikes may use; with neither, 0.8 m out from the
   kerb (or from the parking bays). Never on the pavement.

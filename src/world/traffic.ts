@@ -41,7 +41,7 @@ export const VEHICLES: Record<VehicleKind, { length: number; width: number; mass
   bus: { length: 12 * 1.1 * M, width: 2.55 * 1.1 * M, mass: 9, traffic: 0, parked: 0, paint: 'bus' },
   double: { length: 10.6 * 1.1 * M, width: 2.55 * 1.1 * M, mass: 11, traffic: 0, parked: 0, paint: 'bus' },
   // A bike and its rider (about 90 kg, against your car's tonne and more).
-  bike: { length: 1.8 * 1.1 * M, width: 0.65 * 1.1 * M, mass: 0.08, traffic: 0.1, parked: 0, paint: 'bike' },
+  bike: { length: 1.8 * 1.1 * M, width: 0.65 * 1.1 * M, mass: 0.08, traffic: 0.18, parked: 0, paint: 'bike' },
 };
 
 /** The colours, about as common as on Britain's roads (grey, black and white the most); vans mostly white; lorries' cabs. */
@@ -215,6 +215,8 @@ export interface Lane extends Path {
   /** Where the bikes ride, px over from its middle (+ to its left): along the cycle lane, if it has one (`cycleLane`), else near the kerb; in the kerb lane only. */
   cycleAt: number;
   cycleLane: boolean;
+  /** Along a cycle path (not a road): for bikes only. */
+  path?: boolean;
 }
 
 interface Node {
@@ -235,6 +237,8 @@ const MAX_SPEED = 13.4 * M;
 /** How many vehicles a lane carries, per 100 m, on a quiet stretch; more where there's more to go to (up to TRAFFIC_BUSIEST times as many). */
 const DENSITY: Partial<Record<RoadKind, number>> = { trunk: 3.6, primary: 3.2, secondary: 2.6, tertiary: 2.1, street: 1 };
 const BUSIEST = 3;
+/** How many bikes ride along a cycle path each way, per 100 m. */
+const PATH_BIKES = 0.9;
 /** How fast each kind's driven, against the road's usual speed (before the driver's own pace). */
 const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85, bus: 0.85, double: 0.82, bike: 1 };
 /** How fast a cyclist rides on the flat, px/s (each faster or slower: see pace); how much less briskly they pull away than a car. */
@@ -326,8 +330,9 @@ function nearestOn(p: Path, x: number, y: number): { s: number; d: number } {
  * any bus, cycle or parking lanes painted along it), drawn back from the
  * junctions to leave room for the turns across them.
  */
-export function buildLanes(map: GameMap): { lanes: Lane[]; nodes: Node[] } {
-  const roads = map.roads.map((r, i) => ({ r, i })).filter(({ r }) => DRIVEN.has(r.kind) && r.pts.length >= 4);
+export function buildLanes(map: GameMap, paths = false): { lanes: Lane[]; nodes: Node[] } {
+  // The roads; or (a network of their own, for the bikes) the cycle paths.
+  const roads = map.roads.map((r, i) => ({ r, i })).filter(({ r }) => (paths ? r.kind === 'cycleway' : DRIVEN.has(r.kind)) && r.pts.length >= 4);
   const key = (x: number, y: number) => `${x},${y}`;
   const uses = new Map<string, number>();
   for (const { r } of roads) for (let k = 0; k < r.pts.length; k += 2) uses.set(key(r.pts[k], r.pts[k + 1]), (uses.get(key(r.pts[k], r.pts[k + 1])) ?? 0) + 1);
@@ -428,7 +433,8 @@ export function buildLanes(map: GameMap): { lanes: Lane[]; nodes: Node[] } {
           activity: r.activity ?? 0,
           busLane: index === 0 ? (r.lanes ?? []).filter((l) => l.kind === 'bus' && l.side === dir).reduce((w, l) => w + l.width, 0) : 0,
           ...cycling(r, dir, index, left, offset),
-          density: ((DENSITY[r.kind] ?? 0.6) * Math.min(BUSIEST, 1 + (r.activity ?? 0) / 15)) / (100 * M),
+          density: paths ? PATH_BIKES / (100 * M) : ((DENSITY[r.kind] ?? 0.6) * Math.min(BUSIEST, 1 + (r.activity ?? 0) / 15)) / (100 * M),
+          ...(paths ? { path: true } : {}),
           stops: [],
           giveWay: false,
         };
@@ -439,6 +445,7 @@ export function buildLanes(map: GameMap): { lanes: Lane[]; nodes: Node[] } {
     }
   });
 
+  if (paths) return { lanes, nodes };
   // The traffic lights' stop lines, on the lanes coming to them.
   map.signals.forEach((sig, signal) => {
     const [x0, y0, x1, y1] = sig.stop;
@@ -630,6 +637,16 @@ export class Traffic {
 
   constructor(map: GameMap, options: TrafficOptions = {}) {
     ({ lanes: this.lanes, nodes: this.nodes } = buildLanes(map));
+    // And the cycle paths, a network of their own (numbered on from the roads').
+    {
+      const paths = buildLanes(map, true);
+      const [lanes, nodes, edges] = [this.lanes.length, this.nodes.length, this.lanes.reduce((n, l) => Math.max(n, l.edge + 1), 0)];
+      for (const n of paths.nodes) this.nodes.push({ ...n, out: n.out.map((i) => i + lanes) });
+      for (const l of paths.lanes) {
+        Object.assign(l, { id: l.id + lanes, from: l.from + nodes, to: l.to + nodes, edge: l.edge + edges });
+        this.lanes.push(l);
+      }
+    }
     this.terrain = new Terrain(map.terrain, map.pxPerMetre);
     for (const l of this.lanes) {
       const k = `${l.edge}:${l.dir}`;
@@ -716,6 +733,7 @@ export class Traffic {
     // (Bikes in the kerb lane only, more where there's a cycle lane, fewer on the main roads.)
     const weight = (k: VehicleKind) =>
       k === 'lorry' && !major ? 0 : k === 'bike' ? (lane.index > 0 ? 0 : VEHICLES.bike.traffic * (lane.cycleLane ? 3 : 1) * (lane.rank >= 4 ? 0.6 : 1)) : VEHICLES[k].traffic;
+    if (lane.path) kind = 'bike';
     kind ??= bus ? (this.rand() < 0.55 ? 'double' : 'bus') : pick(this.rand, (Object.keys(VEHICLES) as VehicleKind[]).map((k) => [k, weight(k)]))!;
     const v = this.make(kind, 0, 0, 0, lane.level);
     v.route = [lane];

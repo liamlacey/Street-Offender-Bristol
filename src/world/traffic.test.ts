@@ -346,6 +346,20 @@ describe('cyclists', () => {
     expect(bike.x + bike.length / 2).toBeLessThan(358);
   });
 
+  it('ride the cycle paths (only bikes: the cars keep to the roads)', () => {
+    const map = crossroads({ roads: [...crossroads().roads, road('cycleway', 19, [0, 200, 800, 200])] } as Partial<GameMap>);
+    const traffic = quiet(map);
+    const path = traffic.lanes.find((l) => l.path && l.dir === 1)!;
+    expect(path).toBeDefined();
+    // Not joined to the roads: no road leads onto it.
+    expect(traffic.nodes.filter((n) => n.out.some((i) => !traffic.lanes[i].path)).some((n) => n.out.includes(path.id))).toBe(false);
+    const v = traffic.spawn(path, 20);
+    expect(v.kind).toBe('bike');
+    run(traffic, 5, { ...away, x: 400, y: 200 });
+    expect(v.x).toBeGreaterThan(130);
+    expect(Math.abs(v.y - 200)).toBeLessThan(8);
+  });
+
   it('knocked hard enough, come off: off the road, for the scene to put down', () => {
     const traffic = quiet(crossroads());
     const lane = traffic.lanes.find((l) => l.road === 0 && l.dir === 1)!;
