@@ -585,7 +585,7 @@ bounces off.
 `src/scenes/dentArt.ts`) are damaged where they're hit, by how hard: the impulse of the
 hit (it grows with the speed they came together at and the weight of what hit them;
 the same for both), divided by how sturdy the vehicle is (a small car 0.9, a car 1,
-an SUV or van 1.3, a lorry 2.2). Hitting a wall or a post is a hit as hard as you
+an SUV or van 1.3, a lorry 2.2; yours is built tougher, 2). Hitting a wall or a post is a hit as hard as you
 bounce; what gives way (a lamp post, a wall, a bench) is a hit on the front as hard as
 the speed it takes off you. Each hit lands on the side of the body nearest where they
 touched:
