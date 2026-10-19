@@ -1024,10 +1024,12 @@ export class GameScene extends Phaser.Scene {
     collideCarWithStatic(car, this.posts[this.level]);
     for (const v of this.traffic.near(car.x, car.y, 80)) {
       if (v.level !== this.level) continue;
-      const rel = Math.hypot(v.vx - car.vx, v.vy - car.vy);
+      // How fast it's coming at you (not you at it: walking into the side of a car doesn't knock you over).
+      const [dx, dy] = [car.x - v.x, car.y - v.y];
+      const at = (v.vx * dx + v.vy * dy) / (Math.hypot(dx, dy) || 1);
       const bump = collideCarWithBody(car, v, CAR_BUMP, this.contact);
-      // Hit by something coming along: over you go.
-      if (bump > 0 && v.mode === 'drive' && rel > 3 * 8 && this.downFor <= 0) {
+      // Driven into you: over you go.
+      if (bump > 0 && at > 3 * 8 && this.downFor <= 0) {
         this.downFor = 2.5;
         this.audio?.knock();
         this.shake(0.15, 1.5);
