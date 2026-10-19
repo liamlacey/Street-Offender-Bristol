@@ -82,8 +82,8 @@ const BEACON_HEIGHT = 2.6 * 8;
  * slowly, pulling back as you speed up (more and more quickly, the faster you
  * go), to the furthest at FULL_SPEED px/s, as in the old games.
  */
-const VIEW_AT_REST = 300;
-const VIEW_AT_SPEED = 690;
+const VIEW_AT_REST = 270;
+const VIEW_AT_SPEED = 620;
 const FULL_SPEED = 400;
 const PULL_EASE = 1.7;
 /** How long a hop off a speed hump lasts, seconds. */
