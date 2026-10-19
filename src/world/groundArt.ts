@@ -5,6 +5,7 @@
  */
 
 import type { AreaKind } from '../map/osm';
+import { newCanvas } from './canvas';
 import type { Palette } from './ground';
 
 type Ctx = CanvasRenderingContext2D;
@@ -15,9 +16,7 @@ function seeded(seed: number): () => number {
 }
 
 function tile(size: number, draw: (ctx: Ctx, rand: () => number) => void, seed = 7): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
+  const canvas = newCanvas(size, size);
   draw(canvas.getContext('2d')!, seeded(seed));
   return canvas;
 }

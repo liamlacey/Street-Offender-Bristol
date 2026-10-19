@@ -12,6 +12,7 @@
 import type { Area, AreaKind, GameMap, Pts, Road } from '../map/osm';
 import { type Paving, VEHICLE_ROADS, ringArea } from '../map/osm';
 import { drawCarParks, drawHumps, drawLaneFills, drawLanes, drawPaint } from './paint';
+import { newCanvas } from './canvas';
 import { Surface, surfacePaint } from './surface';
 import { type ChunkIndex, lineLength, offsetLine, pointAlong, shadowOffset, subPolyline } from './world';
 
@@ -522,7 +523,7 @@ let paintCanvas: HTMLCanvasElement | null = null;
 /** A clear layer the size of `ctx`'s canvas, drawn on as `ctx` is (the same transform), for the road markings. */
 function paintLayer(ctx: Ctx): Ctx {
   const { width, height } = ctx.canvas;
-  if (!paintCanvas) paintCanvas = document.createElement('canvas');
+  if (!paintCanvas) paintCanvas = newCanvas(width, height);
   if (paintCanvas.width !== width || paintCanvas.height !== height) {
     paintCanvas.width = width;
     paintCanvas.height = height;
@@ -549,8 +550,7 @@ let wearTile: HTMLCanvasElement | null = null;
  */
 function wear(): HTMLCanvasElement {
   if (wearTile) return wearTile;
-  const c = document.createElement('canvas');
-  c.width = c.height = WEAR_TILE;
+  const c = newCanvas(WEAR_TILE, WEAR_TILE);
   const ctx = c.getContext('2d')!;
   let seed = 1234567;
   const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;

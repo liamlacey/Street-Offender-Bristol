@@ -1,40 +1,41 @@
 import * as Phaser from 'phaser';
-import { drawGround, surfacePalette, type Palette } from './ground';
+import type { Palette } from './ground';
 import { artPalette } from './groundArt';
+import { PIECE, BLEED, paintPiece } from './groundPiece';
+import type { FromWorker, ToWorker } from './groundWorker';
 import type { Perspective } from './perspective';
+import { drawGround, surfacePalette } from './ground';
 import { SurfaceGrid } from './surface';
 import type { Terrain } from './terrain';
 import { TerrainSheet } from './TerrainSheet';
 import { CHUNK, type ChunkIndex, type World, chunkKey } from './world';
 
 /** How many pieces of ground are kept drawn at once (each is 1 MB of texture). */
-const KEEP = 40;
+const KEEP = 48;
 /** Draw pieces this far beyond the view, px, so they're ready before they come into it. */
 const MARGIN = 320;
-/** Pieces drawn per frame once the game's running, so drawing never holds a frame up for long. */
+/** Pieces drawn per frame once the game's running, when they're drawn here (with no worker to draw them), so drawing never holds a frame up for long. */
 const PER_FRAME = 1;
-/** Each piece reaches this far into its neighbours, px. */
-const BLEED = 1;
-
-const EMPTY: ChunkIndex = { areas: [], roads: [], lines: [], buildings: [], crossings: [], signals: [], trees: [], paint: [], banks: [] };
-
-/** Where the light comes from, for shading the hills: the top left of the map (north-west), as for the shadows. */
-const SUN = { x: -0.45, y: -0.6, z: 0.66 };
-/** How much the hills' slopes are darkened or lit. */
-const HILL_SHADE = 1.2;
+/** Pieces asked of the worker at once (nearest first). */
+const IN_HAND = 3;
 
 /**
  * The ground, drawn a 512 px square at a time as the view nears it (the
  * whole map would be far too big a texture for a phone), shaded by the lie
  * of the land and laid over the hills, and forgotten again once it's well
- * out of sight.
+ * out of sight. The pieces are painted in a worker (groundWorker.ts), so
+ * painting one never holds a frame up; where there's no worker to be had,
+ * here, a piece a frame.
  */
 export class GroundLayer {
   private readonly pieces = new Map<string, { sheet: TerrainSheet; key: string; used: number }>();
-  private readonly palette: Palette;
-  private readonly scratch: CanvasRenderingContext2D;
+  private palette: Palette | null = null;
   private frame = 0;
   private painted = 0;
+  private worker: Worker | null = null;
+  /** The pieces the worker's painting (by chunk): which request's the latest for each. */
+  private readonly asked = new Map<string, number>();
+  private requests = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -42,12 +43,17 @@ export class GroundLayer {
     private readonly terrain: Terrain,
     private readonly depth: number,
   ) {
-    const probe = document.createElement('canvas').getContext('2d')!;
-    this.palette = artPalette(probe);
-    const scratch = document.createElement('canvas');
-    scratch.width = CHUNK + BLEED * 2;
-    scratch.height = CHUNK + BLEED * 2;
-    this.scratch = scratch.getContext('2d')!;
+    try {
+      if (typeof OffscreenCanvas !== 'undefined' && typeof Worker !== 'undefined' && typeof createImageBitmap !== 'undefined') {
+        this.worker = new Worker(new URL('./groundWorker.ts', import.meta.url), { type: 'module' });
+        this.worker.onmessage = (e: MessageEvent<FromWorker>) => this.painted_(e.data);
+        // If it can't paint after all, the pieces are painted here.
+        this.worker.onerror = () => this.noWorker();
+        this.tell({ type: 'map', map: world.map });
+      }
+    } catch {
+      this.noWorker();
+    }
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroy());
   }
 
@@ -78,7 +84,14 @@ export class GroundLayer {
     }
     // Nearest first.
     missing.sort((a, b) => a[2] - b[2]);
-    for (const [i, j] of all ? missing : missing.slice(0, PER_FRAME)) this.draw(i, j).update(perspective);
+    if (all || !this.worker) {
+      for (const [i, j] of all ? missing : missing.slice(0, PER_FRAME)) this.draw(i, j).update(perspective);
+    } else {
+      for (const [i, j] of missing) {
+        if (this.asked.size >= IN_HAND) break;
+        if (!this.asked.has(chunkKey(i, j))) this.ask(i, j);
+      }
+    }
     for (const piece of this.pieces.values()) piece.sheet.setVisible(piece.used === this.frame);
     if (this.pieces.size > KEEP) {
       const old = [...this.pieces.entries()].sort((a, b) => a[1].used - b[1].used);
@@ -89,70 +102,67 @@ export class GroundLayer {
     }
   }
 
+  /** Paints a piece here and now. */
   private draw(i: number, j: number): TerrainSheet {
+    this.palette ??= artPalette(document.createElement('canvas').getContext('2d')!);
+    return this.place(i, j, (ctx) => paintPiece(ctx, this.world, this.terrain, this.palette!, i, j));
+  }
+
+  /** A piece's picture made into a texture, laid over the hills. */
+  private place(i: number, j: number, paint: (ctx: CanvasRenderingContext2D) => void): TerrainSheet {
     // A new name each time it's painted: a texture made under an old one's name can come out as the old one.
     const key = `ground:${i},${j}:${this.painted++}`;
-    // A pixel more all round, overlapping the next piece, so no seam shows between them.
-    const size = CHUNK + BLEED * 2;
-    const texture = this.scene.textures.createCanvas(key, size, size)!;
-    const ctx = texture.context;
-    const index = this.world.chunks.get(chunkKey(i, j)) ?? EMPTY;
-    const [x0, y0] = [i * CHUNK - BLEED, j * CHUNK - BLEED];
-    drawGround(ctx, this.world.map, index, this.palette, x0, y0, size, size, 1, this.scratch);
-    this.shadeHills(ctx, x0, y0, size);
+    const texture = this.scene.textures.createCanvas(key, PIECE, PIECE)!;
+    paint(texture.context);
     texture.refresh();
-    const sheet = new TerrainSheet(this.scene, key, x0, y0, size, size, this.depth, (x, y) => this.terrain.at(x, y) * this.terrain.px);
-    this.pieces.set(chunkKey(i, j), { sheet, key, used: this.frame });
+    const [x0, y0] = [i * CHUNK - BLEED, j * CHUNK - BLEED];
+    const sheet = new TerrainSheet(this.scene, key, x0, y0, PIECE, PIECE, this.depth, (x, y) => this.terrain.at(x, y) * this.terrain.px);
+    // In place of the one it's painted again over, if it is.
+    const old = this.pieces.get(chunkKey(i, j));
+    if (old) this.forget(chunkKey(i, j));
+    this.pieces.set(chunkKey(i, j), { sheet, key, used: old?.used ?? this.frame });
     return sheet;
   }
 
-  /** Darkens the slopes facing away from the sun and lights those facing it, a couple of metres at a time, blended smooth. */
-  private shadeHills(ctx: CanvasRenderingContext2D, x0: number, y0: number, size: number): void {
-    const step = 2 * this.terrain.px;
-    const n = Math.ceil(size / step) + 1;
-    const shade = this.shadeCanvas(n);
-    const sctx = shade.getContext('2d')!;
-    const image = sctx.createImageData(n, n);
-    const flat = SUN.z;
-    for (let j = 0; j < n; j++) {
-      for (let i = 0; i < n; i++) {
-        const [gx, gy] = this.terrain.slope(x0 + i * step, y0 + j * step);
-        // The ground's normal, against the sun's direction.
-        const len = Math.hypot(gx * HILL_SHADE, gy * HILL_SHADE, 1);
-        const light = (-gx * HILL_SHADE * SUN.x - gy * HILL_SHADE * SUN.y + SUN.z) / len - flat;
-        const k = (j * n + i) * 4;
-        const lit = light > 0;
-        image.data[k] = image.data[k + 1] = image.data[k + 2] = lit ? 255 : 0;
-        image.data[k + 3] = Math.min(90, Math.abs(light) * (lit ? 200 : 320));
-      }
-    }
-    sctx.putImageData(image, 0, 0);
-    ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(shade, 0, 0, n, n, 0, 0, n * step, n * step);
-    ctx.restore();
+  private tell(m: ToWorker): void {
+    this.worker?.postMessage(m);
   }
 
-  private shade: HTMLCanvasElement | null = null;
-
-  private shadeCanvas(n: number): HTMLCanvasElement {
-    if (!this.shade || this.shade.width !== n) {
-      this.shade = document.createElement('canvas');
-      this.shade.width = this.shade.height = n;
-    }
-    return this.shade;
+  /** Asks the worker to paint a piece. */
+  private ask(i: number, j: number): void {
+    const id = ++this.requests;
+    this.asked.set(chunkKey(i, j), id);
+    this.tell({ type: 'paint', i, j, id });
   }
 
-  /** Paints again, straight away, the pieces of ground within `reach` px of (x, y) that are in use: something on them has changed. */
+  /** The worker's painted a piece: in it goes (unless it's been asked for again since, or it's no longer wanted). */
+  private painted_({ id, i, j, picture }: FromWorker): void {
+    const key = chunkKey(i, j);
+    if (this.asked.get(key) !== id) {
+      picture.close();
+      return;
+    }
+    this.asked.delete(key);
+    this.place(i, j, (ctx) => ctx.drawImage(picture, 0, 0)).setVisible(false);
+    picture.close();
+  }
+
+  /** No worker after all: the pieces are painted here. */
+  private noWorker(): void {
+    this.worker?.terminate();
+    this.worker = null;
+    this.asked.clear();
+  }
+
+  /** Paints again the pieces of ground within `reach` px of (x, y) that are in use: something on them has changed (a tree's fallen). */
   repaint(x: number, y: number, reach: number): void {
+    if (this.worker) this.tell({ type: 'trees', trees: this.world.map.trees });
     for (let i = Math.floor((x - reach) / CHUNK); i <= Math.floor((x + reach) / CHUNK); i++) {
       for (let j = Math.floor((y - reach) / CHUNK); j <= Math.floor((y + reach) / CHUNK); j++) {
-        const piece = this.pieces.get(chunkKey(i, j));
-        if (!piece) continue;
-        const used = piece.used;
-        this.forget(chunkKey(i, j));
-        this.draw(i, j);
-        this.pieces.get(chunkKey(i, j))!.used = used;
+        if (!this.pieces.has(chunkKey(i, j))) continue;
+        // The old picture stays till the new one's ready.
+        if (this.worker) this.ask(i, j);
+        else this.draw(i, j);
       }
     }
   }
@@ -166,6 +176,7 @@ export class GroundLayer {
   }
 
   private destroy(): void {
+    this.noWorker();
     for (const key of [...this.pieces.keys()]) this.forget(key);
   }
 }

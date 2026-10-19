@@ -655,7 +655,8 @@ they're in the way of traffic and people too, when there are some.
 In the game (`src/world/`): `world.ts` (what you hit, what's loose, an index of
 what's where), `ground.ts` and `groundArt.ts` (painting the ground in 512 px
 pieces, and the surface grid that says what's underfoot), `GroundLayer.ts`
-(painting pieces as they come into view, shading the hills), `terrain.ts`,
+(painting pieces as they come into view, shading the hills: in a worker,
+`groundWorker.ts` with `groundPiece.ts`, so painting never holds up a frame), `terrain.ts`,
 `perspective.ts` and `TerrainSheet.ts` (the hills, and the old games'
 perspective: higher than the car is nearer the camera, so drawn pushed out from
 the middle of the view), `buildingLook.ts` and `Buildings.ts` (the buildings),
