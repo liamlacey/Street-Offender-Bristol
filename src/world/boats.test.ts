@@ -115,4 +115,31 @@ describe('boats', () => {
     for (let t = 0; t < 30; t += 1 / 30) boats.update(1 / 30);
     expect(boat.mode).toBe('adrift');
   });
+
+  it('stays somewhere: boats knocked about at random (some set off part way along their way) never lose where they are', () => {
+    for (const seed of [11, 14]) {
+      const rand = seeded(seed);
+      const boats = new Boats(map, { rand });
+      const errors: unknown[] = [];
+      const log = console.error;
+      console.error = (...e: unknown[]) => errors.push(e);
+      try {
+        for (let t = 0; t < 60; t += 1 / 30) {
+          if (rand() < 1 / 15) {
+            const moored = boats.boats.filter((b) => b.mode !== 'adrift');
+            const b = moored[Math.floor(rand() * moored.length)];
+            const a = rand() * Math.PI * 2;
+            [b.vx, b.vy, b.spin] = [Math.cos(a) * 40, Math.sin(a) * 40, rand() - 0.5];
+            boats.knock(b, 300);
+          }
+          boats.update(1 / 30);
+          for (const b of boats.boats) expect([b.x, b.y, b.angle, b.vx, b.vy].every(Number.isFinite)).toBe(true);
+        }
+      } finally {
+        console.error = log;
+      }
+      // Nothing had to be rescued.
+      expect(errors).toEqual([]);
+    }
+  }, 20000);
 });

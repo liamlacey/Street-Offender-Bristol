@@ -405,9 +405,15 @@ export function onCurve(c: number[], t: number): [number, number, number] {
   return [x, y, Math.atan2(dy, dx)];
 }
 
+/** Whether it's somewhere (nothing's gone wrong with where it is, or how it's moving). */
+function finite(b: Boat): boolean {
+  return Number.isFinite(b.x) && Number.isFinite(b.y) && Number.isFinite(b.angle) && Number.isFinite(b.vx) && Number.isFinite(b.vy) && Number.isFinite(b.spin);
+}
+
 /** The difference between two angles, -π to π. */
 function turn(a: number, b: number): number {
   let d = b - a;
+  if (!Number.isFinite(d)) return 0;
   while (d > Math.PI) d -= Math.PI * 2;
   while (d < -Math.PI) d += Math.PI * 2;
   return d;
@@ -541,11 +547,20 @@ export class Boats {
       boat.path = way;
       boat.next = 1;
       if (already > 0) {
-        // Put out along the way already.
-        const at = Math.max(1, Math.min(way.length / 2 - 2, Math.floor((way.length / 2) * already)));
-        [boat.x, boat.y] = [way[at * 2], way[at * 2 + 1]];
-        boat.angle = Math.atan2(way[at * 2 + 3] - boat.y, way[at * 2 + 2] - boat.x);
-        boat.next = at + 1;
+        // Put out along the way already (that far along it), heading along it.
+        let left = way.reduce((sum, _, i) => (i % 2 || i < 2 ? sum : sum + Math.hypot(way[i] - way[i - 2], way[i + 1] - way[i - 1])), 0) * already;
+        let k = 1;
+        for (; k < way.length / 2 - 1; k++) {
+          const seg = Math.hypot(way[k * 2] - way[k * 2 - 2], way[k * 2 + 1] - way[k * 2 - 1]);
+          if (left < seg) break;
+          left -= seg;
+        }
+        const [ax, ay, bx, by] = [way[k * 2 - 2], way[k * 2 - 1], way[k * 2], way[k * 2 + 1]];
+        const seg = Math.hypot(bx - ax, by - ay) || 1;
+        const f = Math.min(1, left / seg);
+        [boat.x, boat.y] = [ax + (bx - ax) * f, ay + (by - ay) * f];
+        boat.angle = Math.atan2(by - ay, bx - ax);
+        boat.next = k;
         boat.mode = 'underway';
         boat.speed = boat.cruise;
       } else {
@@ -595,18 +610,17 @@ export class Boats {
     }
     for (const boat of this.boats) {
       const [x, y, angle] = [boat.x, boat.y, boat.angle];
-      if (boat.mode === 'adrift') {
-        this.drift(boat, dt);
-        if (![boat.x, boat.y, boat.vx, boat.vy, boat.angle, boat.spin].every(Number.isFinite)) this.rescue(boat);
-        continue;
+      if (boat.mode === 'adrift') this.drift(boat, dt);
+      else {
+        if (boat.ferry && boat.mode === 'moored') this.ferryWaits(boat, dt);
+        else if (boat.mode === 'leaving' || boat.mode === 'arriving') this.curving(boat, dt);
+        else if (boat.mode === 'underway') this.steer(boat, dt);
+        // How it's moving, for what it hits (or what hits it).
+        boat.vx = (boat.x - x) / dt;
+        boat.vy = (boat.y - y) / dt;
+        boat.spin = turn(angle, boat.angle) / dt;
       }
-      if (boat.ferry && boat.mode === 'moored') this.ferryWaits(boat, dt);
-      else if (boat.mode === 'leaving' || boat.mode === 'arriving') this.curving(boat, dt);
-      else if (boat.mode === 'underway') this.steer(boat, dt);
-      // How it's moving, for what it hits (or what hits it).
-      boat.vx = (boat.x - x) / dt;
-      boat.vy = (boat.y - y) / dt;
-      boat.spin = turn(angle, boat.angle) / dt;
+      if (!finite(boat)) this.rescue(boat);
     }
     this.bump();
   }
@@ -617,6 +631,8 @@ export class Boats {
     [boat.x, boat.y, boat.angle] = this.bound(boat);
     [boat.vx, boat.vy, boat.spin, boat.speed] = [0, 0, 0, 0];
     boat.mode = 'moored';
+    boat.curve = [];
+    boat.path = [];
     if (boat.ferry) boat.ferry.dwell = DWELL;
   }
 
@@ -735,9 +751,9 @@ export class Boats {
   /** Boats adrift bump into the others (and knock them adrift too, hard enough). */
   private bump(): void {
     for (const a of this.boats) {
-      if (a.mode !== 'adrift') continue;
+      if (a.mode !== 'adrift' || !finite(a)) continue;
       for (const b of this.boats) {
-        if (a === b || (b.mode === 'adrift' && b.id < a.id)) continue;
+        if (a === b || (b.mode === 'adrift' && b.id < a.id) || !finite(b)) continue;
         const reach = (a.length + b.length) / 2;
         if (Math.abs(a.x - b.x) > reach || Math.abs(a.y - b.y) > reach) continue;
         const at = { x: 0, y: 0 };
