@@ -157,13 +157,31 @@ function distanceToLine(x: number, y: number, pts: Pts): number {
   return best;
 }
 
+const boxes = new WeakMap<Road, [number, number, number, number]>();
+
+/** A road's line's bounding box (worked out once). */
+function boxOf(road: Road): [number, number, number, number] {
+  let box = boxes.get(road);
+  if (!box) {
+    box = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < road.pts.length; i += 2) box = [Math.min(box[0], road.pts[i]), Math.min(box[1], road.pts[i + 1]), Math.max(box[2], road.pts[i]), Math.max(box[3], road.pts[i + 1])];
+    boxes.set(road, box);
+  }
+  return box;
+}
+
 export function openings(ax: number, ay: number, bx: number, by: number, passages: Road[]): [number, number][] {
   const out: [number, number][] = [];
   const wx = bx - ax;
   const wy = by - ay;
   const len = Math.hypot(wx, wy);
   if (!len) return out;
+  const [x0, y0, x1, y1] = [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)];
   for (const road of passages) {
+    // (Nowhere near this wall: nothing to open in it. A big map has a great many walls.)
+    const [rx0, ry0, rx1, ry1] = boxOf(road);
+    const pad = Math.max(road.width, ARCHWAY) * 3 + ARCADE_OPEN + len * 0.2;
+    if (rx0 - pad > x1 || rx1 + pad < x0 || ry0 - pad > y1 || ry1 + pad < y0) continue;
     if (road.arcade) {
       // An arcade or colonnade runs under a building's front, open along it: no wall wherever the wall's beside it.
       const reach = road.width / 2 + ARCADE_OPEN;
@@ -225,6 +243,28 @@ export function buildWorld(map: GameMap): World {
   const decks = new Decks(map.roads, () => 0);
   const onDeck = (x: number, y: number) => decks.over(x, y) !== null;
   const passages = map.roads.filter((r) => r.passage);
+  // (The passages by where they are, in squares: each wall looks only at those near it.)
+  const CELL = 256;
+  const passageGrid = new Map<string, Road[]>();
+  for (const r of passages) {
+    const [x0, y0, x1, y1] = boxOf(r);
+    const pad = Math.max(r.width, ARCHWAY) * 3 + ARCADE_OPEN;
+    for (let cx = Math.floor((x0 - pad) / CELL); cx <= Math.floor((x1 + pad) / CELL); cx++) {
+      for (let cy = Math.floor((y0 - pad) / CELL); cy <= Math.floor((y1 + pad) / CELL); cy++) {
+        const k = `${cx},${cy}`;
+        const list = passageGrid.get(k);
+        if (list) list.push(r);
+        else passageGrid.set(k, [r]);
+      }
+    }
+  }
+  const passagesNear = (w: Segment): Road[] => {
+    const out = new Set<Road>();
+    for (let cx = Math.floor(Math.min(w.ax, w.bx) / CELL); cx <= Math.floor(Math.max(w.ax, w.bx) / CELL); cx++) {
+      for (let cy = Math.floor(Math.min(w.ay, w.by) / CELL); cy <= Math.floor(Math.max(w.ay, w.by) / CELL); cy++) for (const r of passageGrid.get(`${cx},${cy}`) ?? []) out.add(r);
+    }
+    return [...out];
+  };
 
   const ground: Wall[] = [];
   const deck: Wall[] = [];
@@ -233,7 +273,8 @@ export function buildWorld(map: GameMap): World {
     for (let i = 0; i + (closed ? 1 : 3) < n; i += 2) {
       const j = (i + 2) % n;
       const s: Wall = { ax: ring[i], ay: ring[i + 1], bx: ring[j], by: ring[j + 1], r, level, ...(kind ? { kind } : {}), ...(height ? { height } : {}) };
-      to.push(...(cut ? cutWall(s, passages).map((piece) => ({ ...piece, level })) : [s]));
+      const near = cut ? passagesNear(s) : [];
+      to.push(...(near.length ? cutWall(s, near).map((piece) => ({ ...piece, level })) : [s]));
     }
   };
   // Buildings, with their archways open, stand in the way on both levels.

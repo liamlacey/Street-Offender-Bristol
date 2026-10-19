@@ -219,6 +219,8 @@ export interface Lane extends Path {
   cycleLane: boolean;
   /** Along a cycle path (not a road): for bikes only. */
   path?: boolean;
+  /** Its bounding box (x0, y0, x1, y1), px. */
+  box?: [number, number, number, number];
 }
 
 interface Node {
@@ -465,12 +467,24 @@ export function buildLanes(map: GameMap, paths = false, joins: Join[] = []): { l
   });
 
   if (paths) return { lanes, nodes };
+  // (Each lane's bounding box, and its road's half width: only the lanes near a point are looked along. A big map has thousands.)
+  const near = (lane: Lane, x: number, y: number) => {
+    const b = lane.box!;
+    const r = map.roads[lane.road].width / 2 + M;
+    return x > b[0] - r && x < b[2] + r && y > b[1] - r && y < b[3] + r;
+  };
+  for (const lane of lanes) {
+    let b: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < lane.pts.length; i += 2) b = [Math.min(b[0], lane.pts[i]), Math.min(b[1], lane.pts[i + 1]), Math.max(b[2], lane.pts[i]), Math.max(b[3], lane.pts[i + 1])];
+    lane.box = b;
+  }
   // The traffic lights' stop lines, on the lanes coming to them.
   map.signals.forEach((sig, signal) => {
     const [x0, y0, x1, y1] = sig.stop;
     const [mx, my] = [(x0 + x1) / 2, (y0 + y1) / 2];
     const [ux, uy] = [Math.cos(sig.angle), Math.sin(sig.angle)];
     for (const lane of lanes) {
+      if (!near(lane, mx, my)) continue;
       const { s, d } = nearestOn(lane, mx, my);
       if (d > map.roads[lane.road].width / 2 + M) continue;
       const [, , tx, ty] = pathAt(lane, s);
@@ -482,6 +496,7 @@ export function buildLanes(map: GameMap, paths = false, joins: Join[] = []): { l
   for (const m of (map.paint ?? []).filter((p) => p.kind === 'asl')) {
     const [ux, uy] = [Math.cos(m.angle), Math.sin(m.angle)];
     for (const lane of lanes) {
+      if (!near(lane, m.x, m.y)) continue;
       const { s, d } = nearestOn(lane, m.x, m.y);
       if (d > map.roads[lane.road].width / 2 + M) continue;
       const [, , tx, ty] = pathAt(lane, s);
@@ -493,10 +508,13 @@ export function buildLanes(map: GameMap, paths = false, joins: Join[] = []): { l
   for (const lane of lanes) lane.stops.sort((a, b) => a.s - b.s);
   // Giving way: at the end of a minor road (to a more major one), or where it's painted.
   const giveWays = (map.paint ?? []).filter((m) => m.kind === 'giveway');
+  // (The lanes at each junction, from it or to it.)
+  const at = new Map<number, Lane[]>();
+  for (const l of lanes) for (const n of [l.from, l.to]) at.set(n, [...(at.get(n) ?? []), l]);
   for (const lane of lanes) {
     const end = nodes[lane.to];
     if (end.degree >= 3 && !lane.stops.some((st) => st.s > lane.length - 25 * M)) {
-      const others = lanes.filter((l) => (l.from === lane.to || l.to === lane.to) && l.edge !== lane.edge);
+      const others = (at.get(lane.to) ?? []).filter((l) => l.edge !== lane.edge);
       if (others.some((l) => l.rank > lane.rank)) lane.giveWay = true;
     }
     const [ex, ey] = [lane.pts[lane.pts.length - 2], lane.pts[lane.pts.length - 1]];
@@ -530,7 +548,14 @@ const SNAP = 12 * M;
 /** Where the cycle paths join the roads (on the same level). */
 export function cycleJoins(map: GameMap): Join[] {
   const joins: Join[] = [];
-  const roads = map.roads.map((r, i) => ({ r, i })).filter(({ r }) => DRIVEN.has(r.kind) && r.pts.length >= 4);
+  const roads = map.roads
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => DRIVEN.has(r.kind) && r.pts.length >= 4)
+    .map(({ r, i }) => {
+      let box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+      for (let k = 0; k < r.pts.length; k += 2) box = [Math.min(box[0], r.pts[k]), Math.min(box[1], r.pts[k + 1]), Math.max(box[2], r.pts[k]), Math.max(box[3], r.pts[k + 1])];
+      return { r, i, box };
+    });
   const at = new Map<string, { road: number; seg: number; t: number }>();
   const count = new Map<string, number>();
   for (const { r, i } of roads) {
@@ -560,8 +585,10 @@ export function cycleJoins(map: GameMap): Join[] {
       // A path's end by a road: joined to the nearest point on it.
       let best: Join | null = null;
       let bestD = Infinity;
-      for (const { r, i } of roads) {
+      for (const { r, i, box } of roads) {
         if (!!r.bridge !== !!c.bridge) continue;
+        const reach = r.width / 2 + 4 * M;
+        if (cx < box[0] - reach || cx > box[2] + reach || cy < box[1] - reach || cy > box[3] + reach) continue;
         for (let s = 0; s + 3 < r.pts.length; s += 2) {
           const [ax, ay, bx, by] = [r.pts[s], r.pts[s + 1], r.pts[s + 2], r.pts[s + 3]];
           const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
@@ -753,20 +780,20 @@ export class Traffic {
         Object.assign(l, { id: l.id + lanes, from: l.from + nodes, to: l.to + nodes, edge: l.edge + edges });
         this.lanes.push(l);
       }
-      const nodeAt = (x: number, y: number, from: number, to: number) => {
-        for (let n = from; n < to; n++) if (this.nodes[n].x === x && this.nodes[n].y === y) return n;
-        return -1;
-      };
+      const [roadAt, pathNodeAt] = [new Map<string, number>(), new Map<string, number>()];
+      this.nodes.forEach((n, i) => (i < nodes ? roadAt : pathNodeAt).set(`${n.x},${n.y}`, i));
+      const linked = new Set<number>();
       for (const j of joins) {
-        const r = nodeAt(j.px, j.py, 0, nodes);
-        const c = nodeAt(j.cx, j.cy, nodes, this.nodes.length);
+        const r = roadAt.get(`${j.px},${j.py}`) ?? -1;
+        const c = pathNodeAt.get(`${j.cx},${j.cy}`) ?? -1;
         if (r < 0 || c < 0) continue;
         // Off the road onto the path, and off the path onto the road (giving way to the traffic).
         const [fromRoad, fromPath] = [this.nodes[r].out.slice(), this.nodes[c].out.filter((i) => this.lanes[i].path)];
         this.nodes[r].out.push(...fromPath.filter((i) => !this.nodes[r].out.includes(i)));
         this.nodes[c].out.push(...fromRoad.filter((i) => !this.nodes[c].out.includes(i)));
-        for (const l of this.lanes) if (l.path && l.to === c) l.giveWay = true;
+        linked.add(c);
       }
+      for (const l of this.lanes) if (l.path && linked.has(l.to)) l.giveWay = true;
     }
     this.terrain = new Terrain(map.terrain, map.pxPerMetre);
     for (const l of this.lanes) {

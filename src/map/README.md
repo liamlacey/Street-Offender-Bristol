@@ -32,7 +32,20 @@ downloaded again unless asked for (`npm run map -- --refresh <area>`).
 
 Each area's LIDAR alignment (`lidarShift`, metres east and south) is worked out
 the first time it's built (see "Lining up" below) and then kept in `areas.json`.
-The `cathedral` area's is −0.5 m east, 0 m south; `kingsdown`'s (the next, to its north) −0.5 m east, 0.5 m south.
+The areas make a 3 by 3 grid, each about 970 m by 945 m, with `cathedral` in the
+middle. Their shifts (east, south):
+
+| Area | Where | Shift |
+| --- | --- | --- |
+| `cathedral` | middle | −0.5 m, 0 m |
+| `kingsdown` | north | −0.5 m, 0.5 m |
+| `stpauls` | north-east | −0.5 m, 1 m |
+| `broadmead` | east | 0 m, 1 m |
+| `redcliffe` | south-east | 0 m, 0.5 m |
+| `southville` | south | 1 m, 1 m |
+| `ashton` | south-west | 0.5 m, 0.5 m |
+| `hotwells` | west | 1 m, 0 m |
+| `clifton` | north-west | 1 m, 1 m |
 
 ## Growing the map
 

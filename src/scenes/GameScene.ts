@@ -129,7 +129,7 @@ export class GameScene extends Phaser.Scene {
   private terrain!: Terrain;
   private readonly perspective = new Perspective();
   /** The street furniture that never moves, and the height of the ground under each, px. */
-  private props: { x: number; y: number; z: number; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
+  private props: Shown[] = [];
   /** What's up high on the fixed things: the cranes' jibs. */
   private raised: { x: number; y: number; z: number; image: Phaser.GameObjects.Image; prop: number; gone?: boolean }[] = [];
   /** What you hit on each level: the ground's, and the bridges' decks'. */
@@ -152,15 +152,18 @@ export class GameScene extends Phaser.Scene {
     y: number;
     z: number;
     h: number;
-    image: Phaser.GameObjects.Image;
     gone?: boolean;
     foot: { x: number; y: number; r: number };
-    trunk: Phaser.GameObjects.Image;
-    bole: Phaser.GameObjects.Image;
+    /** Its pictures, only while it's in or near the view (and its crown's picture, and how big): a big map has many thousands. */
+    art: { image: Phaser.GameObjects.Image; trunk: Phaser.GameObjects.Image; bole: Phaser.GameObjects.Image } | null;
+    tex: string;
+    scale: number;
     alpha: number;
-    /** Its crown's turn as it stands (it sways about it). */
+    /** Its crown's turn as it stands (it sways about it), or as it lies, fallen. */
     turn: number;
   }[] = [];
+  /** Trees' pictures not in use, to use again. */
+  private readonly treeArtPool: { image: Phaser.GameObjects.Image; trunk: Phaser.GameObjects.Image; bole: Phaser.GameObjects.Image }[] = [];
   /** Each traffic light's head, up its pole, with what it's showing. */
   private signalHeads: { x: number; y: number; z: number; controller: number; group: number; light: Light; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
   /** The Belisha beacons' globes, flashing. */
@@ -272,13 +275,16 @@ export class GameScene extends Phaser.Scene {
           this.ground.repaint(t.x, t.y, map.trees[index * 4 + 3] + 64);
         }
         Object.assign(t, { x, y, h });
-        if (angle !== undefined) t.image.setRotation(angle);
+        if (angle !== undefined) {
+          t.turn = angle;
+          t.art?.image.setRotation(angle);
+        }
       },
       treeHeight: (index) => this.trees[index].h,
-      treeRadius: (index) => this.trees[index].image.displayWidth / 2,
+      treeRadius: (index) => this.trees[index].foot.r,
       crownGone: (index) => {
         this.trees[index].gone = true;
-        this.trees[index].image.setVisible(false);
+        this.trees[index].art?.image.setVisible(false);
       },
       audio: () => this.audio,
       weight: () => VEHICLES[this.ride.kind].mass,
@@ -370,16 +376,18 @@ export class GameScene extends Phaser.Scene {
       // Those on a bridge stand on its deck, and are drawn over it.
       const deck = p.level === 1 ? this.decks.over(p.x, p.y) : null;
       const z = deck ? this.decks.height(deck.deck, deck.along) : this.groundAt(p.x, p.y);
-      // (A bike rack with the bikes locked to it.)
-      const image = this.add
-        .image(p.x, p.y, p.kind === 'bikes' ? `${TEX.prop('bikes')}-${racked(p.x, p.y)}` : TEX.prop(p.kind))
-        .setScale(1 / ART_SCALE)
-        .setRotation(p.angle ?? 0)
-        .setDepth(deck ? DEPTH.onDeck : DEPTH.props)
-        .setVisible(false);
-      // A ladder runs from the quay's edge down into the water.
-      if (p.kind === 'ladder') image.setOrigin(0, 0.5);
-      this.props.push({ x: p.x, y: p.y, z, image });
+      // Its picture's made as it comes into view (a big map has thousands of them). (A bike rack with the bikes locked to it.)
+      const make = () => {
+        const image = this.add
+          .image(p.x, p.y, p.kind === 'bikes' ? `${TEX.prop('bikes')}-${racked(p.x, p.y)}` : TEX.prop(p.kind))
+          .setScale(1 / ART_SCALE)
+          .setRotation(p.angle ?? 0)
+          .setDepth(deck ? DEPTH.onDeck : DEPTH.props);
+        // A ladder runs from the quay's edge down into the water.
+        if (p.kind === 'ladder') image.setOrigin(0, 0.5);
+        return image;
+      };
+      this.props.push({ x: p.x, y: p.y, z, image: null, make });
       if (p.kind === 'crane' && p.height) {
         // Its jib, up high, reaching out over the water from where it's pinned.
         const jib = this.add
@@ -456,17 +464,36 @@ export class GameScene extends Phaser.Scene {
     const known = this.world.map.treeSpecies ?? [];
     for (let k = 0; k + 1 < known.length; k += 2) species.set(known[k], TREE_SPECIES[known[k + 1]]);
     for (let i = 0; i < t.length; i += 4) {
-      const image = this.add
-        .image(t[i], t[i + 1], species.has(i / 4) ? TEX.species(species.get(i / 4)!) : TEX.tree((i / 4) % TREE_KINDS))
-        .setScale(t[i + 2] / TREE_RADIUS / ART_SCALE)
-        .setRotation(((i * 1.7) % 6.28) - 3.14)
-        .setDepth(DEPTH.trees)
-        .setVisible(false);
-      // Its trunk, up from its foot into the crown, under it.
-      const trunk = this.add.image(t[i], t[i + 1], TEX.trunk).setDepth(DEPTH.trees - 0.02).setVisible(false);
-      const bole = this.add.image(t[i], t[i + 1], TEX.bole).setScale(1 / ART_SCALE).setDepth(DEPTH.trees - 0.01).setVisible(false);
-      this.trees.push({ x: t[i], y: t[i + 1], z: this.groundAt(t[i], t[i + 1]), h: t[i + 3], image, foot: { x: t[i], y: t[i + 1], r: t[i + 2] }, trunk, bole, alpha: 1, turn: image.rotation });
+      this.trees.push({
+        x: t[i],
+        y: t[i + 1],
+        z: this.groundAt(t[i], t[i + 1]),
+        h: t[i + 3],
+        foot: { x: t[i], y: t[i + 1], r: t[i + 2] },
+        art: null,
+        tex: species.has(i / 4) ? TEX.species(species.get(i / 4)!) : TEX.tree((i / 4) % TREE_KINDS),
+        scale: t[i + 2] / TREE_RADIUS / ART_SCALE,
+        alpha: 1,
+        turn: ((i * 1.7) % 6.28) - 3.14,
+      });
     }
+  }
+
+  /** A tree's pictures, now it's in view: its crown, and its trunk up from its foot into the crown, under it. */
+  private treeArt(t: GameScene['trees'][number]): NonNullable<GameScene['trees'][number]['art']> {
+    if (t.art) return t.art;
+    const art =
+      this.treeArtPool.pop() ??
+      {
+        image: this.add.image(0, 0, t.tex).setDepth(DEPTH.trees),
+        trunk: this.add.image(0, 0, TEX.trunk).setDepth(DEPTH.trees - 0.02),
+        bole: this.add.image(0, 0, TEX.bole).setScale(1 / ART_SCALE).setDepth(DEPTH.trees - 0.01),
+      };
+    art.image.setTexture(t.tex).setScale(t.scale).setRotation(t.turn).setAlpha(t.alpha).setVisible(false);
+    art.trunk.setVisible(false);
+    art.bole.setVisible(false);
+    t.art = art;
+    return art;
   }
 
   update(_time: number, deltaMs: number): void {
@@ -1293,7 +1320,7 @@ export class GameScene extends Phaser.Scene {
         break;
       default:
         this.props[post.index].gone = true;
-        this.props[post.index].image.setVisible(false);
+        this.props[post.index].image?.setVisible(false);
         // A crane's jib comes down with it.
         for (const r of this.raised) if (r.prop === post.index) r.gone = true;
     }
@@ -1326,26 +1353,38 @@ export class GameScene extends Phaser.Scene {
     for (const i of this.treeGrid.around(view, pad + 400, this.shownTrees)) {
       const t = this.trees[i];
       const show = !t.gone && t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
-      if (t.image.visible !== show) t.image.setVisible(show);
       // Its trunk, while it stands (once it's down, it's the stump and the trunk lying there instead).
       const standing = crowns[i * 4 + 2] > 0;
       const trunk = standing && t.foot.x > view.left - pad && t.foot.x < view.right + pad && t.foot.y > view.top - pad && t.foot.y < view.bottom + pad;
-      if (t.trunk.visible !== trunk) {
-        t.trunk.setVisible(trunk);
-        t.bole.setVisible(trunk);
+      if (!show && !trunk) {
+        // Out of sight: its pictures go back for another tree.
+        if (t.art) {
+          t.art.image.setVisible(false);
+          t.art.trunk.setVisible(false);
+          t.art.bole.setVisible(false);
+          this.treeArtPool.push(t.art);
+          t.art = null;
+        }
+        continue;
       }
-      if (show || trunk) now.add(i);
+      now.add(i);
+      const { image, trunk: stem, bole } = this.treeArt(t);
+      if (image.visible !== show) image.setVisible(show);
+      if (stem.visible !== trunk) {
+        stem.setVisible(trunk);
+        bole.setVisible(trunk);
+      }
       if (trunk) {
         // From its foot up to where it goes into the crown, leaning out from the middle of the view as the rest does.
         const s0 = p.lift(t.z);
         const s1 = p.lift(t.z + t.h * 0.6);
         const [ax, ay, bx, by] = [p.x(t.foot.x, s0), p.y(t.foot.y, s0), p.x(t.foot.x, s1), p.y(t.foot.y, s1)];
         const width = Math.min(7, 3 + t.h / 40);
-        t.trunk
+        stem
           .setPosition((ax + bx) / 2, (ay + by) / 2)
           .setRotation(Math.atan2(by - ay, bx - ax))
           .setDisplaySize(Math.max(0.5, Math.hypot(bx - ax, by - ay)), width);
-        t.bole.setPosition(bx, by).setDisplaySize(width * 1.3, width * 1.3);
+        bole.setPosition(bx, by).setDisplaySize(width * 1.3, width * 1.3);
       }
       if (!show) continue;
       // Under its crown (where it stands), the crown's see-through, so you can see the car and the trunk.
@@ -1353,7 +1392,7 @@ export class GameScene extends Phaser.Scene {
       const target = under ? 0.3 : 1;
       if (t.alpha !== target) {
         t.alpha += Math.sign(target - t.alpha) * Math.min(Math.abs(target - t.alpha), dt * 4);
-        t.image.setAlpha(t.alpha);
+        image.setAlpha(t.alpha);
       }
       // The crown's a little below the treetop.
       const s = p.lift(t.z + t.h * 0.85);
@@ -1367,9 +1406,9 @@ export class GameScene extends Phaser.Scene {
         const sway = Math.sin(time * slow * 2.1 + phase) * 0.6 + Math.sin(time * slow * 3.7 + phase * 1.7) * 0.4;
         x += WIND_X * sway * gust * (0.6 + t.h / 120);
         y += WIND_Y * sway * gust * (0.6 + t.h / 120);
-        t.image.setRotation(t.turn + sway * gust * 0.025);
+        image.setRotation(t.turn + sway * gust * 0.025);
       }
-      t.image.setPosition(x, y);
+      image.setPosition(x, y);
     }
     this.shownTrees = now;
   }
@@ -1382,11 +1421,18 @@ export class GameScene extends Phaser.Scene {
     for (const [list, grid, shown, reach] of [
       [this.props, this.propGrid, this.shownProps, pad],
       [this.raised, this.raisedGrid, this.shownRaised, pad + 600],
-    ] as [{ x: number; y: number; z: number; image: Phaser.GameObjects.Image; gone?: boolean }[], Grid, Set<number>, number][]) {
+    ] as [Shown[], Grid, Set<number>, number][]) {
       const now = new Set<number>();
       for (const i of grid.around(view, reach, shown)) {
         const t = list[i];
         const show = !t.gone && t.x > view.left - pad && t.x < view.right + pad && t.y > view.top - pad && t.y < view.bottom + pad;
+        // Made as it comes into view, and let go once it's out of it (if it can be made again).
+        if (show && !t.image && t.make) t.image = t.make();
+        if (!show && t.image && t.make) {
+          t.image.destroy();
+          t.image = null;
+        }
+        if (!t.image) continue;
         if (t.image.visible !== show) t.image.setVisible(show);
         if (!show) continue;
         now.add(i);
@@ -1524,4 +1570,14 @@ class Grid {
     }
     return out;
   }
+}
+
+/** Something fixed, drawn when it's in view: its picture (made as it comes into view, by `make`, if it has that), how high it stands. */
+interface Shown {
+  x: number;
+  y: number;
+  z: number;
+  image: Phaser.GameObjects.Image | null;
+  make?: () => Phaser.GameObjects.Image;
+  gone?: boolean;
 }

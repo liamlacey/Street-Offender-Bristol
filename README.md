@@ -3,10 +3,11 @@
 A top-down, GTA 1-style game set in Bristol, for the browser (and made to play on a
 phone). Built with [Phaser](https://phaser.io), TypeScript and Vite.
 
-Right now it's a car to drive round the middle of Bristol: about a kilometre across
-and two from north to south, from Cotham, Kingsdown and the University of Bristol
-down St Michael's Hill and Park Street, past the cathedral, to the Floating Harbour,
-Queen Square and Wapping Wharf, built from real map data, hills and all. Drive on the
+Right now it's a car to drive round the middle of Bristol: about three kilometres
+square, from Clifton, Cotham and Stokes Croft in the north, through the University,
+Park Street, the cathedral, Broadmead and Old Market, across the Floating Harbour to
+Hotwells, Spike Island, Redcliffe and Temple Meads, and down to Ashton Gate,
+Southville and Bedminster in the south, built from real map data, hills and all. Drive on the
 roads, pavements and grass (up Park Street's hill slower, down it faster), crash into buildings, walls, lamp posts and trees, knock
 benches and bins flying, and drive into the harbour if you like (the car sinks, and
 you're put back on the road).

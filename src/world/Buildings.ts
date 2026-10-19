@@ -4,9 +4,15 @@ import { pointInRing, ridgeAxis } from '../map/osm';
 import type { Perspective } from './perspective';
 import type { Terrain } from './terrain';
 import type { World } from './world';
+import type { Building } from '../map/osm';
 
 /** How far beyond the view a building is still drawn (its walls lean in from out there), px. */
 const PAD = 60;
+/** How far a tall building's roof can lean out past its foot, at most, px: they're looked for this much further round the view. */
+const LEAN = 400;
+/** The squares buildings are found in, px. */
+const CELL = 512;
+const cellKey = (cx: number, cy: number) => (cx + 1024) * 4096 + (cy + 1024);
 
 /**
  * Draws the buildings the old top-down way: each roof is lifted towards
@@ -18,29 +24,54 @@ const PAD = 60;
  * frame, only those near the view.
  */
 export class Buildings {
-  /** Each building's look, and the height of the ground it stands on, px. */
-  private readonly looks: (BuildingLook & { ground: number })[];
+  /**
+   * Each building, in the order they're drawn (those whose roofs are highest
+   * last, over the rest): its box, the height of the ground it stands on, px,
+   * its solar panels; and its look, worked out as it first comes near the
+   * view (a big map has many thousands), and let go once it's far off.
+   */
+  private readonly all: { b: Building; x0: number; y0: number; x1: number; y1: number; ground: number; panels: number[][]; look: (BuildingLook & { ground: number }) | null }[];
+  /** Which are in each square of the map (by where their boxes reach), in drawing order. */
+  private readonly cells = new Map<number, number[]>();
+  private readonly looked = new Set<number>();
+  private readonly earcut = (data: number[], holes?: number[]) => Phaser.Geom.Polygon.Earcut(data, holes);
   private readonly g: Phaser.GameObjects.Graphics;
 
   constructor(scene: Phaser.Scene, world: World, terrain: Terrain, depth: number) {
-    const earcut = (data: number[], holes?: number[]) => Phaser.Geom.Polygon.Earcut(data, holes);
-    this.looks = world.map.buildings
+    this.all = world.map.buildings
       .filter((b) => b.drawn)
       .map((b) => {
         // Its lowest corner, so it never floats above the ground on a slope.
         let ground = Infinity;
+        let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
         const ring = b.rings[0];
-        for (let i = 0; i < ring.length; i += 2) ground = Math.min(ground, terrain.at(ring[i], ring[i + 1]) * terrain.px);
-        return { ...buildingLook(b, earcut), ground };
+        for (let i = 0; i < ring.length; i += 2) {
+          ground = Math.min(ground, terrain.at(ring[i], ring[i + 1]) * terrain.px);
+          [x0, y0, x1, y1] = [Math.min(x0, ring[i]), Math.min(y0, ring[i + 1]), Math.max(x1, ring[i]), Math.max(y1, ring[i + 1])];
+        }
+        return { b, x0, y0, x1, y1, ground, panels: [] as number[][], look: null };
       })
-      // Those whose roofs are highest drawn last, over the rest.
       .sort((a, b) => a.ground + a.b.top - (b.ground + b.b.top));
+    this.all.forEach((e, i) => {
+      for (let cx = Math.floor(e.x0 / CELL); cx <= Math.floor(e.x1 / CELL); cx++) {
+        for (let cy = Math.floor(e.y0 / CELL); cy <= Math.floor(e.y1 / CELL); cy++) {
+          const k = cellKey(cx, cy);
+          const list = this.cells.get(k);
+          if (list) list.push(i);
+          else this.cells.set(k, [i]);
+        }
+      }
+    });
     // Solar panels on the roofs: an array as big as its panels (1.7 m² each), along the building's long side.
     const solar = world.map.solar ?? [];
     for (let i = 0; i + 2 < solar.length; i += 3) {
       const [x, y, count] = [solar[i], solar[i + 1], solar[i + 2]];
-      const on = this.looks.find((l) => x > l.x0 && x < l.x1 && y > l.y0 && y < l.y1 && pointInRing(x, y, l.b.rings[0]));
-      if (!on) continue;
+      const k = (this.cells.get(cellKey(Math.floor(x / CELL), Math.floor(y / CELL))) ?? []).find((j) => {
+        const l = this.all[j];
+        return x > l.x0 && x < l.x1 && y > l.y0 && y < l.y1 && pointInRing(x, y, l.b.rings[0]);
+      });
+      if (k === undefined) continue;
+      const on = this.all[k];
       const { ux, uy } = ridgeAxis(on.b.rings[0], on.b.roofAcross);
       const area = count * 1.7 * 64;
       const w = Math.sqrt(area * 2);
@@ -56,6 +87,16 @@ export class Buildings {
     this.g = scene.add.graphics().setDepth(depth);
   }
 
+  /** A building's look: worked out the first time it's needed. */
+  private lookOf(i: number): BuildingLook & { ground: number } {
+    const e = this.all[i];
+    if (!e.look) {
+      e.look = { ...buildingLook(e.b, this.earcut), ground: e.ground };
+      e.look.panels.push(...e.panels);
+    }
+    return e.look;
+  }
+
   /**
    * Call once a frame. A building the car's under (driving through an
    * archway), at (carX, carY), is drawn see-through, so the car can be seen.
@@ -69,8 +110,25 @@ export class Buildings {
     const right = view.right + PAD;
     const top = view.top - PAD;
     const bottom = view.bottom + PAD;
-    for (const look of this.looks) {
-      const { b } = look;
+    // Those in the squares round the view (a tall one leans out from the middle of the view: looked for further off), in drawing order.
+    const reach = PAD + LEAN;
+    const near = new Set<number>();
+    for (let gx = Math.floor((left - reach) / CELL); gx <= Math.floor((right + reach) / CELL); gx++) {
+      for (let gy = Math.floor((top - reach) / CELL); gy <= Math.floor((bottom + reach) / CELL); gy++) for (const i of this.cells.get(cellKey(gx, gy)) ?? []) near.add(i);
+    }
+    // Far off: their looks let go (worked out again if they're come back to).
+    if (this.looked.size > 4000) {
+      for (const i of this.looked) {
+        if (near.has(i)) continue;
+        this.all[i].look = null;
+        this.looked.delete(i);
+      }
+    }
+    for (const i of [...near].sort((a, b) => a - b)) {
+      const e = this.all[i];
+      const { b } = e;
+      const look = e.look ?? this.lookOf(i);
+      this.looked.add(i);
       // How much a point h px up the building is scaled out from the middle of the view.
       const lift = (h: number) => perspective.lift(look.ground + h);
       const sTop = lift(b.top);

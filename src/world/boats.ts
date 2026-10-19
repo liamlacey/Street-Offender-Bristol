@@ -103,14 +103,14 @@ type Rand = () => number;
 /** Shore cells, px (1 m). */
 const SHORE_CELL = 8;
 
-/** Sets the cells (cols × rows, `cell` px) whose middles are inside the rings (even-odd) to `value`. */
-function fillRings(cells: Uint8Array, cols: number, rows: number, cell: number, rings: Pts[], value: number): void {
+/** Sets the cells (cols × rows, `cell` px, the first's corner at (ox, oy)) whose middles are inside the rings (even-odd) to `value`. */
+function fillRings(cells: Uint8Array, cols: number, rows: number, cell: number, rings: Pts[], value: number, ox = 0, oy = 0): void {
   let [y0, y1] = [Infinity, -Infinity];
   for (const ring of rings) for (let i = 1; i < ring.length; i += 2) [y0, y1] = [Math.min(y0, ring[i]), Math.max(y1, ring[i])];
-  const r0 = Math.max(0, Math.floor(y0 / cell));
-  const r1 = Math.min(rows - 1, Math.ceil(y1 / cell));
+  const r0 = Math.max(0, Math.floor((y0 - oy) / cell));
+  const r1 = Math.min(rows - 1, Math.ceil((y1 - oy) / cell));
   for (let r = r0; r <= r1; r++) {
-    const y = (r + 0.5) * cell;
+    const y = oy + (r + 0.5) * cell;
     const xs: number[] = [];
     for (const ring of rings) {
       for (let i = 0, n = ring.length, j = n - 2; i < n; j = i, i += 2) {
@@ -120,8 +120,8 @@ function fillRings(cells: Uint8Array, cols: number, rows: number, cell: number, 
     }
     xs.sort((a, b) => a - b);
     for (let k = 0; k + 1 < xs.length; k += 2) {
-      const c0 = Math.max(0, Math.ceil(xs[k] / cell - 0.5));
-      const c1 = Math.min(cols - 1, Math.floor(xs[k + 1] / cell - 0.5));
+      const c0 = Math.max(0, Math.ceil((xs[k] - ox) / cell - 0.5));
+      const c1 = Math.min(cols - 1, Math.floor((xs[k + 1] - ox) / cell - 0.5));
       for (let c = c0; c <= c1; c++) cells[r * cols + c] = value;
     }
   }
@@ -140,24 +140,37 @@ export class WaterGrid {
   private readonly wetCols: number;
   private readonly wetRows: number;
   /** Which stretch of open water each cell's in (those a boat can be under way in, joined up): 0 for none. */
-  private readonly part: Int32Array;
-  /** For finding the ways, kept between finds. */
-  private readonly g: Float32Array;
-  private readonly from: Int32Array;
-  private readonly seen: Uint32Array;
+  private readonly part: Uint16Array;
+  /** For finding the ways: only the cells a find's been to (the water's big, and a find goes to little of it). */
+  private readonly g = new Map<number, number>();
+  private readonly from = new Map<number, number>();
+  private readonly seen = new Map<number, number>();
   private search = 0;
+  /** Where the grid's first cell's corner is, px: it covers only the water's extent (a big map's mostly dry). */
+  private readonly ox: number;
+  private readonly oy: number;
 
   constructor(map: GameMap, berths: Berth[] = []) {
-    this.cols = Math.ceil(map.width / CELL);
-    this.rows = Math.ceil(map.height / CELL);
-    this.wetCols = Math.ceil(map.width / SHORE_CELL);
-    this.wetRows = Math.ceil(map.height / SHORE_CELL);
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const a of map.areas) {
+      if (a.kind !== 'water') continue;
+      for (let i = 0; i < a.rings[0].length; i += 2) [x0, y0, x1, y1] = [Math.min(x0, a.rings[0][i]), Math.min(y0, a.rings[0][i + 1]), Math.max(x1, a.rings[0][i]), Math.max(y1, a.rings[0][i + 1])];
+    }
+    if (x0 > x1) [x0, y0, x1, y1] = [0, 0, CELL, CELL];
+    this.ox = Math.max(0, Math.floor(x0 / CELL) - 1) * CELL;
+    this.oy = Math.max(0, Math.floor(y0 / CELL) - 1) * CELL;
+    const [w, h] = [Math.min(map.width, x1 + 2 * CELL) - this.ox, Math.min(map.height, y1 + 2 * CELL) - this.oy];
+    this.cols = Math.max(1, Math.ceil(w / CELL));
+    this.rows = Math.max(1, Math.ceil(h / CELL));
+    this.wetCols = this.cols * (CELL / SHORE_CELL);
+    this.wetRows = this.rows * (CELL / SHORE_CELL);
     this.wet = new Uint8Array(this.wetCols * this.wetRows);
-    for (const a of map.areas) if (a.kind === 'water') fillRings(this.wet, this.wetCols, this.wetRows, SHORE_CELL, a.rings, 1);
-    for (const a of map.areas) if (a.kind === 'pontoon' || a.kind === 'pier') fillRings(this.wet, this.wetCols, this.wetRows, SHORE_CELL, a.rings, 0);
+    const shore = (rings: Pts[], value: number) => fillRings(this.wet, this.wetCols, this.wetRows, SHORE_CELL, rings, value, this.ox, this.oy);
+    for (const a of map.areas) if (a.kind === 'water') shore(a.rings, 1);
+    for (const a of map.areas) if (a.kind === 'pontoon' || a.kind === 'pier') shore(a.rings, 0);
     // The ships moored for good (mapped as buildings), and anything else built out over the water.
     const built = map.buildings.filter((b) => b.solid);
-    for (const b of built) fillRings(this.wet, this.wetCols, this.wetRows, SHORE_CELL, b.rings, 0);
+    for (const b of built) shore(b.rings, 0);
     const wet = new Uint8Array(this.cols * this.rows);
     for (const a of map.areas) if (a.kind === 'water') this.fill(wet, a.rings, 1);
     for (const a of map.areas) if (a.kind === 'pontoon' || a.kind === 'pier') this.fill(wet, a.rings, 0);
@@ -198,24 +211,21 @@ export class WaterGrid {
         }
       });
     }
-    this.part = new Int32Array(wet.length);
+    this.part = new Uint16Array(wet.length);
     let parts = 0;
     for (let i = 0; i < wet.length; i++) {
       if (this.part[i] || this.clear[i] < CLEAR) continue;
-      this.part[i] = ++parts;
+      this.part[i] = Math.min(65535, ++parts);
       [head, tail] = [0, 0];
       queue[tail++] = i;
       while (head < tail) {
         this.next(queue[head++], (j) => {
           if (this.part[j] || this.clear[j] < CLEAR) return;
-          this.part[j] = parts;
+          this.part[j] = Math.min(65535, parts);
           queue[tail++] = j;
         });
       }
     }
-    this.g = new Float32Array(wet.length);
-    this.from = new Int32Array(wet.length);
-    this.seen = new Uint32Array(wet.length);
   }
 
   /** Calls `fn` with each cell next to cell i (a diagonal one too), stopping if it returns true; whether it did. */
@@ -233,12 +243,12 @@ export class WaterGrid {
   }
 
   private fill(cells: Uint8Array, rings: Pts[], value: number): void {
-    fillRings(cells, this.cols, this.rows, CELL, rings, value);
+    fillRings(cells, this.cols, this.rows, CELL, rings, value, this.ox, this.oy);
   }
 
   /** Whether there's water at a point (not land, a pontoon or a pier). */
   water(x: number, y: number): boolean {
-    const [c, r] = [Math.floor(x / SHORE_CELL), Math.floor(y / SHORE_CELL)];
+    const [c, r] = [Math.floor((x - this.ox) / SHORE_CELL), Math.floor((y - this.oy) / SHORE_CELL)];
     return c >= 0 && r >= 0 && c < this.wetCols && r < this.wetRows && this.wet[r * this.wetCols + c] === 1;
   }
 
@@ -251,7 +261,7 @@ export class WaterGrid {
 
   /** A point's clearance, cells (0 on land, or off the map). */
   at(x: number, y: number): number {
-    const [c, r] = [Math.floor(x / CELL), Math.floor(y / CELL)];
+    const [c, r] = [Math.floor((x - this.ox) / CELL), Math.floor((y - this.oy) / CELL)];
     if (c < 0 || r < 0 || c >= this.cols || r >= this.rows) return 0;
     return this.clear[r * this.cols + c];
   }
@@ -262,11 +272,11 @@ export class WaterGrid {
     let best: [number, number] | null = null;
     let bestD = Infinity;
     const n = Math.ceil(reach / CELL);
-    const [c0, r0] = [Math.floor(x / CELL), Math.floor(y / CELL)];
+    const [c0, r0] = [Math.floor((x - this.ox) / CELL), Math.floor((y - this.oy) / CELL)];
     for (let r = r0 - n; r <= r0 + n; r++) {
       for (let c = c0 - n; c <= c0 + n; c++) {
         if (c < 0 || r < 0 || c >= this.cols || r >= this.rows || this.clear[r * this.cols + c] < CLEAR) continue;
-        const [cx, cy] = [(c + 0.5) * CELL, (r + 0.5) * CELL];
+        const [cx, cy] = [this.ox + (c + 0.5) * CELL, this.oy + (r + 0.5) * CELL];
         const d = Math.hypot(cx - x, cy - y);
         if (d < bestD && d <= reach) [best, bestD] = [[cx, cy], d];
       }
@@ -288,29 +298,33 @@ export class WaterGrid {
    */
   way(ax: number, ay: number, bx: number, by: number): number[] | null {
     const { cols, rows, clear } = this;
-    const cell = (x: number, y: number) => Math.floor(y / CELL) * cols + Math.floor(x / CELL);
+    if (this.at(ax, ay) < CLEAR || this.at(bx, by) < CLEAR) return null;
+    const cell = (x: number, y: number) => Math.floor((y - this.oy) / CELL) * cols + Math.floor((x - this.ox) / CELL);
     const [start, goal] = [cell(ax, ay), cell(bx, by)];
     if (clear[start] < CLEAR || clear[goal] < CLEAR || this.part[start] !== this.part[goal]) return null;
     const [gc, gr] = [goal % cols, Math.floor(goal / cols)];
     const { g, from, seen } = this;
+    g.clear();
+    from.clear();
+    seen.clear();
     // Each cell's marked with the search that's been to it: 2n once it's reached, 2n + 1 once it's done.
     const mark = (this.search += 2);
-    const reached = (i: number) => seen[i] >= mark;
+    const reached = (i: number) => (seen.get(i) ?? 0) >= mark;
     const heap = new Heap();
     const h = (i: number) => {
       const [dc, dr] = [Math.abs((i % cols) - gc), Math.abs(Math.floor(i / cols) - gr)];
       // Weighted (a little longer a way, perhaps, but found much quicker).
       return (Math.max(dc, dr) + 0.414 * Math.min(dc, dr)) * 1.6;
     };
-    g[start] = 0;
-    from[start] = -1;
-    seen[start] = mark;
+    g.set(start, 0);
+    from.set(start, -1);
+    seen.set(start, mark);
     heap.push(start, h(start));
     while (heap.size) {
       const i = heap.pop();
       if (i === goal) break;
-      if (seen[i] === mark + 1) continue;
-      seen[i] = mark + 1;
+      if (seen.get(i) === mark + 1) continue;
+      seen.set(i, mark + 1);
       const [c, r] = [i % cols, Math.floor(i / cols)];
       for (let dr = -1; dr <= 1; dr++) {
         for (let dc = -1; dc <= 1; dc++) {
@@ -318,14 +332,14 @@ export class WaterGrid {
           const [cc, rr] = [c + dc, r + dr];
           if (cc < 0 || rr < 0 || cc >= cols || rr >= rows) continue;
           const j = rr * cols + cc;
-          if (seen[j] === mark + 1 || clear[j] < CLEAR) continue;
+          if (seen.get(j) === mark + 1 || clear[j] < CLEAR) continue;
           // Out in the middle where there's room: near the banks costs more.
           const near = clear[j] >= 6 ? 0 : (6 - clear[j]) * 0.5;
-          const cost = g[i] + (dc && dr ? 1.414 : 1) * (1 + near);
-          if (!reached(j) || cost < g[j]) {
-            seen[j] = mark;
-            g[j] = cost;
-            from[j] = i;
+          const cost = g.get(i)! + (dc && dr ? 1.414 : 1) * (1 + near);
+          if (!reached(j) || cost < g.get(j)!) {
+            seen.set(j, mark);
+            g.set(j, cost);
+            from.set(j, i);
             heap.push(j, cost + h(j));
           }
         }
@@ -333,10 +347,10 @@ export class WaterGrid {
     }
     if (goal !== start && !reached(goal)) return null;
     const cells: number[] = [];
-    for (let i = goal; i !== start; i = from[i]) cells.push(i);
+    for (let i = goal; i !== start; i = from.get(i)!) cells.push(i);
     cells.reverse();
     const pts: number[] = [ax, ay];
-    for (const i of cells.slice(0, -1)) pts.push(((i % cols) + 0.5) * CELL, (Math.floor(i / cols) + 0.5) * CELL);
+    for (const i of cells.slice(0, -1)) pts.push(this.ox + ((i % cols) + 0.5) * CELL, this.oy + (Math.floor(i / cols) + 0.5) * CELL);
     pts.push(bx, by);
     // Pulled straight: from each point kept, on to the furthest it can see.
     const out = [pts[0], pts[1]];

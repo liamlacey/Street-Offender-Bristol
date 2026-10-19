@@ -193,6 +193,7 @@ export class People {
   readonly walks: Walk[] = [];
   readonly spots: Spot[] = [];
   readonly crossings: CrossingPoint[] = [];
+  private readonly crossingGrid = new Map<string, number[]>();
   /** The bus stops: where people wait (on the pavement by the stop), x, y. */
   readonly stops: [number, number][] = [];
   /** The parks and squares people wander about. */
@@ -400,7 +401,17 @@ export class People {
       if (c.kind === 'lights') map.signals.forEach((s, i) => {
         if (Math.hypot(s.x - c.x, s.y - c.y) < 30 * M && (c.controller === undefined || s.controller === c.controller)) signals.push(i);
       });
+      const k = this.crossings.length;
       this.crossings.push({ ax: c.x + nx * off, ay: c.y + ny * off, bx: c.x - nx * off, by: c.y - ny * off, kind: c.kind, signals });
+      // (By where its kerbs are, and round them: only those near someone walking are looked at.)
+      for (const [x, y] of [[c.x + nx * off, c.y + ny * off], [c.x - nx * off, c.y - ny * off]]) {
+        for (const [ox, oy] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, 1], [-1, 1], [1, -1]]) {
+          const cell = key(x + ox * 3 * M, y + oy * 3 * M);
+          const list = this.crossingGrid.get(cell) ?? [];
+          if (!list.includes(k)) list.push(k);
+          this.crossingGrid.set(cell, list);
+        }
+      }
     }
   }
 
@@ -820,7 +831,8 @@ export class People {
     }
     // Passing a crossing: now and then, over the road.
     if (p.mode === 'walk' && this.rand() < dt * 3) {
-      for (const [i, c] of this.crossings.entries()) {
+      for (const i of this.crossingGrid.get(key(p.x, p.y)) ?? []) {
+        const c = this.crossings[i];
         if (i === p.crossing) continue;
         for (const [kx, ky, fx, fy] of [[c.ax, c.ay, c.bx, c.by], [c.bx, c.by, c.ax, c.ay]]) {
           if (Math.hypot(kx - p.x, ky - p.y) > 2.5 * M) continue;

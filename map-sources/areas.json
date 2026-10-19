@@ -37,6 +37,118 @@
         -0.5,
         0.5
       ]
+    },
+    {
+      "name": "stpauls",
+      "about": "About 970 m by 945 m to the north-east of the cathedral area: Stokes Croft, St Paul's and its squares (Portland, Brunswick, King), the Bear Pit, Bond Street, Cabot Circus and down to Old Market.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.5935,
+        "maxlat": 51.4645,
+        "maxlon": -2.5795
+      },
+      "fetched": "2026-10-19",
+      "osmNewestEdit": "2026-10-19T19:14:12Z",
+      "lidarShift": [
+        -0.5,
+        1
+      ]
+    },
+    {
+      "name": "broadmead",
+      "about": "About 970 m by 945 m to the east of the cathedral area: Broadmead, Castle Park, Baldwin Street and Welsh Back, Finzels Reach, Victoria Street, Temple Way and Temple Gardens.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.5935,
+        "maxlat": 51.456,
+        "maxlon": -2.5795
+      },
+      "fetched": "2026-10-19",
+      "osmNewestEdit": "2026-10-19T20:26:10Z",
+      "lidarShift": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "redcliffe",
+      "about": "About 970 m by 945 m to the south-east of the cathedral area: Redcliff Hill, Bath Road towards Temple Meads, the Bath Bridge and Bedminster Bridge roundabouts, York Road, Victoria Park and Windmill Hill.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.5935,
+        "maxlat": 51.4475,
+        "maxlon": -2.5795
+      },
+      "fetched": "2026-10-19",
+      "osmNewestEdit": "2026-10-19T15:52:27Z",
+      "lidarShift": [
+        0,
+        0.5
+      ]
+    },
+    {
+      "name": "southville",
+      "about": "About 970 m by 945 m to the south of the cathedral area: Coronation Road along the New Cut, Southville, Bedminster's East Street and Cannon Street, and North Street's east end.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.6075,
+        "maxlat": 51.4475,
+        "maxlon": -2.5935
+      },
+      "fetched": "2026-10-19",
+      "osmNewestEdit": "2026-10-19T19:14:12Z",
+      "lidarShift": [
+        1,
+        1
+      ]
+    },
+    {
+      "name": "ashton",
+      "about": "About 970 m by 945 m to the south-west of the cathedral area: the west of Spike Island and Baltic Wharf, Brunel Lock, Clift House Road, Greville Smyth Park, Ashton Gate and its stadium.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.6215,
+        "maxlat": 51.4475,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-10-19",
+      "osmNewestEdit": "2026-10-19T19:14:12Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "hotwells",
+      "about": "About 970 m by 945 m to the west of the cathedral area: Hotwells and Hotwell Road, the SS Great Britain, Cumberland Basin, Cliftonwood, Jacob's Wells and up to Royal York Crescent.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.6215,
+        "maxlat": 51.456,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-10-19",
+      "osmNewestEdit": "2026-10-19T19:14:12Z",
+      "lidarShift": [
+        1,
+        0
+      ]
+    },
+    {
+      "name": "clifton",
+      "about": "About 970 m by 945 m to the north-west of the cathedral area: Clifton Village, Clifton Down, Queens Road and the Triangle, Whiteladies Road, Pembroke Road and the Clifton Lido.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.6215,
+        "maxlat": 51.4645,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-10-19",
+      "osmNewestEdit": "2026-10-19T19:14:12Z",
+      "lidarShift": [
+        1,
+        1
+      ]
     }
   ]
 }

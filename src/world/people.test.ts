@@ -155,7 +155,7 @@ describe('people', () => {
       if (!p.hurt) dived++;
     }
     expect(dived).toBeGreaterThan(10);
-  });
+  }, 30000);
 
   it('get on a bus waiting at their stop', () => {
     const people = new People(map, { rand: seeded(9) });

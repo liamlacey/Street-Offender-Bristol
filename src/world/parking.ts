@@ -43,6 +43,19 @@ const streetTaken = (r: Road) => Math.min(0.92, 0.55 + (r.activity ?? 0) * 0.012
  * lined up with its longest side. Kept inside its outline, and off the roads
  * through it.
  */
+const boxes = new WeakMap<Road, [number, number, number, number]>();
+
+/** A road's bounding box (worked out once). */
+function boxOf(r: Road): [number, number, number, number] {
+  let b = boxes.get(r);
+  if (!b) {
+    b = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let k = 0; k < r.pts.length; k += 2) b = [Math.min(b[0], r.pts[k]), Math.min(b[1], r.pts[k + 1]), Math.max(b[2], r.pts[k]), Math.max(b[3], r.pts[k + 1])];
+    boxes.set(r, b);
+  }
+  return b;
+}
+
 export function carParkBays(map: GameMap, a: Area): Bays {
   const lines: number[] = [];
   const spaces: Space[] = [];
@@ -50,9 +63,14 @@ export function carParkBays(map: GameMap, a: Area): Bays {
   let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
   for (let k = 0; k < ring.length; k += 2) [x0, y0, x1, y1] = [Math.min(x0, ring[k]), Math.min(y0, ring[k + 1]), Math.max(x1, ring[k]), Math.max(y1, ring[k + 1])];
   const inside = (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1 && a.rings.every((r, i) => pointInRing(x, y, r) === (i === 0));
-  const aisles = map.roads.filter((r) => r.aisle && r.pts.some((v, k) => k % 2 === 0 && inside(v, r.pts[k + 1])));
+  // (Only the roads anywhere near it are looked at: a big map has thousands.)
+  const nearby = map.roads.filter((r) => {
+    const b = boxOf(r);
+    return b[0] < x1 + 80 && b[2] > x0 - 80 && b[1] < y1 + 80 && b[3] > y0 - 80;
+  });
+  const aisles = nearby.filter((r) => r.aisle && r.pts.some((v, k) => k % 2 === 0 && inside(v, r.pts[k + 1])));
   // The roads through it (its aisles and any other): no bay's painted out onto one.
-  const through = map.roads.filter((r) => r.kind !== 'footway' && r.kind !== 'steps' && r.pts.some((v, k) => k % 2 === 0 && v > x0 - 80 && v < x1 + 80 && r.pts[k + 1] > y0 - 80 && r.pts[k + 1] < y1 + 80));
+  const through = nearby.filter((r) => r.kind !== 'footway' && r.kind !== 'steps' && r.pts.some((v, k) => k % 2 === 0 && v > x0 - 80 && v < x1 + 80 && r.pts[k + 1] > y0 - 80 && r.pts[k + 1] < y1 + 80));
   const onRoad = (x: number, y: number, own: Road | null) => through.some((r) => r !== own && distanceTo(x, y, r.pts) < r.width / 2);
   if (aisles.length) {
     for (const r of aisles) {
