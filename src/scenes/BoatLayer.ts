@@ -56,6 +56,8 @@ export class BoatLayer {
         const key = `boat-dented-${b.id}`;
         paintWreck(this.scene, key, { base: boatTexture(this.scene, b.kind, b.colour), length: b.length, width: b.beam, mirror: 1e6 }, b.wreck);
         s.body.setTexture(key);
+        // Its shadow the shape it is now (crumpled in, parts gone).
+        s.shadow.setTexture(key);
       }
       const lift = perspective.lift(this.base(b.x, b.y));
       // Rocking a little on the water (each in its own time), more when it's moving.

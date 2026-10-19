@@ -64,6 +64,8 @@ export class TrafficLayer {
           const key = `vehicle-dented-${v.id}`;
           paintWreck(this.scene, key, { base: (v.bus ? busTexture(this.scene, v.kind, v.bus.colour, v.bus.ref) : vehicleTexture(this.scene, v.kind, v.colour)), length: VEHICLES[v.kind].length, width: VEHICLES[v.kind].width, mirror: bodyLayout(v.kind).mirror }, v.wreck);
           s.body.setTexture(key);
+        // Its shadow the shape it is now (crumpled in, parts gone).
+        s.shadow.setTexture(key);
         }
         const lift = perspective.lift(this.base(v.x, v.y, v.level));
         const [x, y] = [perspective.x(v.x, lift), perspective.y(v.y, lift)];

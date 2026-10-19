@@ -814,6 +814,7 @@ export class GameScene extends Phaser.Scene {
     Object.assign(this.wreck, newWreck());
     this.wreckShown = this.wreck.version;
     this.carSprite.setTexture(TEX.car).setAlpha(1).setTint(0xffffff);
+    this.carShadow.setTexture(TEX.carShadow);
   }
 
   /** A jolt shakes the camera this long (s), this far (map px); a harder one takes over from a weaker. */
@@ -840,6 +841,8 @@ export class GameScene extends Phaser.Scene {
       this.wreckShown = this.wreck.version;
       paintWreck(this, 'car-dented', { base: TEX.car, length: CAR_LENGTH, width: CAR_WIDTH, mirror: PLAYER_SHAPE.mirror }, this.wreck);
       this.carSprite.setTexture('car-dented');
+      // Its shadow the shape it is now (crumpled in, parts gone).
+      this.carShadow.setTexture('car-dented');
     }
     // Off a speed hump: up and down again, nearer the camera at the top (a little bigger), its shadow further off.
     const phase = this.hopLeft > 0 ? 1 - this.hopLeft / HOP_TIME : 1;
