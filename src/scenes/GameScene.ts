@@ -50,6 +50,7 @@ import { TrafficLayer } from './TrafficLayer';
 import { Traffic, VEHICLES, type Vehicle, collideBodies } from '../world/traffic';
 import { type Boat, Boats } from '../world/boats';
 import { BoatLayer } from './BoatLayer';
+import { WaterRipples } from './WaterRipples';
 import { type Shape, STIFFNESS, type Wreck, hit as dentAt, newWreck, toBody, toWorld } from '../car/dents';
 import { paintWreck } from './dentArt';
 import { bodyLayout } from './vehicleArt';
@@ -61,6 +62,8 @@ const MAX_STEPS_PER_FRAME = 8;
 const DEPTH = {
   ground: 0,
   skids: 1,
+  /** The water's ripples, just over it. */
+  ripples: 0.5,
   /** On the water, under the bridges. */
   boats: 1.5,
   props: 2,
@@ -102,6 +105,9 @@ const PULL_EASE = 1.7;
 const PHONE_SIDE = 390;
 const SCREEN_EASE = 0.55;
 const REST_MOST = 0.9;
+/** Which way the wind sways the trees (and how far, px, at its most): the same way it blows the ripples on the water. */
+const WIND_X = Math.cos(0.35) * 0.9;
+const WIND_Y = Math.sin(0.35) * 0.9;
 /** How long a hop off a speed hump lasts, seconds. */
 const HOP_TIME = 0.35;
 /** How many loose things (benches, bins, and the bits of what's been broken) before the smallest bits stop being kept. */
@@ -148,6 +154,8 @@ export class GameScene extends Phaser.Scene {
     trunk: Phaser.GameObjects.Image;
     bole: Phaser.GameObjects.Image;
     alpha: number;
+    /** Its crown's turn as it stands (it sways about it). */
+    turn: number;
   }[] = [];
   /** Each traffic light's head, up its pole, with what it's showing. */
   private signalHeads: { x: number; y: number; z: number; controller: number; group: number; light: Light; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
@@ -167,6 +175,7 @@ export class GameScene extends Phaser.Scene {
   private trafficLayer!: TrafficLayer;
   private boats!: Boats;
   private boatLayer!: BoatLayer;
+  private ripples!: WaterRipples;
   private loose: { body: LooseProp; image: Phaser.GameObjects.Image }[] = [];
   private looseByChunk = new Map<string, number[]>();
   private effects!: CarEffects;
@@ -254,6 +263,7 @@ export class GameScene extends Phaser.Scene {
     this.addLights();
     this.traffic = new Traffic(map);
     this.boats = new Boats(map);
+    this.ripples = new WaterRipples(this, this.surfaces, (x, y) => this.groundAt(x, y), DEPTH.ripples);
     this.boatLayer = new BoatLayer(this, this.boats, (x, y) => this.groundAt(x, y), DEPTH.boats);
     this.trafficLayer = new TrafficLayer(this, this.traffic, (x, y, level) => this.surfaceHeight(x, y, level), (x, y, reach) => this.decks.atEnd(x, y, reach), {
       ground: DEPTH.car - 0.05,
@@ -412,7 +422,7 @@ export class GameScene extends Phaser.Scene {
       // Its trunk, up from its foot into the crown, under it.
       const trunk = this.add.image(t[i], t[i + 1], TEX.trunk).setDepth(DEPTH.trees - 0.02).setVisible(false);
       const bole = this.add.image(t[i], t[i + 1], TEX.bole).setScale(1 / ART_SCALE).setDepth(DEPTH.trees - 0.01).setVisible(false);
-      this.trees.push({ x: t[i], y: t[i + 1], z: this.groundAt(t[i], t[i + 1]), h: t[i + 3], image, foot: { x: t[i], y: t[i + 1], r: t[i + 2] }, trunk, bole, alpha: 1 });
+      this.trees.push({ x: t[i], y: t[i + 1], z: this.groundAt(t[i], t[i + 1]), h: t[i + 3], image, foot: { x: t[i], y: t[i + 1], r: t[i + 2] }, trunk, bole, alpha: 1, turn: image.rotation });
     }
   }
 
@@ -453,6 +463,7 @@ export class GameScene extends Phaser.Scene {
     this.wallLayer.update(view, this.perspective);
     this.trafficLayer.update(view, this.perspective, this.level, this.time.now / 1000);
     this.boatLayer.update(view, this.perspective, this.time.now / 1000);
+    this.ripples.update(view, this.perspective, dt);
     this.updateStreet(dt);
     const speed = Math.hypot(this.car.vx, this.car.vy);
     this.audio?.update({
@@ -1017,7 +1028,19 @@ export class GameScene extends Phaser.Scene {
       }
       // The crown's a little below the treetop.
       const s = p.lift(t.z + t.h * 0.85);
-      t.image.setPosition(p.x(t.x, s), p.y(t.y, s));
+      let [x, y] = [p.x(t.x, s), p.y(t.y, s)];
+      if (standing) {
+        // Swaying in the wind: each in its own time (the bigger, the slower), more in the gusts that roll across.
+        const time = this.time.now / 1000;
+        const slow = 0.9 / Math.sqrt(1 + t.h / 60);
+        const phase = i * 2.399;
+        const gust = 0.55 + 0.45 * Math.max(0, Math.sin(time * 0.23 - (t.foot.x * 0.6 + t.foot.y * 0.25) * 0.0025));
+        const sway = Math.sin(time * slow * 2.1 + phase) * 0.6 + Math.sin(time * slow * 3.7 + phase * 1.7) * 0.4;
+        x += WIND_X * sway * gust * (0.6 + t.h / 120);
+        y += WIND_Y * sway * gust * (0.6 + t.h / 120);
+        t.image.setRotation(t.turn + sway * gust * 0.025);
+      }
+      t.image.setPosition(x, y);
     }
   }
 
