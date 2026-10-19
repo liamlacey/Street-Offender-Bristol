@@ -586,7 +586,7 @@ but the water and the buildings.
 - **Buses**: 1 to 3 wait at each bus stop near the view (on the walk nearest it); when a
   bus is waiting at the stop (within 20 m), they walk to its door (front, kerb side) and
   get on; 0 to 3 get off each bus at each stop.
-- **Danger**: only close by: you going over 8 m/s within 3.5 m of them, or driving along a
+- **Danger**: only close by, and only in something (not you on foot): you going over 8 m/s within 3.5 m of them, or driving along a
   pavement (over 5 m/s, within 5 m): they run (4.2 m/s) away from you, roads or not (but
   not into the water or a wall), for 4 to 7 s, then go back to walking. A crash (or
   someone knocked down) sends everyone within 12 m (8 m) running.
