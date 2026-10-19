@@ -14,7 +14,7 @@
  * ferry fits against.
  */
 
-import type { Area, Pts } from './osm.ts';
+import type { Area, Building, Pts } from './osm.ts';
 import { pointInRing } from './osm.ts';
 
 export type BoatKind = 'narrowboat' | 'barge' | 'cruiser' | 'yacht' | 'dinghy' | 'tug' | 'ferry';
@@ -62,14 +62,14 @@ const MIX: Record<string, [BoatKind, number][]> = {
   yes: [['cruiser', 0.35], ['yacht', 0.25], ['narrowboat', 0.25], ['dinghy', 0.15]],
 };
 
-/** The water boats can be on: in the water areas, and not on a pontoon or a pier. */
+/** The water boats can be on: in the water areas, and not on a pontoon or a pier, or where a ship's moored for good (mapped as a building). */
 export class Water {
   private readonly water: Pts[][];
   private readonly solid: Pts[][];
 
-  constructor(areas: Area[]) {
+  constructor(areas: Area[], buildings: Building[] = []) {
     this.water = areas.filter((a) => a.kind === 'water').map((a) => a.rings);
-    this.solid = areas.filter((a) => a.kind === 'pontoon' || a.kind === 'pier').map((a) => a.rings);
+    this.solid = [...areas.filter((a) => a.kind === 'pontoon' || a.kind === 'pier').map((a) => a.rings), ...buildings.filter((b) => b.solid).map((b) => b.rings)];
   }
 
   /** Each water area's rings and each pontoon's and pier's, for their edges. */

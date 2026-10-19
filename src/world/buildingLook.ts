@@ -108,7 +108,7 @@ export type Triangulate = (data: number[], holeIndices?: number[]) => number[];
 
 const PITCHED_KINDS = new Set(['house', 'terrace', 'detached', 'semidetached_house', 'church', 'chapel', 'cathedral', 'bungalow', 'cottage', 'garage', 'shed']);
 const PITCHED_SHAPES = new Set(['gabled', 'hipped', 'pitched', 'half-hipped', 'gambrel', 'mansard', 'saltbox', 'side_hipped', 'double_saltbox']);
-const NO_WINDOWS = new Set(['roof', 'shed', 'garage', 'garages', 'ship', 'kiosk', 'hut', 'service', 'toilets']);
+const NO_WINDOWS = new Set(['roof', 'shed', 'garage', 'garages', 'ship', 'boat', 'kiosk', 'hut', 'service', 'toilets']);
 
 /** Where the light comes from (the top left, the north-west, as the shadows say), as a direction on the map. */
 const LIGHT = { x: -0.6, y: -0.8 };

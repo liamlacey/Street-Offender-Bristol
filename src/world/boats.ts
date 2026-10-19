@@ -155,9 +155,13 @@ export class WaterGrid {
     this.wet = new Uint8Array(this.wetCols * this.wetRows);
     for (const a of map.areas) if (a.kind === 'water') fillRings(this.wet, this.wetCols, this.wetRows, SHORE_CELL, a.rings, 1);
     for (const a of map.areas) if (a.kind === 'pontoon' || a.kind === 'pier') fillRings(this.wet, this.wetCols, this.wetRows, SHORE_CELL, a.rings, 0);
+    // The ships moored for good (mapped as buildings), and anything else built out over the water.
+    const built = map.buildings.filter((b) => b.solid);
+    for (const b of built) fillRings(this.wet, this.wetCols, this.wetRows, SHORE_CELL, b.rings, 0);
     const wet = new Uint8Array(this.cols * this.rows);
     for (const a of map.areas) if (a.kind === 'water') this.fill(wet, a.rings, 1);
     for (const a of map.areas) if (a.kind === 'pontoon' || a.kind === 'pier') this.fill(wet, a.rings, 0);
+    for (const b of built) this.fill(wet, b.rings, 0);
     // The moored boats (and where they will be), half a metre round.
     for (const b of berths) {
       const [L, W] = BOAT_SIZE[b.kind].map((m) => m * map.pxPerMetre + map.pxPerMetre);
