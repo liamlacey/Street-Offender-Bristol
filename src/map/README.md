@@ -486,8 +486,15 @@ else: the lights, giving way, queueing):
   5.3 m/s on the flat (each at their own pace, as drivers do, and never faster than the
   road's speed), pulling away less than half as briskly as a car, and much slower uphill.
 - **On the cycle paths** (`highway=cycleway`): a network of their own (two-way, each
-  way 0.6 m either side of the path's middle, and not joined to the roads), with 0.9
-  bikes each way per 100 m, and nothing else on it. They stop for anyone walking
+  way 0.6 m either side of the path's middle), with 0.9 bikes each way per 100 m, and
+  nothing else on it, joined to the roads where they meet them: wherever a path shares
+  a point with a road, and wherever a path ends within 4 m of a road's edge (joined to
+  the nearest point on the road's line; within 12 m of a junction, or of another path's
+  join, at that). The road's cut there (a junction for the bikes; the cars don't turn
+  off), and the path stops 1.2 m short of the carriageway, where a cyclist coming off
+  it gives way, then turns on into the kerb lane (or across, onto the path on the far
+  side). Coming along the road, a cyclist turns off onto a path there more often than
+  not (weighted 6, against 1 + the road's rank for each road on). They stop for anyone walking
   along it; anyone they brush past is only nudged aside (and doesn't dive away).
 - Drawn 1.4 times life size, as the people are (bigger than life), to be made out on a
   phone; their collisions are life size.

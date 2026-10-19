@@ -360,6 +360,26 @@ describe('cyclists', () => {
     expect(Math.abs(v.y - 200)).toBeLessThan(8);
   });
 
+  it('come off a cycle path onto the road it meets (giving way), and the road leads onto the path', () => {
+    // A path from the north, ending 2 m short of the main road's edge (x = 200).
+    const map = crossroads({ roads: [...crossroads().roads, road('cycleway', 19, [200, 100, 200, 352])] } as Partial<GameMap>);
+    const traffic = quiet(map);
+    const south = traffic.lanes.find((l) => l.path && l.pts[1] < l.pts[l.pts.length - 1])!;
+    expect(south.giveWay).toBe(true);
+    // Its end is clear of the road (the carriageway's edge is at y = 368).
+    expect(south.pts[south.pts.length - 1]).toBeLessThan(366);
+    // From the road's lanes there, the path's one of the ways on.
+    expect(traffic.lanes.some((l) => !l.path && traffic.nodes[l.to].out.some((i) => traffic.lanes[i].path))).toBe(true);
+    const v = traffic.spawn(south, 20);
+    let onRoad = false;
+    for (let t = 0; t < 20 && !onRoad; t += 0.25) {
+      run(traffic, 0.25, { ...away, x: v.x, y: 700 });
+      onRoad = !!v.route[0].lane && !v.route[0].lane.path;
+    }
+    expect(onRoad).toBe(true);
+    expect(v.kind).toBe('bike');
+  });
+
   it('knocked hard enough, come off: off the road, for the scene to put down', () => {
     const traffic = quiet(crossroads());
     const lane = traffic.lanes.find((l) => l.road === 0 && l.dir === 1)!;
