@@ -6,13 +6,15 @@
 
 import type * as Phaser from 'phaser';
 import { COLOURS, VEHICLES, type VehicleKind } from '../world/traffic';
-import { canvasTexture, roundRect } from './art';
+import { TEX, canvasTexture, roundRect } from './art';
 import { clothes } from './PeopleLayer';
 
 type Ctx = CanvasRenderingContext2D;
 
 export function vehicleTexture(scene: Phaser.Scene, kind: VehicleKind, colour: number, rider = 0): string {
   if (kind === 'bike') return bikeTexture(scene, colour, rider);
+  // Your own car, left somewhere.
+  if (kind === 'own') return TEX.car;
   const key = `vehicle-${kind}-${colour}`;
   const { length: L, width: W, paint } = VEHICLES[kind];
   const body = COLOURS[paint][colour][0];
@@ -29,6 +31,7 @@ export function busTexture(scene: Phaser.Scene, kind: VehicleKind, colour: strin
 }
 
 export function vehicleShadow(scene: Phaser.Scene, kind: VehicleKind): string {
+  if (kind === 'own') return TEX.carShadow;
   const key = `vehicle-shadow-${kind}`;
   const { length: L, width: W } = VEHICLES[kind];
   canvasTexture(scene, key, L, W, (ctx) => (kind === 'bike' ? roundRect(ctx, 0, W * 0.25, L, W * 0.5, W * 0.25, '#000') : roundRect(ctx, 0, 0, L, W, kind === 'lorry' || kind === 'van' ? 2.5 : 5, '#000')));
@@ -88,6 +91,7 @@ export function bodyLayout(kind: VehicleKind): { mirror: number; screen: number 
   if (kind === 'lorry') return { mirror: L / 2 - 4.9, screen: L / 2 - 3.3 };
   if (kind === 'bus' || kind === 'double') return { mirror: L / 2 - 2, screen: L / 2 - 1.5 };
   if (kind === 'bike') return { mirror: 0, screen: 0 };
+  if (kind === 'own') return { mirror: L / 2 - 15.75, screen: L / 2 - 13.25 };
   const [, , screen, bonnet] = LAYOUT[kind].map((f) => f * L);
   return { mirror: screen + 0.1 - L / 2, screen: (screen + bonnet) / 2 - L / 2 };
 }
@@ -114,7 +118,7 @@ function draw(ctx: Ctx, kind: VehicleKind, L: number, W: number, colour: string)
   if (kind === 'lorry') return lorry(ctx, L, W, colour);
   if (kind === 'bus' || kind === 'double') return bus(ctx, L, W, colour, '', kind === 'double');
   const boxy = kind === 'van' || kind === 'suv';
-  if (kind === 'bike') return;
+  if (kind === 'bike' || kind === 'own') return;
   const corner = boxy ? 3 : kind === 'small' ? 5.5 : 5;
   // The body, with a lighter top edge for the light.
   roundRect(ctx, 0.5, 1, L - 1, W - 2, corner, shade(colour, -0.3));
@@ -163,7 +167,7 @@ function draw(ctx: Ctx, kind: VehicleKind, L: number, W: number, colour: string)
 }
 
 /** Along each kind, from the back, as fractions of its length: where the rear window starts, the roof, the windscreen, and the bonnet. */
-const LAYOUT: Record<Exclude<VehicleKind, 'lorry' | 'bus' | 'double' | 'bike'>, [number, number, number, number]> = {
+const LAYOUT: Record<Exclude<VehicleKind, 'lorry' | 'bus' | 'double' | 'bike' | 'own'>, [number, number, number, number]> = {
   small: [0.1, 0.22, 0.58, 0.72],
   hatch: [0.09, 0.2, 0.56, 0.7],
   saloon: [0.2, 0.31, 0.58, 0.71],

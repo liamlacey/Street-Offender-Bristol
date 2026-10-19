@@ -391,3 +391,26 @@ describe('cyclists', () => {
     expect(traffic.unseated.map((u) => u.bike)).toEqual([bike]);
   });
 });
+
+describe('taken and left', () => {
+  it('takes a vehicle out of the traffic (or off its bay), and leaves one where you got out, in the way', () => {
+    const traffic = quiet(crossroads());
+    const lane = traffic.lanes.find((l) => l.road === 0 && l.dir === 1)!;
+    const v = traffic.spawn(lane, 100, 'van');
+    traffic.take(v);
+    expect(traffic.vehicles).not.toContain(v);
+    const left = traffic.leave('own', 200, 384, 0, 0, { colour: 0 });
+    expect(traffic.parked).toContain(left);
+    expect(left.mode).toBe('parked');
+    // A car coming along the lane goes round it (as anything stuck in the road), without touching it.
+    const car = traffic.spawn(lane, 10, 'hatch');
+    let closest = Infinity;
+    for (let t = 0; t < 10; t += 1 / 60) {
+      traffic.update(1 / 60, away, view, green);
+      closest = Math.min(closest, Math.hypot(car.x - left.x, car.y - left.y));
+    }
+    expect(car.x).toBeGreaterThan(260);
+    expect(closest).toBeGreaterThan(car.r + left.r);
+    expect(traffic.stats.overtakes).toBe(1);
+  });
+});

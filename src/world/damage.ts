@@ -9,7 +9,7 @@
  * through, their leaves and twigs strewn about. What's left stays where it fell, in the way. Pure, so it's tested.
  */
 
-import { CAR_LENGTH, CAR_WIDTH, type CarState } from '../car/CarPhysics';
+import { type CarState, carHull } from '../car/CarPhysics';
 import type { Segment } from '../physics/collisions';
 
 export type Material = 'wood' | 'electric' | 'metal' | 'iron' | 'glass' | 'stone' | 'plant' | 'timber' | 'plastic';
@@ -85,8 +85,6 @@ export function breaks(t: Toughness, speed: number, weight = 1): boolean {
   return speed * weight >= t.strength;
 }
 
-const CAR_RADIUS = CAR_WIDTH / 2;
-const HULL = [-(CAR_LENGTH / 2 - CAR_RADIUS), 0, CAR_LENGTH / 2 - CAR_RADIUS];
 
 /**
  * How fast the car is going into (x, y) (0 if it's going away), if any of it
@@ -97,8 +95,9 @@ export function impactSpeed(car: CarState, x: number, y: number, reach: number, 
   const cos = Math.cos(car.heading);
   const sin = Math.sin(car.heading);
   let touching = false;
-  for (const o of HULL) {
-    if (Math.hypot(car.x + cos * o - x, car.y + sin * o - y) < reach + CAR_RADIUS) touching = true;
+  const { radius, offsets } = carHull(car);
+  for (const o of offsets) {
+    if (Math.hypot(car.x + cos * o - x, car.y + sin * o - y) < reach + radius) touching = true;
   }
   if (!touching) return 0;
   const dx = x - car.x;

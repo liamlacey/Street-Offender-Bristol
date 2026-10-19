@@ -10,7 +10,7 @@
  * contact point so off-centre hits spin the car.
  */
 
-import { CAR_LENGTH, CAR_WIDTH, type CarState } from '../car/CarPhysics';
+import { type CarState, carHull } from '../car/CarPhysics';
 
 export interface Circle {
   x: number;
@@ -37,12 +37,6 @@ export interface Body extends Circle {
   damping?: number;
 }
 
-const CAR_RADIUS = CAR_WIDTH / 2;
-/** Offsets of the car's three body circles along its heading. */
-const CAR_HULL = [-(CAR_LENGTH / 2 - CAR_RADIUS), 0, CAR_LENGTH / 2 - CAR_RADIUS];
-const CAR_INV_MASS = 1;
-/** Moment of inertia of a solid rectangle with mass 1. */
-const CAR_INV_INERTIA = 12 / (CAR_LENGTH * CAR_LENGTH + CAR_WIDTH * CAR_WIDTH);
 
 /** Spatial hash of fixed circles, so a query only checks the few nearby. */
 export class CircleGrid {
@@ -121,6 +115,7 @@ export function collideCarWithStatic(
   contactOut?: ContactPoint,
 ): number {
   let strongest = 0;
+  const { radius: CAR_RADIUS, offsets: CAR_HULL } = carHull(car);
   for (const offset of CAR_HULL) {
     for (const s of grid.near(...hullCentre(car, offset), CAR_RADIUS)) {
       const [cx, cy] = hullCentre(car, offset);
@@ -222,6 +217,7 @@ export function nearestOnSegment(x: number, y: number, s: Segment): [number, num
  */
 export function collideCarWithWalls(car: CarState, grid: SegmentGrid, material = WALL_HIT, contactOut?: ContactPoint): number {
   let strongest = 0;
+  const { radius: CAR_RADIUS, offsets: CAR_HULL } = carHull(car);
   for (const offset of CAR_HULL) {
     let [cx, cy] = hullCentre(car, offset);
     for (const s of grid.near(cx, cy, CAR_RADIUS + 2)) {
@@ -263,6 +259,7 @@ export function collideCarWithWalls(car: CarState, grid: SegmentGrid, material =
 
 /** Whether the car's body overlaps any of the circles (nothing is moved). */
 export function carTouches(car: CarState, grid: CircleGrid): boolean {
+  const { radius: CAR_RADIUS, offsets: CAR_HULL } = carHull(car);
   return CAR_HULL.some((offset) => {
     const [cx, cy] = hullCentre(car, offset);
     return grid.near(cx, cy, CAR_RADIUS).some((c) => overlap(cx, cy, CAR_RADIUS, c) !== null);
@@ -272,7 +269,8 @@ export function carTouches(car: CarState, grid: CircleGrid): boolean {
 /** Car against a loose object; both move. Returns the impulse (0 if not touching). */
 export function collideCarWithBody(car: CarState, body: Body, material = CONE_HIT, contactOut?: ContactPoint): number {
   // Too far apart to touch.
-  const reach = CAR_LENGTH / 2 + (body.length ?? 0) / 2 + body.r;
+  const { radius: CAR_RADIUS, offsets: CAR_HULL, invMass: CAR_INV_MASS } = carHull(car);
+  const reach = CAR_HULL[CAR_HULL.length - 1] + CAR_RADIUS + (body.length ?? 0) / 2 + body.r;
   if (Math.abs(car.x - body.x) > reach || Math.abs(car.y - body.y) > reach) return 0;
   let strongest = 0;
   // A long body turns when hit off-centre, like a car; a round one just spins for show.
@@ -318,18 +316,20 @@ const SINGLE = [0];
 /** Two cars bumping: both move and both can be spun. Returns the strongest impulse. */
 export function collideCars(a: CarState, b: CarState, material = CAR_BUMP, contactOut?: ContactPoint): number {
   // Each car's hull reaches half its length from its centre, so further apart than a car length can't touch.
-  if (Math.abs(a.x - b.x) > CAR_LENGTH || Math.abs(a.y - b.y) > CAR_LENGTH) return 0;
+  const [ha, hb] = [carHull(a), carHull(b)];
+  const reach = ha.offsets[ha.offsets.length - 1] + hb.offsets[hb.offsets.length - 1] + ha.radius + hb.radius;
+  if (Math.abs(a.x - b.x) > reach || Math.abs(a.y - b.y) > reach) return 0;
   let strongest = 0;
-  for (const offsetA of CAR_HULL) {
-    for (const offsetB of CAR_HULL) {
+  for (const offsetA of ha.offsets) {
+    for (const offsetB of hb.offsets) {
       const [ax, ay] = hullCentre(a, offsetA);
       const [bx, by] = hullCentre(b, offsetB);
-      const contact = overlap(ax, ay, CAR_RADIUS, { x: bx, y: by, r: CAR_RADIUS });
+      const contact = overlap(ax, ay, ha.radius, { x: bx, y: by, r: hb.radius });
       if (!contact) continue;
       const { nx, ny, depth } = contact;
       // Touching where the two hull circles meet.
-      const px = ax - nx * CAR_RADIUS;
-      const py = ay - ny * CAR_RADIUS;
+      const px = ax - nx * ha.radius;
+      const py = ay - ny * ha.radius;
       const sideA = carSide(a, px - a.x, py - a.y);
       const sideB = carSide(b, px - b.x, py - b.y);
       a.x += (nx * depth) / 2;
@@ -434,7 +434,8 @@ interface ContactSide {
 }
 
 function carSide(car: CarState, rx: number, ry: number): ContactSide {
-  return { v: car, invMass: CAR_INV_MASS, invInertia: CAR_INV_INERTIA, rx, ry };
+  const { invMass, invInertia } = carHull(car);
+  return { v: car, invMass, invInertia, rx, ry };
 }
 
 /**

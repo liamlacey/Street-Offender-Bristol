@@ -26,6 +26,8 @@ interface Button {
 export const STREET_EVENT = 'street';
 /** Sent by the HUD's reset button: put the car back on the road. */
 export const RESET_EVENT = 'reset-car';
+/** Sent by the HUD's action button: get out of what you're driving, or into what you're by. */
+export const ACTION_EVENT = 'get-in-out';
 
 /**
  * Drawn over the game: the street you're on (the old games put up the name
@@ -47,6 +49,11 @@ export class HudScene extends Phaser.Scene {
   private resetButton!: Phaser.GameObjects.Text;
   private credit!: Phaser.GameObjects.Text;
   private hint: Phaser.GameObjects.Text | null = null;
+  /** Getting out (or in): the button, and whether it's lit (something to get into within reach). */
+  private action!: Phaser.GameObjects.Text;
+  private actionZone = new Phaser.Geom.Circle(0, 0, 1);
+  private actionLit = true;
+  private actionHeld = false;
 
   constructor() {
     super('hud');
@@ -74,18 +81,28 @@ export class HudScene extends Phaser.Scene {
       .setOrigin(1, 0)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.scene.get('game').events.emit(RESET_EVENT));
+    this.action = this.add
+      .text(0, 0, 'GET OUT', { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', fontStyle: 'bold', backgroundColor: '#00000066', padding: { x: 8, y: 6 } })
+      .setOrigin(0.5);
+    // (On a touch screen, it's a button by the others; with a keyboard, F or E.)
+    if (!this.touch) this.action.setOrigin(1, 0);
     this.credit = this.add
       .text(0, 0, '© OpenStreetMap contributors · LIDAR © Environment Agency (OGL)', { fontFamily: 'sans-serif', fontSize: '10px', color: '#ffffff' })
       .setAlpha(0.6)
       .setOrigin(0.5, 1);
     if (!this.touch) {
       this.hint = this.add
-        .text(0, 0, 'Arrows / WASD to drive    SPACE handbrake    R reset', { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', backgroundColor: '#00000066', padding: { x: 8, y: 5 } })
+        .text(0, 0, 'Arrows / WASD to drive (or walk)    SPACE handbrake    F get out / in    R reset', { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', backgroundColor: '#00000066', padding: { x: 8, y: 5 } })
         .setOrigin(0.5, 1);
       this.time.delayedCall(9000, () => this.tweens.add({ targets: this.hint, alpha: 0, duration: 800 }));
     }
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      // Getting out or in: once, as it's touched (however quick the tap).
+      if (this.touch && this.actionZone.contains(p.x, p.y)) {
+        this.scene.get('game').events.emit(ACTION_EVENT);
+        return;
+      }
       // A thumb landing on the left of the screen takes the steering, from wherever it lands.
       if (this.touch && !this.steerPointer && p.x < this.scale.width * 0.45) {
         this.steerPointer = p;
@@ -103,6 +120,7 @@ export class HudScene extends Phaser.Scene {
     const { width, height } = this.scale;
     this.street.setPosition(width / 2, 10);
     this.resetButton.setPosition(width - 10, 10);
+    if (!this.touch) this.action.setPosition(width - 10, 46);
     this.credit.setPosition(width / 2, height - 3);
     this.hint?.setPosition(width / 2, height - 18);
     if (!this.touch) return;
@@ -119,6 +137,9 @@ export class HudScene extends Phaser.Scene {
       b.zone.setTo(x, y, radius);
       b.label.setPosition(x, y).setFontSize(Math.round(radius * 0.32));
     }
+    // Getting out or in: up above the brake, out of the way of the thumb on the pedals.
+    this.actionZone.setTo(gas.x - r * 2.55, gas.y - r * 2.05, r * 0.72);
+    this.action.setPosition(this.actionZone.x, this.actionZone.y).setFontSize(Math.round(r * 0.26)).setBackgroundColor('#00000000');
   }
 
   update(_time: number, delta: number): void {
@@ -143,6 +164,8 @@ export class HudScene extends Phaser.Scene {
     // Buttons: any thumb on one holds it, so a thumb can slide from one to the next.
     const pointers = this.input.manager.pointers.filter((q) => q.isDown && q !== this.steerPointer);
     for (const b of this.buttons) this.drive[b.key] = pointers.some((q) => b.zone.contains(q.x, q.y));
+    // (Getting out or in happens as it's touched: see create. Lit while it's held.)
+    this.actionHeld = pointers.some((q) => this.actionZone.contains(q.x, q.y));
     this.draw();
   }
 
@@ -166,6 +189,16 @@ export class HudScene extends Phaser.Scene {
       bg.fillStyle(colours[b.key], on ? 0.55 : 0.22).fillCircle(b.zone.x, b.zone.y, b.zone.radius);
       bg.lineStyle(2, 0xffffff, on ? 0.8 : 0.35).strokeCircle(b.zone.x, b.zone.y, b.zone.radius);
     }
+    const a = this.actionZone;
+    bg.fillStyle(0x4aa3df, this.actionHeld ? 0.55 : this.actionLit ? 0.3 : 0.1).fillCircle(a.x, a.y, a.radius);
+    bg.lineStyle(2, 0xffffff, this.actionLit ? 0.5 : 0.2).strokeCircle(a.x, a.y, a.radius);
+  }
+
+  /** What the action button says (GET OUT, or GET IN), and whether there's anything to do with it now. */
+  setAction(label: string, lit: boolean): void {
+    if (this.action.text !== label) this.action.setText(label);
+    this.actionLit = lit;
+    this.action.setAlpha(lit ? 0.9 : 0.4);
   }
 
   private showStreet(name: string): void {

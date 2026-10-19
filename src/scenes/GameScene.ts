@@ -4,7 +4,6 @@ import {
   CAR_LENGTH,
   CAR_WIDTH,
   type CarInput,
-  DEFAULT_TUNING,
   type CarState,
   SURFACE_GRIP,
   createCar,
@@ -44,18 +43,19 @@ import { Kerbs } from '../world/kerbs';
 import { Humps } from '../world/humps';
 import { WallLayer } from '../world/WallLayer';
 import { type Debris, type DebrisKind, debris, impactSpeed, racked } from '../world/damage';
-import { HudScene, RESET_EVENT, STREET_EVENT } from './HudScene';
+import { ACTION_EVENT, HudScene, RESET_EVENT, STREET_EVENT } from './HudScene';
+import { WALKER, stepWalker, tuningFor } from '../car/rides';
 import { SkidMarks } from './SkidMarks';
 import { TrafficLayer } from './TrafficLayer';
-import { Traffic, VEHICLES, type Vehicle, collideBodies } from '../world/traffic';
+import { COLOURS, Traffic, VEHICLES, type Vehicle, type VehicleKind, collideBodies } from '../world/traffic';
 import { type Boat, Boats } from '../world/boats';
 import { BoatLayer } from './BoatLayer';
 import { WaterRipples } from './WaterRipples';
 import { type Mover, People } from '../world/people';
-import { PeopleLayer } from './PeopleLayer';
+import { type Pose, PeopleLayer, SIZE as PERSON_SIZE, personTexture } from './PeopleLayer';
 import { type Shape, STIFFNESS, type Wreck, hit as dentAt, newWreck, toBody, toWorld } from '../car/dents';
 import { paintWreck } from './dentArt';
-import { bodyLayout } from './vehicleArt';
+import { bodyLayout, busTexture, vehicleShadow, vehicleTexture } from './vehicleArt';
 
 /** Physics runs at a fixed rate so handling feels the same at any frame rate. */
 const PHYSICS_DT = 1 / 120;
@@ -171,8 +171,22 @@ export class GameScene extends Phaser.Scene {
   private hopLeft = 0;
   private wallLayer!: WallLayer;
   private traffic!: Traffic;
-  /** Your car's damage, and the version of it its picture shows. */
-  private readonly wreck: Wreck = newWreck();
+  /** What you're driving's damage, and the version of it its picture shows. */
+  private wreck: Wreck = newWreck();
+  /**
+   * On foot (out of anything), or driving; and what you're driving: its kind
+   * and colour (and a bus's route, for its picture). Your own car's `own`.
+   */
+  private onFoot = false;
+  private ride: { kind: VehicleKind; colour: number; bus?: { colour: string; ref: string } } = { kind: 'own', colour: 0 };
+  /** Your clothes (on foot, and on a bike); how far you've walked (for your steps); seconds left down, knocked over. */
+  private readonly look = Math.floor(Math.random() * 48);
+  private stride = 0;
+  private downFor = 0;
+  /** Come off a bike (hit something hard): off it, after this step. */
+  private thrown = false;
+  /** Seconds till what's within reach to get into is looked for again. */
+  private reachTimer = 0;
   private wreckShown = 0;
   private trafficLayer!: TrafficLayer;
   private boats!: Boats;
@@ -186,7 +200,7 @@ export class GameScene extends Phaser.Scene {
   private skids!: SkidMarks;
   private audio: CarAudio | null = null;
   private hud!: HudScene;
-  private keys!: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'space' | 'r', Phaser.Input.Keyboard.Key>;
+  private keys!: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'space' | 'r' | 'f' | 'e', Phaser.Input.Keyboard.Key>;
   private input_: CarInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   private accumulator = 0;
   /** Where the car was before the last physics step: it's drawn (and followed) between that and where it is now, by how far into the next step the frame is, so it moves smoothly whatever the screen's refresh rate. */
@@ -257,7 +271,7 @@ export class GameScene extends Phaser.Scene {
         this.trees[index].image.setVisible(false);
       },
       audio: () => this.audio,
-      weight: () => 1,
+      weight: () => VEHICLES[this.ride.kind].mass,
       wallBroken: (kind, from, to) => {
         if (kind === 'parapet') this.deckLayer.breakParapet(from, to);
       },
@@ -308,9 +322,14 @@ export class GameScene extends Phaser.Scene {
       d: kb.addKey(K.D),
       space: kb.addKey(K.SPACE),
       r: kb.addKey(K.R),
+      f: kb.addKey(K.F),
+      e: kb.addKey(K.E),
     };
     this.keys.r.on('down', () => this.resetCar());
+    this.keys.f.on('down', () => this.getInOrOut());
+    this.keys.e.on('down', () => this.getInOrOut());
     this.events.on(RESET_EVENT, this.resetCar, this);
+    this.events.on(ACTION_EVENT, this.getInOrOut, this);
 
     this.scene.launch('hud');
     this.hud = this.scene.get('hud') as HudScene;
@@ -322,6 +341,7 @@ export class GameScene extends Phaser.Scene {
       this.audio?.destroy();
       this.audio = null;
       this.events.off(RESET_EVENT, this.resetCar, this);
+      this.events.off(ACTION_EVENT, this.getInOrOut, this);
     });
   }
 
@@ -444,6 +464,11 @@ export class GameScene extends Phaser.Scene {
       this.prev = { x: this.car.x, y: this.car.y, heading: this.car.heading };
       this.step(PHYSICS_DT);
     }
+    // Come off a bike: on foot, and down.
+    if (this.thrown) {
+      this.thrown = false;
+      this.getOut(true);
+    }
     this.interpolate(this.accumulator / PHYSICS_DT);
     this.updateSinking(dt);
     this.updateLoose();
@@ -451,7 +476,7 @@ export class GameScene extends Phaser.Scene {
     this.hopLeft = Math.max(0, this.hopLeft - dt);
     this.drawCar();
     // No tyre marks on the bridges (they'd be laid on the ground below).
-    if (this.sinking < 0 && this.level === 0) this.effects.update(this.car, this.input_, SURFACE_KIND[this.surface], dt);
+    if (this.sinking < 0 && this.level === 0 && !this.onFoot) this.effects.update(this.car, this.input_, SURFACE_KIND[this.surface], dt);
     this.skids.flush();
     this.updateCamera(dt);
     this.updatePerspective();
@@ -461,7 +486,7 @@ export class GameScene extends Phaser.Scene {
     // A bridge is drawn over the car when it's underneath, and under it when it's on top.
     // (And under it at the end of a bridge you're driving onto or off, where the deck meets the road.)
     this.deckLayer.update(view, this.perspective, (i) =>
-      this.level === 1 || this.decks.atEnd(this.car.x, this.car.y, CAR_LENGTH / 2 + 4, this.decks.decks[i]) ? DEPTH.deckBelow : DEPTH.deckAbove,
+      this.level === 1 || this.decks.atEnd(this.car.x, this.car.y, this.carLength() / 2 + 4, this.decks.decks[i]) ? DEPTH.deckBelow : DEPTH.deckAbove,
     );
     this.buildings.update(view, this.perspective, this.car.x, this.car.y);
     // Before the trees: it moves the ones coming down.
@@ -476,12 +501,21 @@ export class GameScene extends Phaser.Scene {
     this.peopleLayer.update(view, this.perspective);
     this.updateStreet(dt);
     const speed = Math.hypot(this.car.vx, this.car.vy);
+    const kind = this.ride.kind;
     this.audio?.update({
-      speed: this.sinking >= 0 ? 0 : Math.abs(forwardSpeed(this.car)),
-      throttle: this.sinking >= 0 ? 0 : this.input_.throttle,
-      slide: Math.max(Math.abs(lateralSpeed(this.car)), this.input_.handbrake ? speed * 0.6 : 0),
+      speed: this.sinking >= 0 || this.onFoot ? 0 : Math.abs(forwardSpeed(this.car)),
+      throttle: this.sinking >= 0 || this.onFoot ? 0 : this.input_.throttle,
+      slide: this.onFoot ? 0 : Math.max(Math.abs(lateralSpeed(this.car)), this.input_.handbrake ? speed * 0.6 : 0),
       surface: SURFACE_KIND[this.surface],
+      // (No engine on foot or on a bike; a deeper one in a lorry or a bus.)
+      engine: this.onFoot || kind === 'bike' ? 0 : kind === 'lorry' || kind === 'bus' || kind === 'double' ? 0.7 : kind === 'van' ? 0.85 : 1,
     });
+    // The button to get out (slow enough), or in (something within reach).
+    this.reachTimer -= dt;
+    if (this.reachTimer <= 0) {
+      this.reachTimer = 0.15;
+      this.hud?.setAction(this.onFoot ? 'GET IN' : 'GET OUT', this.onFoot ? this.reachable() !== null : speed < GET_OUT_SPEED);
+    }
     if (this.bigHit > 0) {
       this.audio?.crash(this.bigHit);
       if (this.bigHit > 220) this.shake(0.12, Math.min(7, this.bigHit / 68));
@@ -505,9 +539,10 @@ export class GameScene extends Phaser.Scene {
     else Object.assign(this.input_, { throttle, brake, steer, handbrake });
   }
 
-  /** One fixed physics step: drive, then hit things. */
+  /** One fixed physics step: drive (or walk), then hit things. */
   private step(dt: number): void {
     const car = this.car;
+    if (this.onFoot) return this.stepOnFoot(dt);
     if (this.sinking >= 0) {
       // Going down: the water drags the car to a stop.
       car.vx *= Math.exp(-4 * dt);
@@ -522,7 +557,7 @@ export class GameScene extends Phaser.Scene {
     this.surface = on ? deckSurface(on.deck.road) : this.surfaces.at(car.x, car.y);
     const [sx, sy] = on ? this.decks.slope(on.deck, on.along) : this.terrain.slope(car.x, car.y);
     const [px, py] = [car.x, car.y];
-    stepCar(car, this.input_, dt, SURFACE_GRIP[SURFACE_KIND[this.surface]], DEFAULT_TUNING, { x: sx, y: sy });
+    stepCar(car, this.input_, dt, SURFACE_GRIP[SURFACE_KIND[this.surface]], tuningFor(this.ride.kind), { x: sx, y: sy });
     // Over a speed hump: a jolt, and a little hop.
     if (this.level === 0) {
       const hump = this.humps.over(car, px, py);
@@ -551,7 +586,7 @@ export class GameScene extends Phaser.Scene {
     const lost = Math.hypot(car.vx - bvx, car.vy - bvy);
     if (lost > 0) {
       const sp = Math.hypot(bvx, bvy) || 1;
-      this.dent(null, car.x + (bvx / sp) * (CAR_LENGTH / 2), car.y + (bvy / sp) * (CAR_LENGTH / 2), lost);
+      this.dent(null, car.x + (bvx / sp) * (this.carLength() / 2), car.y + (bvy / sp) * (this.carLength() / 2), lost);
     }
     const wall = collideCarWithWalls(car, this.walls[this.level], undefined, this.contact);
     if (wall > 0) {
@@ -564,7 +599,7 @@ export class GameScene extends Phaser.Scene {
       this.dent(null, this.contact.x, this.contact.y, post);
     }
     // The traffic, and the parked cars: knocked about (and it stops a moment).
-    for (const v of this.traffic.near(car.x, car.y, CAR_LENGTH + 80)) {
+    for (const v of this.traffic.near(car.x, car.y, this.carLength() + 80)) {
       if (v.level !== this.level) continue;
       const bump = collideCarWithBody(car, v, CAR_BUMP, this.contact);
       if (bump <= 0) continue;
@@ -579,7 +614,7 @@ export class GameScene extends Phaser.Scene {
     }
     // The boats (moored, under way, or adrift), on the water under the bridges: knocked adrift, and dented.
     if (this.level === 0) {
-      for (const b of this.boats.near(car.x, car.y, CAR_LENGTH)) {
+      for (const b of this.boats.near(car.x, car.y, this.carLength())) {
         const bump = collideCarWithBody(car, b, CAR_BUMP, this.contact);
         if (bump <= 0) continue;
         this.boats.knock(b, bump);
@@ -632,7 +667,7 @@ export class GameScene extends Phaser.Scene {
     try {
       this.traffic.update(
         dt,
-        { x: car.x, y: car.y, heading: car.heading, vx: car.vx, vy: car.vy, level: this.level, length: CAR_LENGTH, width: CAR_WIDTH },
+        { x: car.x, y: car.y, heading: car.heading, vx: car.vx, vy: car.vy, level: this.level, length: this.carLength(), width: this.carWidth() },
         { x0: view.left, y0: view.top, x1: view.right, y1: view.bottom },
         (i) => (this.signalHeads[i]?.gone ? 'green' : lightAt(controllers[signals[i].controller], signals[i].controller, signals[i].group, time)),
       );
@@ -704,7 +739,7 @@ export class GameScene extends Phaser.Scene {
       // From its engine, at the back.
       this.effects.smokeAt(b.x - Math.cos(b.angle) * b.length * 0.3, b.y - Math.sin(b.angle) * b.length * 0.3);
     }
-    if (this.wreck.taken.front > 120 && Math.random() < dt * 6) {
+    if (!this.onFoot && this.wreck.taken.front > 120 && Math.random() < dt * 6) {
       this.effects.smokeAt(this.car.x + Math.cos(this.car.heading) * 12, this.car.y + Math.sin(this.car.heading) * 12);
     }
   }
@@ -715,10 +750,14 @@ export class GameScene extends Phaser.Scene {
    * ground (a smashed light's glass, a mirror, a hubcap, the bumper).
    */
   private dent(v: Vehicle | null, x: number, y: number, impulse: number): void {
-    // (A bike isn't dented: its rider comes off it, see `unseated`.)
+    // (A bike isn't dented: its rider comes off it, see `unseated`; you too, if you hit something hard enough.)
     if (v?.kind === 'bike') return;
+    if (!v && this.ride.kind === 'bike') {
+      if (impulse > 45) this.thrown = true;
+      return;
+    }
     const body = v ? { x: v.x, y: v.y, angle: v.angle, vx: v.vx, vy: v.vy, level: v.level } : { x: this.car.x, y: this.car.y, angle: this.car.heading, vx: this.car.vx, vy: this.car.vy, level: this.level };
-    const shape = v ? vehicleShape(v) : PLAYER_SHAPE;
+    const shape = v ? vehicleShape(v) : this.rideShape();
     const wreck = v ? (v.wreck ??= newWreck()) : this.wreck;
     const [u, w] = toBody(x, y, body.x, body.y, body.angle);
     const out = dentAt(wreck, shape, u, w, impulse, this.time.now / 1000, Math.random);
@@ -762,7 +801,8 @@ export class GameScene extends Phaser.Scene {
     const view = this.cameras.main.worldView;
     const car = this.car;
     // You and the traffic, each on its level (what's up on a bridge is nowhere near those under it).
-    const player: Mover = { x: car.x, y: car.y, angle: car.heading, length: CAR_LENGTH, width: CAR_WIDTH, vx: car.vx, vy: car.vy, id: -1, level: this.level };
+    // (On foot, or on a bike, you brush past people.)
+    const player: Mover = { x: car.x, y: car.y, angle: car.heading, length: this.carLength(), width: this.carWidth(), vx: car.vx, vy: car.vy, id: -1, level: this.level, bike: this.onFoot || this.ride.kind === 'bike' };
     const movers: Mover[] = [];
     for (const v of [...this.traffic.vehicles, ...this.traffic.parked]) {
       if (Math.abs(v.x - car.x) > view.width + 400 || Math.abs(v.y - car.y) > view.height + 400) continue;
@@ -835,6 +875,172 @@ export class GameScene extends Phaser.Scene {
     wreck.marks = wreck.marks.filter((m) => m.kind !== 'crack');
     this.boats.hurt(b);
     if (impulse > 40) this.effects.splashAt(x, y, Math.min(14, Math.round(impulse / 25)));
+  }
+
+  /** How long and wide what you're driving is (or you, on foot), px. */
+  private carLength(): number {
+    return this.car.length ?? CAR_LENGTH;
+  }
+
+  private carWidth(): number {
+    return this.car.width ?? CAR_WIDTH;
+  }
+
+  /** What you're driving, for its damage; and its picture. */
+  private rideShape(): Shape {
+    return this.ride.kind === 'own' ? PLAYER_SHAPE : vehicleShape(this.ride);
+  }
+
+  private rideTexture(): string {
+    const r = this.ride;
+    return r.bus ? busTexture(this, r.kind, r.bus.colour, r.bus.ref) : vehicleTexture(this, r.kind, r.colour, this.look);
+  }
+
+  /** The button (or F, or E): out of what you're driving, or into what you're by. */
+  private getInOrOut(): void {
+    if (this.sinking >= 0 || this.downFor > 0) return;
+    if (!this.onFoot) {
+      if (Math.hypot(this.car.vx, this.car.vy) < GET_OUT_SPEED) this.getOut(false);
+      return;
+    }
+    const target = this.reachable();
+    if (target) this.getIn(target);
+  }
+
+  /** The nearest thing you could get into from where you're standing: a vehicle (driven, or parked), or a bike lying on the ground. */
+  private reachable(): Vehicle | { body: LooseProp; image: Phaser.GameObjects.Image } | null {
+    if (!this.onFoot) return null;
+    const { x, y } = this.car;
+    let best: Vehicle | { body: LooseProp; image: Phaser.GameObjects.Image } | null = null;
+    let bestD = REACH;
+    for (const v of this.traffic.near(x, y, 120)) {
+      if (v.level !== this.level) continue;
+      // How far from its sides (or ends).
+      const [ux, uy] = [Math.cos(v.angle), Math.sin(v.angle)];
+      const [dx, dy] = [x - v.x, y - v.y];
+      const d = Math.hypot(Math.max(0, Math.abs(dx * ux + dy * uy) - v.length / 2), Math.max(0, Math.abs(-dx * uy + dy * ux) - v.r));
+      if (d < bestD) [best, bestD] = [v, d];
+    }
+    for (const i of this.nearbyLoose(x, y)) {
+      const l = this.loose[i];
+      if (l.body.kind !== 'bike' || l.body.gone || l.body.level !== this.level) continue;
+      const d = Math.max(0, Math.hypot(l.body.x - x, l.body.y - y) - 4);
+      if (d < bestD) [best, bestD] = [l, d];
+    }
+    return best;
+  }
+
+  /** Into a vehicle (pulling its driver out, if it's being driven), or onto a bike lying there. */
+  private getIn(target: Vehicle | { body: LooseProp; image: Phaser.GameObjects.Image }): void {
+    const car = this.car;
+    if ('body' in target) {
+      const { body, image } = target;
+      body.gone = true;
+      image.destroy();
+      this.ride = { kind: 'bike', colour: Math.floor(Math.random() * COLOURS.bike.length) };
+      this.wreck = newWreck();
+      Object.assign(car, { x: body.x, y: body.y, heading: body.angle, vx: 0, vy: 0, spin: 0 });
+      this.level = body.level;
+    } else {
+      const v = target;
+      if (this.traffic.vehicles.includes(v)) {
+        // Pulled out of their seat (the driver's, on the right), and off they run.
+        const [rx, ry] = [-Math.sin(v.angle), Math.cos(v.angle)];
+        const out = v.r + 0.8 * 8;
+        this.people.jumpOut(v.x + rx * out, v.y + ry * out, v.level, v.rider ?? Math.floor(Math.random() * 48), car.x, car.y);
+        this.audio?.knock();
+      }
+      this.traffic.take(v);
+      this.ride = { kind: v.kind, colour: v.colour, ...(v.bus ? { bus: { colour: v.bus.colour, ref: v.bus.ref } } : {}) };
+      this.wreck = v.wreck ?? newWreck();
+      Object.assign(car, { x: v.x, y: v.y, heading: v.angle, vx: v.vx, vy: v.vy, spin: 0 });
+      this.level = v.level;
+    }
+    this.onFoot = false;
+    const k = VEHICLES[this.ride.kind];
+    if (this.ride.kind === 'own') Object.assign(car, { length: undefined, width: undefined, invMass: undefined });
+    else Object.assign(car, { length: k.length, width: k.width, invMass: 1 / k.mass });
+    this.prev = { x: car.x, y: car.y, heading: car.heading };
+    this.wreckShown = -1;
+    this.carSprite.setTexture(this.rideTexture());
+    this.carShadow.setTexture(vehicleShadow(this, this.ride.kind)).setVisible(true);
+    this.effects.reset();
+    this.reachTimer = 0;
+  }
+
+  /**
+   * Out of what you're driving (or off it, thrown, `fell`): out of the
+   * driver's door (on the right; the other side, if that's against a wall),
+   * on foot; what you were driving left where it is, its damage and all.
+   */
+  private getOut(fell: boolean): void {
+    const car = this.car;
+    const h = car.heading;
+    const off = this.carWidth() / 2 + 0.7 * 8;
+    const free = (x: number, y: number) =>
+      (this.level === 1 || this.surfaces.at(x, y) !== Surface.Deep) &&
+      !this.walls[this.level].near(x, y, 4).some((w) => {
+        const [px, py] = nearestOnSegment(x, y, w);
+        return Math.hypot(px - x, py - y) < w.r + 3;
+      });
+    const spot = ([1, -1] as const).map((side) => [car.x - Math.sin(h) * side * off, car.y + Math.cos(h) * side * off] as const).find(([x, y]) => free(x, y)) ?? (fell ? ([car.x, car.y] as const) : null);
+    if (!spot) return;
+    const r = this.ride;
+    if (r.kind === 'bike') {
+      // A bike's left lying on its side (picked up again, ridden off).
+      this.addDebris({ kind: 'bike', x: car.x, y: car.y, vx: car.vx * 0.6, vy: car.vy * 0.6, angle: h, spin: fell ? (Math.random() - 0.5) * 4 : 0, r: 2.4, length: 13, invMass: 12 }, this.level);
+    } else {
+      const bus = r.bus ? { bus: { route: -1, ref: r.bus.ref, colour: r.bus.colour, leg: 0, stops: [], served: new Set<number>(), dwell: -1, yield: false, lost: true } } : {};
+      this.traffic.leave(r.kind, car.x, car.y, h, this.level, { colour: r.colour, wreck: this.wreck, ...bus });
+    }
+    this.onFoot = true;
+    Object.assign(car, { x: spot[0], y: spot[1], vx: fell ? car.vx * 0.3 : 0, vy: fell ? car.vy * 0.3 : 0, spin: 0, length: WALKER.size, width: WALKER.size, invMass: WALKER.invMass });
+    if (fell) {
+      this.downFor = 2;
+      this.audio?.knock();
+    }
+    this.wreck = newWreck();
+    this.wreckShown = 0;
+    this.prev = { x: car.x, y: car.y, heading: car.heading };
+    this.effects.reset();
+    this.reachTimer = 0;
+  }
+
+  /** On foot: turning and walking (or running); not into the water, nor through walls; knocked over by the traffic. */
+  private stepOnFoot(dt: number): void {
+    const car = this.car;
+    const [px, py] = [car.x, car.y];
+    if (this.downFor > 0) {
+      this.downFor -= dt;
+      car.vx *= Math.exp(-5 * dt);
+      car.vy *= Math.exp(-5 * dt);
+      car.x += car.vx * dt;
+      car.y += car.vy * dt;
+    } else stepWalker(car, this.input_, dt);
+    if (this.level === 0 && this.surfaces.at(car.x, car.y) === Surface.Deep) {
+      [car.x, car.y, car.vx, car.vy] = [px, py, 0, 0];
+    }
+    collideCarWithWalls(car, this.walls[this.level]);
+    collideCarWithStatic(car, this.posts[this.level]);
+    for (const v of this.traffic.near(car.x, car.y, 80)) {
+      if (v.level !== this.level) continue;
+      const rel = Math.hypot(v.vx - car.vx, v.vy - car.vy);
+      const bump = collideCarWithBody(car, v, CAR_BUMP, this.contact);
+      // Hit by something coming along: over you go.
+      if (bump > 0 && v.mode === 'drive' && rel > 3 * 8 && this.downFor <= 0) {
+        this.downFor = 2.5;
+        this.audio?.knock();
+        this.shake(0.15, 1.5);
+      }
+    }
+    for (const i of this.nearbyLoose(car.x, car.y)) {
+      const { body } = this.loose[i];
+      if (body.level !== this.level || body.gone) continue;
+      if (collideCarWithBody(car, body) > 0) body.moved = true;
+    }
+    this.stride += Math.hypot(car.x - px, car.y - py);
+    this.level = this.decks.stepAt(this.level, car.x, car.y, this.groundAt(car.x, car.y));
+    this.surface = this.level === 1 ? Surface.Road : this.surfaces.at(car.x, car.y);
   }
 
   /** How loud something at (x, y) is, by how far it is from the car: 1 close, 0 out of earshot. */
@@ -923,9 +1129,14 @@ export class GameScene extends Phaser.Scene {
     if (this.sinking > 2.2) this.resetCar();
   }
 
-  /** Back on the road, where it last was safely, and repaired. */
+  /** Back on the road, where it last was safely, and repaired (on foot, back there). */
   private resetCar(): void {
     Object.assign(this.car, { x: this.safe.x, y: this.safe.y, heading: this.safe.heading, vx: 0, vy: 0, spin: 0 });
+    if (this.onFoot) {
+      this.level = 0;
+      this.downFor = 0;
+      return;
+    }
     this.sinking = -1;
     this.level = 0;
     this.surface = this.surfaces.at(this.car.x, this.car.y);
@@ -933,8 +1144,8 @@ export class GameScene extends Phaser.Scene {
     // Good as new.
     Object.assign(this.wreck, newWreck());
     this.wreckShown = this.wreck.version;
-    this.carSprite.setTexture(TEX.car).setAlpha(1).setTint(0xffffff);
-    this.carShadow.setTexture(TEX.carShadow);
+    this.carSprite.setTexture(this.rideTexture()).setAlpha(1).setTint(0xffffff);
+    this.carShadow.setTexture(vehicleShadow(this, this.ride.kind));
   }
 
   /** A jolt shakes the camera this long (s), this far (map px); a harder one takes over from a weaker. */
@@ -957,9 +1168,18 @@ export class GameScene extends Phaser.Scene {
 
   private drawCar(): void {
     const { x, y, heading } = this.shown;
+    if (this.onFoot) {
+      // You: standing, stepping as you walk (and run), or down, knocked over.
+      const moving = Math.hypot(this.car.vx, this.car.vy) > 4;
+      const pose: Pose = this.downFor > 0 ? 'down' : !moving ? 'stand' : Math.floor(this.stride / (0.75 * 8)) % 2 ? 'step0' : 'step1';
+      this.carSprite.setTexture(personTexture(this, this.look, pose)).setScale(PERSON_SIZE / ART_SCALE).setAlpha(1).clearTint().setPosition(x, y).setRotation(heading);
+      this.carShadow.setVisible(false);
+      return;
+    }
     if (this.wreck.version !== this.wreckShown) {
       this.wreckShown = this.wreck.version;
-      paintWreck(this, 'car-dented', { base: TEX.car, length: CAR_LENGTH, width: CAR_WIDTH, mirror: PLAYER_SHAPE.mirror }, this.wreck);
+      const k = VEHICLES[this.ride.kind];
+      paintWreck(this, 'car-dented', { base: this.rideTexture(), length: k.length, width: k.width, mirror: this.rideShape().mirror }, this.wreck);
       this.carSprite.setTexture('car-dented');
       // Its shadow the shape it is now (crumpled in, parts gone).
       this.carShadow.setTexture('car-dented');
@@ -967,7 +1187,8 @@ export class GameScene extends Phaser.Scene {
     // Off a speed hump: up and down again, nearer the camera at the top (a little bigger), its shadow further off.
     const phase = this.hopLeft > 0 ? 1 - this.hopLeft / HOP_TIME : 1;
     const hop = this.hopPeak * 4 * phase * (1 - phase);
-    const s = (1 / ART_SCALE) * (1 + hop * 0.07);
+    // (A bike drawn as big as the people are: see TrafficLayer.)
+    const s = ((this.ride.kind === 'bike' ? 1.4 : 1) / ART_SCALE) * (1 + hop * 0.07);
     if (this.sinking >= 0) {
       // Sinking: smaller, darker and fading under the water.
       const k = Math.min(this.sinking / 1.6, 1);
@@ -1198,6 +1419,11 @@ const PLAYER_SHAPE: Shape = { length: CAR_LENGTH, width: CAR_WIDTH, stiffness: S
 
 const shapes = new Map<string, Shape>();
 
+/** Out of what you're driving only going slower than this, px/s (a fast walk). */
+const GET_OUT_SPEED = 3 * 8;
+/** Into something only from within this of it, px. */
+const REACH = 1.3 * 8;
+
 /** A kind of vehicle, for its damage. */
 /** How sturdy each kind of boat is (a car's 1): a dinghy's thin plastic, a narrowboat's steel, an old tug's heavy plate. */
 const BOAT_STIFFNESS: Record<Boat['kind'], number> = { dinghy: 0.7, cruiser: 1.1, yacht: 1.2, narrowboat: 2.4, barge: 3, ferry: 2, tug: 4 };
@@ -1216,7 +1442,7 @@ function restView(side: number): number {
   return Math.min(VIEW_AT_SPEED * REST_MOST, VIEW_AT_REST * Math.max(1, side / PHONE_SIDE) ** SCREEN_EASE);
 }
 
-function vehicleShape(v: Vehicle): Shape {
+function vehicleShape(v: { kind: VehicleKind }): Shape {
   let shape = shapes.get(v.kind);
   if (!shape) {
     const k = VEHICLES[v.kind];

@@ -4,16 +4,17 @@ import { TEX } from './art';
 import type { Material } from '../world/damage';
 import type { SkidMarks } from './SkidMarks';
 
-/** Wheel positions in the car's frame: x forward, y to the right. */
-const REAR = -(CAR_LENGTH / 2 - 8);
-const FRONT = CAR_LENGTH / 2 - 9;
-const SIDE = CAR_WIDTH / 2 - 2.5;
-const WHEELS: [number, number][] = [
-  [REAR, -SIDE],
-  [REAR, SIDE],
-  [FRONT, -SIDE],
-  [FRONT, SIDE],
-];
+/** Wheel positions in the car's frame (whatever you're driving): x forward, y to the right. */
+function wheels(car: CarState): [number, number][] {
+  const [L, W] = [car.length ?? CAR_LENGTH, car.width ?? CAR_WIDTH];
+  const [rear, front, side] = [-(L / 2 - 8 * (L / CAR_LENGTH) ** 0.5), L / 2 - 9 * (L / CAR_LENGTH) ** 0.5, Math.max(0, W / 2 - 2.5)];
+  return [
+    [rear, -side],
+    [rear, side],
+    [front, -side],
+    [front, side],
+  ];
+}
 
 const RUBBER = { color: 0x111111, alpha: 0.32, width: 3 };
 const TURF = { color: 0x3a2c1a, alpha: 0.35, width: 4 };
@@ -160,7 +161,7 @@ export class CarEffects {
     const soft = surface === 'grass' || surface === 'mud' || surface === 'dirt';
     const cos = Math.cos(car.heading);
     const sin = Math.sin(car.heading);
-    WHEELS.forEach(([fx, fy], i) => {
+    wheels(car).forEach(([fx, fy], i) => {
       const x = car.x + cos * fx - sin * fy;
       const y = car.y + sin * fx + cos * fy;
       const rear = i < 2;

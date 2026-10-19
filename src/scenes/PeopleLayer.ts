@@ -6,7 +6,7 @@ import { ART_SCALE, canvasTexture } from './art';
 type Ctx = CanvasRenderingContext2D;
 
 /** Drawn a little bigger than life, so they can be made out on a phone. */
-const SIZE = 1.5;
+export const SIZE = 1.5;
 
 /** Their clothes (a top, and trousers or a skirt), their hair; and skin. */
 const TOPS = ['#2f4a7a', '#8a2b2b', '#2e5d3c', '#d8d2c2', '#1f1f22', '#c4762f', '#6b4c8a', '#3d7f8c', '#b8a43a', '#9c9c9c', '#d06a8a', '#4a5a2e'];
@@ -74,7 +74,7 @@ function shadeOf(hex: string): string {
   return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
 }
 
-type Pose = 'stand' | 'step0' | 'step1' | 'down' | 'sit';
+export type Pose = 'stand' | 'step0' | 'step1' | 'down' | 'sit';
 
 /** Picnic blankets: red and white check, blue and white check, a tartan, a plain green. */
 const BLANKETS: [string, string][] = [['#c8372d', '#f2ece0'], ['#2f5f9a', '#eef0f2'], ['#7a2a2a', '#2b4a2e'], ['#5f8a4a', '#5f8a4a']];
@@ -103,7 +103,7 @@ function blanket(scene: Phaser.Scene, pattern: number): string {
   return key;
 }
 
-function texture(scene: Phaser.Scene, look: number, pose: Pose): string {
+export function personTexture(scene: Phaser.Scene, look: number, pose: Pose): string {
   const key = `person-${look % LOOKS}-${pose}`;
   if (pose === 'down') canvasTexture(scene, key, 16, 8, (ctx) => person(ctx, look, pose));
   else canvasTexture(scene, key, 10, 10, (ctx) => person(ctx, look, pose));
@@ -135,7 +135,7 @@ export class PeopleLayer {
       if (p.x < view.left - pad || p.x > view.right + pad || p.y < view.top - pad || p.y > view.bottom + pad) continue;
       seen.add(p);
       const pose: Pose = p.mode === 'down' ? 'down' : p.mode === 'sit' ? 'sit' : p.speed < 2 ? 'stand' : p.step < 0.5 ? 'step0' : 'step1';
-      const key = texture(this.scene, p.look, pose);
+      const key = personTexture(this.scene, p.look, pose);
       let s = this.sprites.get(p);
       if (!s) {
         s = this.scene.add.image(0, 0, key).setScale(SIZE / ART_SCALE);

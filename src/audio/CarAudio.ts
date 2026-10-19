@@ -18,6 +18,8 @@ export interface EngineState {
   /** Sideways sliding speed, px/s. */
   slide: number;
   surface: SurfaceKind;
+  /** The engine's note against a car's (lower, for a lorry or a bus); 0, no engine (on foot, on a bike). */
+  engine?: number;
 }
 
 /** Speed range of each "gear", so the engine note rises and drops like it's changing up. */
@@ -269,15 +271,15 @@ class Engine {
     this.sub.start();
   }
 
-  update({ speed, throttle }: EngineState): void {
+  update({ speed, throttle, engine = 1 }: EngineState): void {
     const gear = Math.floor(speed / GEAR_SPAN);
     const rev = (speed % GEAR_SPAN) / GEAR_SPAN;
-    const freq = 52 + rev * 70 + gear * 10 + throttle * 6;
+    const freq = (52 + rev * 70 + gear * 10 + throttle * 6) * (engine || 1);
     const t = this.ctx.currentTime;
     this.saw.frequency.setTargetAtTime(freq, t, 0.04);
     this.sub.frequency.setTargetAtTime(freq / 2, t, 0.04);
     this.filter.frequency.setTargetAtTime(400 + throttle * 900 + speed * 1.5, t, 0.05);
-    this.gain.gain.setTargetAtTime(0.06 + throttle * 0.05, t, 0.05);
+    this.gain.gain.setTargetAtTime(engine ? 0.06 + throttle * 0.05 : 0, t, 0.05);
   }
 
   stop(): void {

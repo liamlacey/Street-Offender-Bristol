@@ -22,7 +22,7 @@ const M = 8;
 
 // --- The vehicles ---
 
-export type VehicleKind = 'small' | 'hatch' | 'saloon' | 'estate' | 'suv' | 'van' | 'lorry' | 'bus' | 'double' | 'bike';
+export type VehicleKind = 'small' | 'hatch' | 'saloon' | 'estate' | 'suv' | 'van' | 'lorry' | 'bus' | 'double' | 'bike' | 'own';
 
 /**
  * Each kind: how long and wide (px; real sizes, a tenth up, to match your car),
@@ -42,6 +42,8 @@ export const VEHICLES: Record<VehicleKind, { length: number; width: number; mass
   double: { length: 10.6 * 1.1 * M, width: 2.55 * 1.1 * M, mass: 11, traffic: 0, parked: 0, paint: 'bus' },
   // A bike and its rider (about 90 kg, against your car's tonne and more).
   bike: { length: 1.8 * 1.1 * M, width: 0.65 * 1.1 * M, mass: 0.08, traffic: 0.18, parked: 0, paint: 'bike' },
+  // Your own car, left where you got out of it (CarPhysics's CAR_LENGTH and CAR_WIDTH).
+  own: { length: 38, width: 18, mass: 1, traffic: 0, parked: 0, paint: 'car' },
 };
 
 /** The colours, about as common as on Britain's roads (grey, black and white the most); vans mostly white; lorries' cabs. */
@@ -240,7 +242,7 @@ const BUSIEST = 3;
 /** How many bikes ride along a cycle path each way, per 100 m. */
 const PATH_BIKES = 0.9;
 /** How fast each kind's driven, against the road's usual speed (before the driver's own pace). */
-const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85, bus: 0.85, double: 0.82, bike: 1 };
+const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85, bus: 0.85, double: 0.82, bike: 1, own: 1 };
 /** How fast a cyclist rides on the flat, px/s (each faster or slower: see pace); how much less briskly they pull away than a car. */
 const BIKE_SPEED = 5.3 * M;
 const BIKE_ACCEL = 0.4;
@@ -250,7 +252,7 @@ const BIKE_ROOM = 1.5 * M;
 /** A cyclist hit harder than this (an impulse, your car's mass × px/s) comes off. */
 const UNSEAT = 1;
 /** Up a hill, how much each kind slows for each 1 in 1 of it (a lorry labours; a car barely notices); and how strongly gravity holds it back pulling away. */
-const CLIMB: Record<VehicleKind, number> = { small: 0.8, hatch: 0.6, saloon: 0.5, estate: 0.5, suv: 0.5, van: 1.3, lorry: 3, bus: 2.2, double: 2.4, bike: 7 };
+const CLIMB: Record<VehicleKind, number> = { small: 0.8, hatch: 0.6, saloon: 0.5, estate: 0.5, suv: 0.5, van: 1.3, lorry: 3, bus: 2.2, double: 2.4, bike: 7, own: 0.5 };
 const GRAVITY = 9.81 * M;
 /** Dawdling: how often a driver slows a moment, a second (more often the busier the street), and for how long. */
 const DAWDLE = 0.003;
@@ -1791,6 +1793,23 @@ export class Traffic {
     v.mode = 'knocked';
     v.rest = 0;
     v.speed = 0;
+  }
+
+  /** Taken out of the traffic (or off its parking place): you've got in it. */
+  take(v: Vehicle): void {
+    this.remove(v);
+    const i = this.parked.indexOf(v);
+    if (i >= 0) this.parked.splice(i, 1);
+    this.parkedById.delete(v.id);
+  }
+
+  /** A vehicle you've got out of, left where it is (as a parked one, but not in a bay: it's in the way, and gone round). */
+  leave(kind: VehicleKind, x: number, y: number, angle: number, level: number, extra: Partial<Vehicle> = {}): Vehicle {
+    const v = this.make(kind, x, y, angle, level);
+    Object.assign(v, extra, { mode: 'parked', damping: SLIDE, speed: 0, vx: 0, vy: 0, spin: 0 });
+    this.parked.push(v);
+    this.parkedById.set(v.id, v);
+    return v;
   }
 
   /** A cyclist knocked off their bike: taken off the road (the bike and its rider go down on it: see `unseated`). */

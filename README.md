@@ -10,9 +10,18 @@ roads, pavements and grass (up Park Street's hill slower, down it faster), crash
 benches and bins flying, and drive into the harbour if you like (the car sinks, and
 you're put back on the road).
 
+Get out (stopped, or nearly) and walk about, and get into anything you're beside:
+a parked car, your own car where you left it, a bike lying on the ground, or a car,
+van, lorry, bus or bike going past (its driver's pulled out, and runs). Each drives
+as it would: a bus is slow to get going and to turn, a bike's quick off the mark but
+tops out at a cyclist's speed (hit something hard on one and you come off). What
+you get out of is left where it is, damage and all (the traffic goes round it).
+
 Controls: on a phone, the left thumb steers (from wherever it lands) and the right
-has GAS, BRAKE (hold it to reverse) and H/BRAKE. On a computer, arrows or WASD,
-SPACE for the handbrake, R to reset.
+has GAS, BRAKE (hold it to reverse), H/BRAKE, and GET OUT / GET IN (lit when there's
+something to get into within reach). On foot, steering turns you, GAS runs and BRAKE
+steps back. On a computer, arrows or WASD, SPACE for the handbrake, F (or E) to get
+out or in, R to reset.
 
 ```sh
 npm install

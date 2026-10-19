@@ -32,6 +32,41 @@ export interface CarState {
   vy: number;
   /** Yaw rate in rad/s from collisions (steering turns the car directly, not through this). */
   spin: number;
+  /** What you're driving, if it's not your own car: how long and wide it is, px, and 1 / its mass (your car's is 1). */
+  length?: number;
+  width?: number;
+  invMass?: number;
+}
+
+/**
+ * The body's circles: their radius (half its width), and where each is along
+ * it from its middle (three, or more for a long one, so there are no gaps).
+ */
+export interface Hull {
+  radius: number;
+  offsets: number[];
+  invMass: number;
+  invInertia: number;
+}
+
+const hulls = new Map<string, Hull>();
+
+export function carHull(car: CarState): Hull {
+  const L = car.length ?? CAR_LENGTH;
+  const W = car.width ?? CAR_WIDTH;
+  const invMass = car.invMass ?? 1;
+  const key = `${L},${W},${invMass}`;
+  let hull = hulls.get(key);
+  if (!hull) {
+    const radius = W / 2;
+    const span = Math.max(0, L / 2 - radius);
+    const n = Math.max(3, Math.ceil((span * 2) / radius - 0.5) + 1);
+    const offsets = Array.from({ length: n }, (_, i) => -span + (2 * span * i) / (n - 1));
+    // A solid rectangle's moment of inertia.
+    hull = { radius, offsets, invMass, invInertia: (12 * invMass) / (L * L + W * W) };
+    hulls.set(key, hull);
+  }
+  return hull;
 }
 
 export interface CarTuning {

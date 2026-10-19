@@ -1137,6 +1137,14 @@ export class People {
     }
   }
 
+  /** A driver (or rider) pulled out of their vehicle at (x, y): off and running, away from (fromX, fromY). */
+  jumpOut(x: number, y: number, level: number, look: number, fromX: number, fromY: number): Person {
+    const p = this.make(x, y, 'walk');
+    Object.assign(p, { look: look % LOOKS, level });
+    this.scare(p, fromX, fromY);
+    return p;
+  }
+
   /**
    * A cyclist knocked off their bike, going `speed` px/s: down on the road
    * at (x, y), facing `angle`; hurt if it was fast. (Up again, they go on on
