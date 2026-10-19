@@ -14,6 +14,7 @@ import type { GameMap, Pts, Road, RoadKind } from '../map/osm';
 import type { Body } from '../physics/collisions';
 import type { Light } from './lights';
 import { type Space, parkingSpaces } from './parking';
+import { Terrain } from './terrain';
 import { lineLength, offsetLine, subPolyline } from './world';
 
 const M = 8;
@@ -59,9 +60,14 @@ export interface Vehicle extends Body {
   s: number;
   /** The way it came (for which way it's pointing as it turns). */
   back: Path | null;
-  /** Its speed along the way, and the speed it likes to go (a little over or under the limit), px/s. */
+  /** Its speed along the way, px/s; and how fast this driver likes to go, against the road's usual speed (0.7 to 1.35). */
   speed: number;
   pace: number;
+  /** How its speed wanders as it drives (two slow swells, each a rate and a phase: radians/s, radians). */
+  wander: [number, number, number, number];
+  /** Dawdling a moment (looking for a shop, or somewhere to park): seconds left, and how much slower. */
+  dawdle: number;
+  dawdleTo: number;
   /** Which level it's on: 0 the ground, 1 a bridge's deck. */
   level: number;
   /** Seconds stopped since it was knocked; seconds stuck behind the same thing. */
@@ -145,6 +151,8 @@ export interface Lane extends Path {
   density: number;
   /** Where the traffic lights' stop lines are along it (and which lights). */
   stops: { s: number; signal: number }[];
+  /** How busy the road is (see Road.activity). */
+  activity: number;
   /** At its end, it gives way to the traffic on the road it joins. */
   giveWay: boolean;
 }
@@ -166,6 +174,14 @@ const SPEED: Partial<Record<RoadKind, number>> = { trunk: 13 * M, primary: 10 * 
 /** How many vehicles a lane carries, per 100 m, on a quiet stretch; more where there's more to go to (up to TRAFFIC_BUSIEST times as many). */
 const DENSITY: Partial<Record<RoadKind, number>> = { trunk: 2.2, primary: 2, secondary: 1.6, tertiary: 1.3, street: 0.6 };
 const BUSIEST = 3;
+/** How fast each kind's driven, against the road's usual speed (before the driver's own pace). */
+const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85 };
+/** Up a hill, how much each kind slows for each 1 in 1 of it (a lorry labours; a car barely notices); and how strongly gravity holds it back pulling away. */
+const CLIMB: Record<VehicleKind, number> = { small: 0.8, hatch: 0.6, saloon: 0.5, estate: 0.5, suv: 0.5, van: 1.3, lorry: 3 };
+const GRAVITY = 9.81 * M;
+/** Dawdling: how often a driver slows a moment, a second (more often the busier the street), and for how long. */
+const DAWDLE = 0.003;
+const DAWDLE_BUSY = 0.0015;
 /** A lane's width, if the road doesn't say, px. */
 const LANE = 3.2 * M;
 /** Bends and turns are taken no faster than this sideways pull allows, px/s². */
@@ -317,8 +333,10 @@ export function buildLanes(map: GameMap): { lanes: Lane[]; nodes: Node[] } {
           count,
           from: dir === 1 ? e.a : e.b,
           to: dir === 1 ? e.b : e.a,
-          speed: SPEED[r.kind] ?? 8 * M,
+          // Slower along a busy shopping street, or a narrow lane.
+          speed: (SPEED[r.kind] ?? 8 * M) * (1 - Math.min(0.15, (r.activity ?? 0) * 0.005)) * (each < 2.9 * M ? 0.88 : 1),
           rank: RANK[r.kind] ?? 1,
+          activity: r.activity ?? 0,
           density: ((DENSITY[r.kind] ?? 0.6) * Math.min(BUSIEST, 1 + (r.activity ?? 0) / 15)) / (100 * M),
           stops: [],
           giveWay: false,
@@ -445,9 +463,11 @@ export class Traffic {
   private started = false;
   private clock = 0;
   private readonly byId = new Map<number, Vehicle>();
+  private readonly terrain: Terrain;
 
   constructor(map: GameMap, options: TrafficOptions = {}) {
     ({ lanes: this.lanes, nodes: this.nodes } = buildLanes(map));
+    this.terrain = new Terrain(map.terrain, map.pxPerMetre);
     this.rand = options.rand ?? Math.random;
     this.max = options.max ?? 40;
     // The parked cars: most of the bays taken, more where it's busier.
@@ -485,7 +505,11 @@ export class Traffic {
       s: 0,
       back: null,
       speed: 0,
-      pace: 0.88 + this.rand() * 0.22,
+      // Each driver their own pace: most about the usual, some slower, some in a hurry; heavier vehicles slower.
+      pace: KIND_PACE[kind] * (0.8 + 0.2 * (this.rand() + this.rand())) * (this.rand() < 0.1 ? 1.12 : 1),
+      wander: [(2 * Math.PI) / (6 + this.rand() * 8), this.rand() * 6.3, (2 * Math.PI) / (2.5 + this.rand() * 2.5), this.rand() * 6.3],
+      dawdle: 0,
+      dawdleTo: 1,
       level,
       rest: 0,
       stuck: 0,
@@ -730,7 +754,22 @@ export class Traffic {
     }
 
     // The speed it wants: its usual for the road (drifting a little, as a driver's does), slowing in time for the bends ahead...
-    const cruise = (v.route.find((p) => p.lane)?.lane?.speed ?? 8 * M) * v.pace * (1 + 0.04 * Math.sin(this.clock * 0.23 + v.id * 1.7));
+    // The speed it likes: the road's, at its own pace, never quite steady (it swells and eases off a little as it drives)...
+    const lane = v.route.find((p) => p.lane)?.lane;
+    const [w1, p1, w2, p2] = v.wander;
+    let cruise = (lane?.speed ?? 8 * M) * v.pace * (1 + 0.06 * Math.sin(this.clock * w1 + p1) + 0.035 * Math.sin(this.clock * w2 + p2));
+    // ...slower up a hill (a lorry much slower), a little quicker down one...
+    const [gx, gy] = this.terrain.slope(v.x, v.y);
+    const grade = gx * Math.cos(v.angle) + gy * Math.sin(v.angle);
+    cruise *= grade > 0 ? Math.max(0.45, 1 - CLIMB[v.kind] * grade) : 1 + Math.min(0.05, -grade * 0.3);
+    // ...and now and then it dawdles a moment (more often along a busy street).
+    if (v.dawdle > 0) {
+      v.dawdle -= dt;
+      cruise *= v.dawdleTo;
+    } else if (lane && v.route[0].lane && v.speed > 3 * M && this.rand() < (DAWDLE + DAWDLE_BUSY * Math.min(30, lane.activity)) * dt) {
+      v.dawdle = 2 + this.rand() * 3;
+      v.dawdleTo = 0.55 + this.rand() * 0.25;
+    }
     let want = Math.min(cruise, this.limitAhead(v));
     // ...and for what's ahead: dropping back to a couple of seconds behind a moving car, and rolling gently up to a stop.
     let urgent = false;
@@ -749,7 +788,8 @@ export class Traffic {
       want = 0;
     }
     // Onto the accelerator or brake, and off it, smoothly: easing towards the speed it wants.
-    const top = ACCEL * v.verve * (1 - 0.4 * Math.min(1, v.speed / Math.max(cruise, 1)));
+    // Pulling away: less briskly as it gets up to speed, and up a hill.
+    const top = Math.max(ACCEL * 0.35, ACCEL * v.verve * (1 - 0.4 * Math.min(1, v.speed / Math.max(cruise, 1))) - GRAVITY * Math.max(0, grade) * 0.5);
     const target = urgent ? -Math.min(HARDEST, ((v.speed ** 2 - lead ** 2) / (2 * Math.max(gap - hold * 0.5, 0.1))) * 1.1) : Math.max(-BRAKE * 1.6, Math.min(top, (want - v.speed) * GAIN));
     const jerk = urgent ? 40 * M : target > v.accel ? (v.accel < 0 ? JERK_OFF : JERK_ON * v.verve) : JERK_OFF;
     v.accel += Math.max(-jerk * dt, Math.min(jerk * dt, target - v.accel));

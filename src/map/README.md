@@ -353,9 +353,16 @@ curve takes each lane on to the next across it. One-way streets are only driven 
 way.
 
 **Driving, by the law:**
-- Speed (as driven, each driver within 12% of it, drifting 4% either way as they
-  drive): trunk 13 m/s, primary 10, secondary 9.5, tertiary 9, streets 8 (central
-  Bristol's mostly 20 mph). Slower round bends and turns: no more sideways pull than
+- Speed: the road's (trunk 13 m/s, primary 10, secondary 9.5, tertiary 9, streets
+  8: central Bristol's mostly 20 mph), slower along a busy street (0.5% per point of
+  activity, at most 15%) or where its lanes are under 2.9 m wide (12%). Each driver
+  has their own pace (0.8 to 1.2 of it, most near the middle; one in ten 12% quicker
+  still), vans 7% and lorries 15% slower; and no one holds a steady speed: it swells
+  and eases (6% over 6 to 14 s, 3.5% over 2.5 to 5 s). Now and then (0.3% a second,
+  plus 0.15% per point of activity) a driver dawdles 2 to 5 s at 55 to 80% (looking
+  for a shop, or somewhere to park). Up a hill it slows (by the grade times 0.5 to
+  0.8 for a car, 1.3 for a van, 3 for a lorry; never below 45%) and pulls away less
+  briskly; down one it's up to 5% quicker. Slower round bends and turns: no more sideways pull than
   2.2 m/s², the sharpness measured every 2 m over 8 m either side along a lane (so a
   kink in the road's line is the gentle bend it is) and 1.5 to 4 m on a turn; it
   slows in time, braking at 2.2 m/s², and is slowest at the sharpest part.

@@ -65,6 +65,23 @@ describe('driving', () => {
     expect(v.speed).toBeLessThan(95);
   });
 
+  it('drives at its own pace, and not quite steadily: no two alike, and never a fixed speed', () => {
+    const long = crossroads({ width: 8000, roads: [road('street', 48, [0, 400, 8000, 400])] } as Partial<GameMap>);
+    const traffic = quiet(long);
+    const lane = traffic.lanes.find((l) => l.dir === 1)!;
+    const paces = Array.from({ length: 30 }, () => traffic.spawn(lane, 10, 'hatch').pace);
+    expect(Math.max(...paces) - Math.min(...paces)).toBeGreaterThan(0.2);
+    // One on its own, along a straight road: its speed swells and eases.
+    const solo = quiet(long);
+    const v = solo.spawn(solo.lanes.find((l) => l.dir === 1)!, 10, 'hatch');
+    const speeds: number[] = [];
+    for (let t = 0; t < 40; t += 1 / 60) {
+      solo.update(1 / 60, { ...away, x: v.x, y: 700 }, { x0: v.x - 400, y0: 0, x1: v.x + 400, y1: 800 }, green);
+      if (t > 6) speeds.push(v.speed);
+    }
+    expect(Math.max(...speeds) - Math.min(...speeds)).toBeGreaterThan(6);
+  });
+
   it("stops behind something in the way, without hitting it", () => {
     const traffic = quiet(crossroads());
     const lane = traffic.lanes.find((l) => l.road === 0 && l.dir === 1 && l.pts[0] < 400)!;
@@ -104,9 +121,10 @@ describe('driving', () => {
     const you = { ...away, x: 300, y: 384, vx: 80 };
     run(traffic, 1, you);
     expect(v.y + v.length / 2).toBeLessThan(side.pts[side.pts.length - 1] + 2);
-    // Gone by: it goes.
+    // Gone by: it goes (on across the junction, or turning into the main road).
     run(traffic, 6);
-    expect(v.y).toBeGreaterThan(400);
+    expect(v.route[0]).not.toBe(side);
+    expect(v.y).toBeGreaterThan(side.pts[side.pts.length - 1] + 10);
   });
 
   it('knocked about, stops a moment, then drives back into its lane and on', () => {
