@@ -100,8 +100,8 @@ const PULL_EASE = 1.7;
  * power SCREEN_EASE; never further back than REST_MOST of VIEW_AT_SPEED.
  */
 const PHONE_SIDE = 390;
-const SCREEN_EASE = 0.4;
-const REST_MOST = 0.8;
+const SCREEN_EASE = 0.55;
+const REST_MOST = 0.9;
 /** How long a hop off a speed hump lasts, seconds. */
 const HOP_TIME = 0.35;
 /** How many loose things (benches, bins, and the bits of what's been broken) before the smallest bits stop being kept. */
