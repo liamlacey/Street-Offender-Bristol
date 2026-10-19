@@ -131,6 +131,8 @@ export interface Mover {
   level?: number;
   /** A bike: it weaves round people (they're only brushed aside), and isn't dived away from. */
   bike?: boolean;
+  /** Someone on foot (you, out of a car): nothing to run from. */
+  onFoot?: boolean;
 }
 
 export interface PeopleView {
@@ -729,7 +731,7 @@ export class People {
     const pspeed = Math.hypot(player.vx, player.vy);
     const plevel = player.level ?? 0;
     for (const p of this.people) {
-      if (p.mode === 'down' || p.mode === 'board' || p.level !== plevel) continue;
+      if (p.mode === 'down' || p.mode === 'board' || p.level !== plevel || player.onFoot) continue;
       const d = Math.hypot(p.x - player.x, p.y - player.y);
       const onPavement = pspeed > 5 * M && d < 5 * M && !this.inRoad(player.x, player.y, undefined, plevel);
       if ((pspeed > 8 * M && d < 3.5 * M) || onPavement) this.scare(p, player.x, player.y);

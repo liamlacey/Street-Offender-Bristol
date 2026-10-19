@@ -128,6 +128,16 @@ describe('people', () => {
     expect(Math.hypot(p.x - px, p.y - py)).toBeLessThan(1 * 8);
   });
 
+  it("don't run from you on foot, running along the pavement past them", () => {
+    const [x, y] = parkStreet;
+    const people = new People(map, { rand: seeded(9) });
+    people.populate(viewAt(x, y), true);
+    const p = people.people.find((q) => q.mode === 'walk')!;
+    const you: Mover = { x: p.x - 16, y: p.y, angle: 0, length: 4.8, width: 4.8, vx: 44, vy: 0, id: -1, bike: true, onFoot: true };
+    for (let t = 0; t < 1; t += 1 / 30) people.update(1 / 30, viewAt(x, y), you, [], () => 'red', () => true);
+    expect(people.people.filter((q) => q.mode === 'flee')).toHaveLength(0);
+  });
+
   it('jump out of the way of a car coming straight at them', () => {
     const [x, y] = parkStreet;
     let dived = 0;

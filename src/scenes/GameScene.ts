@@ -804,7 +804,7 @@ export class GameScene extends Phaser.Scene {
     const car = this.car;
     // You and the traffic, each on its level (what's up on a bridge is nowhere near those under it).
     // (On foot, or on a bike, you brush past people.)
-    const player: Mover = { x: car.x, y: car.y, angle: car.heading, length: this.carLength(), width: this.carWidth(), vx: car.vx, vy: car.vy, id: -1, level: this.level, bike: this.onFoot || this.ride.kind === 'bike' };
+    const player: Mover = { x: car.x, y: car.y, angle: car.heading, length: this.carLength(), width: this.carWidth(), vx: car.vx, vy: car.vy, id: -1, level: this.level, bike: this.onFoot || this.ride.kind === 'bike', onFoot: this.onFoot };
     const movers: Mover[] = [];
     for (const v of [...this.traffic.vehicles, ...this.traffic.parked]) {
       if (Math.abs(v.x - car.x) > view.width + 400 || Math.abs(v.y - car.y) > view.height + 400) continue;
