@@ -532,18 +532,10 @@ but the water and the buildings.
   it, and dive sideways (6 m/s) away from it, then run.
 - **Knocked down**: they're heavy (a car's about 15 times their weight), not skittles. A
   vehicle going into them faster than 1.2 m/s (slower, they're nudged aside) knocks them
-  over and loses some of its speed to it (6% plus 6% for every 40 m/s, at most 20%: you
-  feel the knock). Under 4 m/s they're pushed over in front of it (at 0.55 of its speed)
-  and a little to the side, falling over and rolling half a turn; faster, they're
-  scooped up onto the bonnet and over the roof head over heels (half a turn, or a whole
-  one over 10 m/s), thrown up at 1.6 m/s + 0.45 × (its speed − 4 m/s), at most 6.2 m/s,
-  under 1.8 times real gravity (so they come down heavily, not float: under 0.7 s in the
-  air), and only a little the way it was going (0.55 of its speed at 4 m/s, down to 0.12
-  at 10 m/s and over), so it goes on under them. They land flat, with no bounce, losing
-  half their speed, and roll over sideways once or twice (lying across the way they're
-  rolling, 13 radians a second), stopping as they stop rolling, not far from where they
-  were hit. Faster than 6.7 m/s (15 mph) and they stay
-  down; slower, they're up in 2.5 to 4.5 s and on their way.
+  flat on the ground, there and then, where they were standing (not thrown), and loses
+  some of its speed to it (6% plus 6% for every 40 m/s, at most 20%: you feel the knock);
+  then it goes on over them (below). Faster than 6.7 m/s (15 mph) and they stay down;
+  slower, they're up in 2.5 to 4.5 s and on their way.
 - **Driven over**: someone lying there isn't knocked again: the vehicle goes over them,
   each axle (a third of its length in from each end) bumping over them as it reaches
   them: a thud and a lurch (as a speed hump), and 2% of its speed lost, up to 10% the

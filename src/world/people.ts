@@ -31,10 +31,6 @@ const NEAR = 30 * M;
 const FAR = 55 * M;
 /** A hit faster than this, px/s (about 15 mph), and they stay down. */
 const HURT = 6.7 * M;
-/** Pulling them back down when they're thrown up, px/s²: more than real, so they come down heavily rather than float. */
-const GRAVITY = 1.8 * 9.8 * M;
-/** How fast someone knocked down rolls over on the ground, radians/s. */
-const ROLL = 13;
 /** How long they're down after a slower hit, s. */
 const DOWN: [number, number] = [2.5, 4.5];
 /** Running from danger this long, s. */
@@ -117,18 +113,6 @@ export interface Person {
   /** Lying under a vehicle (its id, or null): how far along it they were, px (for its wheels going over them). */
   under: number | null;
   underAlong: number;
-  /**
-   * Off the ground, toppling over a car that hit them: how high, px, and how
-   * fast going up; how fast they're turning head over heels, radians a second,
-   * and how far over they've turned. Down on the ground: how far they've rolled
-   * over sideways, and how far they've still to roll, radians.
-   */
-  z: number;
-  vz: number;
-  spin: number;
-  tumble: number;
-  roll: number;
-  rollLeft: number;
 }
 
 /** A vehicle as the people see it: where, which way, how big, how fast; a bus's stop. */
@@ -520,12 +504,6 @@ export class People {
       level: 0,
       under: null,
       underAlong: 0,
-      z: 0,
-      vz: 0,
-      spin: 0,
-      tumble: 0,
-      roll: 0,
-      rollLeft: 0,
     };
     this.people.push(p);
     return p;
@@ -798,7 +776,7 @@ export class People {
           break;
       }
       if (p.speed > 0 && p.mode !== 'down') p.step = (p.step + (dt * p.speed) / (0.75 * M)) % 1;
-      if (p.z <= 0) p.level = levelAt(p.level, p.x, p.y);
+      p.level = levelAt(p.level, p.x, p.y);
     }
     this.hitBy(all);
     this.buses(movers);
@@ -1034,32 +1012,8 @@ export class People {
     const [nx, ny] = [p.x + p.vx * dt, p.y + p.vy * dt];
     if (walkable(nx, ny, p.level)) [p.x, p.y] = [nx, ny];
     else [p.vx, p.vy] = [0, 0];
-    if (p.z > 0 || p.vz > 0) {
-      // Up over the bonnet and roof, head over heels, and down again.
-      p.vz -= GRAVITY * dt;
-      p.z += p.vz * dt;
-      p.tumble += p.spin * dt;
-      if (p.z <= 0) {
-        // Down heavily, flat (no bounce), losing half the way they were going; then rolling over
-        // once or twice, lying across it.
-        p.z = 0;
-        p.vz = 0;
-        p.spin = 0;
-        p.tumble = 0;
-        p.vx *= 0.5;
-        p.vy *= 0.5;
-        this.fallOver(p, Math.hypot(p.vx, p.vy) > 1.2 * M ? 2 : 1);
-      }
-      p.speed = Math.hypot(p.vx, p.vy);
-      return;
-    }
-    // On the ground: rolling over (and stopping as they stop rolling), then lying still.
-    if (p.rollLeft > 0) {
-      const step = Math.min(p.rollLeft, ROLL * dt);
-      p.roll += step;
-      p.rollLeft -= step;
-    }
-    const k = Math.exp(-(p.mode === 'dive' ? 3 : p.rollLeft > 0 ? 6 : 14) * dt);
+    // Diving: a short slide to a stop. (Knocked down, they're not moving.)
+    const k = Math.exp(-(p.mode === 'dive' ? 3 : 14) * dt);
     p.vx *= k;
     p.vy *= k;
     p.speed = Math.hypot(p.vx, p.vy);
@@ -1111,8 +1065,7 @@ export class People {
   /** The vehicles hitting people: knocked flying, the way it was going (and up again, after a slow one). */
   private hitBy(all: Mover[]): void {
     for (const p of this.people) {
-      // In the air, over the car: it's gone under them.
-      if (p.mode === 'board' || p.z > 0.2 * M) continue;
+      if (p.mode === 'board') continue;
       for (const v of all) {
         if ((v.level ?? 0) !== p.level || Math.abs(v.x - p.x) > v.length || Math.abs(v.y - p.y) > v.length) continue;
         const [ux, uy] = [Math.cos(v.angle), Math.sin(v.angle)];
@@ -1133,17 +1086,13 @@ export class People {
           continue;
         }
         this.knock(p, v, rel);
+        // And now under it: its wheels go over them (see runOver).
+        p.under = v.id;
+        p.underAlong = along;
       }
       // Out from under it.
       if (p.under !== null && !all.some((v) => v.id === p.under && Math.abs((p.x - v.x) * Math.cos(v.angle) + (p.y - v.y) * Math.sin(v.angle)) <= v.length / 2 + R)) p.under = null;
     }
-  }
-
-  /** Falling over, onto the ground: lying across the way they're going, rolling over `halves` half turns. */
-  private fallOver(p: Person, halves: number): void {
-    if (Math.hypot(p.vx, p.vy) > 0.1 * M) p.angle = Math.atan2(p.vy, p.vx) + Math.PI / 2;
-    p.roll = Math.round(p.roll / Math.PI) * Math.PI;
-    p.rollLeft = Math.PI * halves;
   }
 
   /**
@@ -1184,27 +1133,13 @@ export class People {
     p.seat = null;
     p.picnic = null;
     p.under = null;
-    // A grown person's a dead weight, not a skittle. Slow, they're pushed over in front of it, a
-    // little to the side; faster, scooped up onto the bonnet and rolled over the roof, turning over
-    // slowly, to come down heavily not far from where they were hit (it's gone on under them).
-    const f = speed < 4 * M ? 0.55 : Math.max(0.12, 0.55 - ((speed - 4 * M) / (6 * M)) * 0.43);
-    const v0 = Math.hypot(v.vx, v.vy) || 1;
-    const side = this.rand() < 0.5 ? 1 : -1;
-    const shove = speed < 4 * M ? 0.5 * M : 0.2 * M;
-    p.vx = v.vx * f - (v.vy / v0) * side * shove;
-    p.vy = v.vy * f + (v.vx / v0) * side * shove;
-    p.z = 0;
-    p.vz = speed < 4 * M ? 0 : Math.min(6.2 * M, 1.6 * M + (speed - 4 * M) * 0.45);
-    // Head over heels in the air: half a turn, or a whole one when it's fast, landing flat.
-    const air = (2 * p.vz) / GRAVITY;
-    p.tumble = 0;
-    p.spin = p.vz ? (side * Math.PI * (speed > 10 * M ? 2 : 1)) / air : 0;
-    p.angle = Math.atan2(v.vy, v.vx) + (this.rand() - 0.5) * 0.3;
-    // Slow: straight over onto the ground, and rolled over once.
-    if (!p.vz) this.fallOver(p, 1);
+    // Flat on the ground where they were hit (not thrown about): lying the way it was going, more or less.
+    p.vx = 0;
+    p.vy = 0;
+    p.angle = Math.atan2(v.vy, v.vx) + (this.rand() - 0.5) * 0.8;
     if (speed > HURT) p.hurt = true;
     p.timer = DOWN[0] + this.rand() * (DOWN[1] - DOWN[0]);
-    // What hit them loses some of its speed to them (a car's 15 times their weight, but they're thrown at its speed, near enough), and to the knock.
+    // What hit them loses some of its speed to the knock (a car's 15 times their weight).
     this.hits.push({ person: p, speed, by: v.id, how: 'hit', loss: speed < 1.2 * M ? 0 : Math.min(0.2, 0.06 + speed / (40 * M) * 0.06) });
   }
 

@@ -80,18 +80,12 @@ describe('people', () => {
     const [bx, by] = [b.x, b.y];
     people.knock(a, { vx: 30, vy: 0 }, 30);
     people.knock(b, { vx: 160, vy: 0 }, 160);
-    let high = 0;
-    for (let t = 0; t < 8; t += 1 / 30) {
-      people.update(1 / 30, viewAt(x, y), still(-1e6, -1e6), [], () => 'red', () => true);
-      high = Math.max(high, b.z);
-    }
+    for (let t = 0; t < 8; t += 1 / 30) people.update(1 / 30, viewAt(x, y), still(-1e6, -1e6), [], () => 'red', () => true);
     expect(a.mode).not.toBe('down');
     expect(b.mode).toBe('down');
     expect(b.hurt).toBe(true);
-    // Up over the bonnet, and down again not far from where they were hit.
-    expect(high).toBeGreaterThan(0.9 * 8);
-    expect(b.z).toBe(0);
-    expect(Math.hypot(b.x - bx, b.y - by)).toBeLessThan(5 * 8);
+    // Flat where they were hit.
+    expect(Math.hypot(b.x - bx, b.y - by)).toBe(0);
   });
 
   it('lying in the road, are driven over (a bump for each axle), and barely moved', () => {
@@ -113,6 +107,23 @@ describe('people', () => {
     expect(over).toHaveLength(2);
     expect(over.every((h) => h.loss > 0 && h.loss <= 0.1)).toBe(true);
     expect(people.hits.some((h) => h.how === 'hit')).toBe(false);
+    expect(p.mode).toBe('down');
+    expect(Math.hypot(p.x - px, p.y - py)).toBeLessThan(1 * 8);
+  });
+
+  it('hit, go down flat where they stand, and the car goes on over them', () => {
+    const [x, y] = parkStreet;
+    const people = new People(map, { rand: () => 0.99 });
+    people.populate(viewAt(x, y), true);
+    const p = people.people[0];
+    Object.assign(p, { mode: 'stand', timer: 99 });
+    const [px, py] = [p.x, p.y];
+    const car: Mover = { x: px - 60, y: py, angle: 0, length: 38, width: 18, vx: 120, vy: 0, id: -1 };
+    for (let t = 0; t < 1.2; t += 1 / 60) {
+      car.x += car.vx / 60;
+      people.update(1 / 60, viewAt(x, y), car, [], () => 'red', () => true);
+    }
+    expect(people.hits.filter((h) => h.person === p).map((h) => h.how)).toEqual(['hit', 'over', 'over']);
     expect(p.mode).toBe('down');
     expect(Math.hypot(p.x - px, p.y - py)).toBeLessThan(1 * 8);
   });

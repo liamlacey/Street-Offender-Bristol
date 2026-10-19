@@ -122,8 +122,8 @@ export class PeopleLayer {
     private readonly people: People,
     /** The height of what's underfoot at a point on a level (the ground, a bridge's deck), px. */
     private readonly base: (x: number, y: number, level: number) => number,
-    /** Drawn on the ground (under the bridges), up on the decks, and thrown up over a car (over the cars). */
-    private readonly depths: { ground: number; deck: number; air: number },
+    /** Drawn on the ground (under the bridges), and up on the decks. */
+    private readonly depths: { ground: number; deck: number },
   ) {}
 
   update(view: Phaser.Geom.Rectangle, perspective: Perspective): void {
@@ -140,16 +140,10 @@ export class PeopleLayer {
         this.sprites.set(p, s);
       } else if (s.texture.key !== key) s.setTexture(key);
       // Head height (lying down, the ground), and how high they've been thrown: up over the car, and a little bigger.
-      const lift = perspective.lift(this.base(p.x, p.y, p.level) + (p.mode === 'down' ? 0.2 : p.mode === 'sit' ? 0.8 : 1.2) * 8 + p.z);
-      // Knocked down: head over heels in the air (seen from above, shortening and flipping end over end),
-      // or rolling over on the ground (lying across the way they're rolling, flipping side over side).
-      const size = (SIZE / ART_SCALE) * (1 + p.z / 160);
-      const flip = (a: number) => (Math.cos(a) < 0 ? -1 : 1) * Math.max(0.3, Math.abs(Math.cos(a)));
-      const [fx, fy] = pose !== 'down' ? [1, 1] : p.z > 0 ? [flip(p.tumble), 1] : [1, flip(p.roll)];
+      const lift = perspective.lift(this.base(p.x, p.y, p.level) + (p.mode === 'down' ? 0.2 : p.mode === 'sit' ? 0.8 : 1.2) * 8);
       s.setPosition(perspective.x(p.x, lift), perspective.y(p.y, lift))
         .setRotation(p.angle)
-        .setScale(size * fx, size * fy)
-        .setDepth(p.level === 1 ? this.depths.deck + (p.z > 0 ? 0.02 : 0) : p.z > 0 ? this.depths.air : this.depths.ground);
+        .setDepth(p.level === 1 ? this.depths.deck : this.depths.ground);
     }
     for (const [p, s] of this.sprites) {
       if (seen.has(p)) continue;
