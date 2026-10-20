@@ -19,12 +19,18 @@ export class LedgeLayer {
 
   constructor(
     scene: Phaser.Scene,
-    private readonly ledges: Ledges,
+    private ledges: Ledges,
     /** The height of the ground under a point, px. */
     private readonly ground: (x: number, y: number) => number,
     depth: number,
   ) {
     this.g = scene.add.graphics().setDepth(depth);
+  }
+
+  /** The next region's drops (see streamer.ts). */
+  use(ledges: Ledges): void {
+    this.ledges = ledges;
+    this.foot.clear();
   }
 
   update(view: Phaser.Geom.Rectangle, p: Perspective): void {

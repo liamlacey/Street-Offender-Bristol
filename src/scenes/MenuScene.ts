@@ -1,10 +1,11 @@
 import * as Phaser from 'phaser';
-import type { GameMap } from '../map/osm';
-import { type Going, OVERVIEW_SCALE, type Spot, drawOverview, jumpSpot } from '../world/overview';
+import { type Going, OVERVIEW_SCALE, type Overview, type OverviewRoad, type Spot, drawOverview, jumpSpot } from '../world/overview';
 
 /** What the game hands the menu as it pauses. */
 export interface MenuData {
-  map: GameMap;
+  /** How big the whole map is, px; and what its map's drawn from, fetched (only when it's wanted). */
+  map: { width: number; height: number };
+  overview: () => Promise<Overview>;
   /** Where you are, and which way you're facing. */
   you: { x: number; y: number; heading: number };
   /** What you're getting about in (where you can be put down). */
@@ -14,6 +15,8 @@ export interface MenuData {
 }
 
 const OVERVIEW = 'overview-map';
+/** The overview's picture's longest side, at most, px (a big map's drawn smaller, and scaled up). */
+const MOST_SIDE = 2048;
 /** Closest in, screen px for each of the overview's. */
 const MOST_ZOOM = 3.5;
 /** A touch that moves less than this is a tap (a place picked), px. */
@@ -39,6 +42,10 @@ export class MenuScene extends Phaser.Scene {
   /** Fingers on the map (by pointer id): where each was last; and whether it's been a drag (not a tap). */
   private touches = new Map<number, { x: number; y: number }>();
   private dragged = false;
+  /** The roads (to put you down on), once the overview's here; and how much bigger it's shown than its picture's drawn. */
+  private roads: OverviewRoad[] | null = null;
+  private upscale = 1;
+  private fetching = false;
 
   constructor() {
     super('menu');
@@ -54,7 +61,12 @@ export class MenuScene extends Phaser.Scene {
   create(): void {
     this.build();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.build, this);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, this.build, this));
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.build, this);
+      // The overview's let go till it's next wanted (it's the whole map).
+      if (this.textures.exists(OVERVIEW)) this.textures.remove(OVERVIEW);
+      this.roads = null;
+    });
     const kb = this.input.keyboard;
     kb?.on('keydown-ESC', () => (this.mode === 'map' ? this.showMenu() : this.close(null)));
     kb?.on('keydown-P', () => this.close(null));
@@ -109,14 +121,31 @@ export class MenuScene extends Phaser.Scene {
   private showMap(fresh = true): void {
     this.mode = 'map';
     this.clear();
-    const { map, you } = this.data_;
+    const { you } = this.data_;
     const { width, height } = this.scale;
-    if (!this.textures.exists(OVERVIEW)) {
-      const tex = this.textures.createCanvas(OVERVIEW, Math.ceil(map.width * OVERVIEW_SCALE), Math.ceil(map.height * OVERVIEW_SCALE))!;
-      drawOverview(tex.context, map);
-      tex.refresh();
-    }
     this.items.push(this.add.rectangle(0, 0, width, height, 0x14161b, 1).setOrigin(0));
+    if (!this.textures.exists(OVERVIEW)) {
+      // Fetched, and drawn; then the map shown again.
+      this.items.push(this.add.text(width / 2, height / 2, 'LOADING THE MAP…', { ...FONT, fontSize: '16px' }).setOrigin(0.5));
+      this.button(70, 30, 'BACK', () => this.showMenu(), 15);
+      if (!this.fetching) {
+        this.fetching = true;
+        void this.data_
+          .overview()
+          .then((o) => {
+            const s = Math.min(OVERVIEW_SCALE, MOST_SIDE / Math.max(o.width, o.height));
+            const tex = this.textures.createCanvas(OVERVIEW, Math.ceil(o.width * s), Math.ceil(o.height * s))!;
+            drawOverview(tex.context, o, s);
+            tex.refresh();
+            this.upscale = OVERVIEW_SCALE / s;
+            this.roads = o.roads;
+            if (this.mode === 'map' && this.sys.isActive()) this.showMap(fresh);
+          })
+          .catch((e) => console.error('map:', e))
+          .finally(() => (this.fetching = false));
+      }
+      return;
+    }
     this.image = this.add.image(0, 0, OVERVIEW).setOrigin(0);
     this.items.push(this.image);
     this.marks = this.add.graphics();
@@ -190,7 +219,7 @@ export class MenuScene extends Phaser.Scene {
   /** The map where the view says, and you and where you're going marked on it. */
   private place(): void {
     if (!this.image) return;
-    this.image.setPosition(this.view.x, this.view.y).setScale(this.view.zoom);
+    this.image.setPosition(this.view.x, this.view.y).setScale(this.view.zoom * this.upscale);
     const g = this.marks.clear();
     const { you } = this.data_;
     const [x, y] = this.toScreen(you.x, you.y);
@@ -258,7 +287,7 @@ export class MenuScene extends Phaser.Scene {
     // A tap (not a drag or a pinch): that's where to go.
     if (!this.dragged && this.touches.size === 0) {
       const [x, y] = this.toMap(p.x, p.y);
-      const spot = jumpSpot(this.data_.map, x, y, this.data_.going);
+      const spot = this.roads && jumpSpot({ roads: this.roads }, x, y, this.data_.going);
       if (spot) this.pick(spot);
     }
   }

@@ -951,6 +951,56 @@ the car and stopping on their own; walls and trunks left standing or lying
 are solid. They're all part of the world's walls, posts and loose things, so
 they're in the way of traffic and people too, when there are some.
 
+## In tiles: only the map round you
+
+The game never holds the whole map, so the map can keep growing without the
+phone running out of memory. `bristol.json` isn't in the game's code. When the
+game's built (and as it's asked for while developing), the `map-tiles` plugin
+in `vite.config.ts` cuts it up (`regions.ts`, pure, tested in
+`regions.test.ts`) into:
+
+- `map/index.json`: what's everywhere. That's the map's size and origin, where
+  you start, the traffic lights' timings, the bus routes (their legs by the
+  roads' ids), the ferries, and the terrain grid's shape.
+- `map/t/<i>_<j>.json`: one file per 500 m tile, holding what's in it, each
+  thing with its id (its place in `bristol.json`'s list). Anything long or wide
+  (a road, a building, a park) is in every tile it reaches into. Anything at a
+  point (a tree, a lamp post) is in the one tile it's in. Each tile also holds
+  its block of the terrain grid.
+- `map/overview.json`: what the pause menu's map is drawn from (`overview.ts`).
+  It covers the whole map, but only what's drawn, simplified to about a pixel
+  of it. It's fetched only when the menu's map is opened, and let go after.
+
+The game (`src/world/streamer.ts`) fetches a **region**: 4 × 4 tiles (2 km)
+centred on the corner of the tiles nearest you. It puts the region together
+as a `GameMap` like the whole one, of only what's in it (`assemble`):
+
+- Things that refer to others by their place in a list are renumbered to the
+  region's places: crossings' roads, bus stations' bays' roads, the bus
+  routes' legs, the trees' species.
+- A crossing whose road isn't in the region is left out. So is a bus station
+  with fewer than 2 bays in it, and a bus route's leg is a gap there.
+- `ids` says what each thing is in the whole map.
+
+`region.ts` makes everything the game needs from the region: the world, the
+surfaces, the decks, the traffic, the people and the boats.
+
+When you're 300 m from the region's middle (either way), the next region is
+made ready. It's made a few milliseconds a frame as you drive; every long
+loop pauses now and then (`work.ts`). Then it takes over (`GameScene.enter`):
+
+- **Round the view** (100 m out from it), what's there is carried over as it
+  is. The traffic, people and boats are adopted onto the new region's lanes,
+  walks and berths (`adopt`), matched by where they are. So are the loose
+  things.
+- **Beyond that**, out of sight, it's the new region's own.
+- **What's been broken** (`changes.ts`) is broken again in each new region:
+  walls knocked through, posts knocked down, trees felled, parapets.
+
+Only the region's tiles are kept, so the game holds two regions at most. A
+jump from the menu to somewhere outside the region makes the region there
+first, with the loading screen up.
+
 ## The files
 
 - `osm.ts`: reads OSM's XML and makes the map (`buildMap`): projection, roads,
@@ -959,7 +1009,8 @@ they're in the way of traffic and people too, when there are some.
 - `landmarks.ts`: landmarks' colours (and heights, roof shapes), and streets' looks;
   and the corrections (`CORRECTIONS`: King Street pedestrianised).
 - `enrich.ts`, `lidar.ts`, `osgb.ts`: the LIDAR and the terrain. Tested in `lidar.test.ts`.
-- `bristol.json`: the map the game loads.
+- `bristol.json`: the whole map, cut into tiles for the game (see "In tiles").
+- `regions.ts`, `tileStore.ts`: the tiles, regions put together from them, and fetching them.
 - `../../tools/build-map.ts`: downloads, keeps and puts it all together.
 - `../../map-sources/`: the kept downloads, and the list of areas.
 

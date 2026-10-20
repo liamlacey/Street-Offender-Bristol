@@ -6,6 +6,7 @@
 
 import type { GameMap, Pts, Service } from '../map/osm';
 import { pointAlong } from './world';
+import { type Work, drain } from './work';
 
 const M = 8;
 
@@ -60,18 +61,25 @@ const CLEAR = 9 * M;
  * first, at most `most` of them.
  */
 export function kerbsides<L extends KerbLane>(map: Pick<GameMap, 'roads' | 'crossings' | 'paint'>, lanes: L[], service: Service, length: number, width: number, avoid: { x: number; y: number }[], others: Kerbside<L>[], most: number): Kerbside<L>[] {
-  const near = places(map, lanes, service, length, width, avoid, others, NEAR);
-  return (near.length ? near : places(map, lanes, service, length, width, avoid, others, FARTHER))
+  return drain(kerbsidesWork(map, lanes, service, length, width, avoid, others, most));
+}
+
+/** The same, a little at a time (see work.ts). */
+export function* kerbsidesWork<L extends KerbLane>(map: Pick<GameMap, 'roads' | 'crossings' | 'paint'>, lanes: L[], service: Service, length: number, width: number, avoid: { x: number; y: number }[], others: Kerbside<L>[], most: number): Work<Kerbside<L>[]> {
+  const near = yield* places(map, lanes, service, length, width, avoid, others, NEAR);
+  return (near.length ? near : yield* places(map, lanes, service, length, width, avoid, others, FARTHER))
     .sort((a, b) => a.d - b.d)
     .slice(0, most)
     .map((f) => f.spot);
 }
 
-function places<L extends KerbLane>(map: Pick<GameMap, 'roads' | 'crossings' | 'paint'>, lanes: L[], service: Service, length: number, width: number, avoid: { x: number; y: number }[], others: Kerbside<L>[], reach: number): { spot: Kerbside<L>; d: number }[] {
+function* places<L extends KerbLane>(map: Pick<GameMap, 'roads' | 'crossings' | 'paint'>, lanes: L[], service: Service, length: number, width: number, everywhere: { x: number; y: number }[], others: Kerbside<L>[], reach: number): Work<{ spot: Kerbside<L>; d: number }[]> {
   const [x0, y0, x1, y1] = bounds(service.rings);
   const found: { spot: Kerbside<L>; d: number }[] = [];
-  const crossings = map.crossings.filter((c) => c.x > x0 - 80 * M && c.x < x1 + 80 * M && c.y > y0 - 80 * M && c.y < y1 + 80 * M);
-  const stops = (map.paint ?? []).filter((p) => p.kind === 'busstop' && p.x > x0 - 80 * M && p.x < x1 + 80 * M && p.y > y0 - 80 * M && p.y < y1 + 80 * M);
+  const by = (p: { x: number; y: number }) => p.x > x0 - 80 * M && p.x < x1 + 80 * M && p.y > y0 - 80 * M && p.y < y1 + 80 * M;
+  const crossings = map.crossings.filter(by);
+  const stops = (map.paint ?? []).filter((p) => p.kind === 'busstop' && by(p));
+  const avoid = everywhere.filter(by);
   for (const lane of lanes) {
     const road = map.roads[lane.road];
     // Along the kerb on its left (the kerb lane); on a one-way street, on its right too (the lane furthest out).
@@ -81,6 +89,7 @@ function places<L extends KerbLane>(map: Pick<GameMap, 'roads' | 'crossings' | '
     const pad = reach + road.width;
     const [bx0, by0, bx1, by1] = lane.box ?? bounds([lane.pts]);
     if (bx1 < x0 - pad || bx0 > x1 + pad || by1 < y0 - pad || by0 > y1 + pad) continue;
+    yield;
     for (const side of sides) {
       const placed: number[] = [];
       for (let s = ENDS + length / 2; s <= lane.length - ENDS - length / 2; s += M) {

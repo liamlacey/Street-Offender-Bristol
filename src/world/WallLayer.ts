@@ -30,12 +30,17 @@ export class WallLayer {
 
   constructor(
     scene: Phaser.Scene,
-    private readonly grids: [SegmentGrid, SegmentGrid],
+    private grids: [SegmentGrid, SegmentGrid],
     /** The height of the ground (or the deck, on level 1) under a point, px. */
     private readonly base: (x: number, y: number, level: number) => number,
     depth: number,
   ) {
     this.g = scene.add.graphics().setDepth(depth);
+  }
+
+  /** The next region's walls (see streamer.ts). */
+  use(grids: [SegmentGrid, SegmentGrid]): void {
+    this.grids = grids;
   }
 
   update(view: Phaser.Geom.Rectangle, perspective: Perspective): void {

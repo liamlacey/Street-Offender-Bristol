@@ -44,6 +44,9 @@ export class SurfaceGrid {
     readonly rows: number,
     /** px per cell. */
     readonly cell: number,
+    /** Where its first cell's corner is, px (a region of the map's grid starts where the region does). */
+    readonly ox = 0,
+    readonly oy = 0,
   ) {}
 
   /** Reads the grid back from painted RGBA pixels (one per cell). */
@@ -54,8 +57,8 @@ export class SurfaceGrid {
   }
 
   at(x: number, y: number): Surface {
-    const cx = Math.floor(x / this.cell);
-    const cy = Math.floor(y / this.cell);
+    const cx = Math.floor((x - this.ox) / this.cell);
+    const cy = Math.floor((y - this.oy) / this.cell);
     if (cx < 0 || cy < 0 || cx >= this.cols || cy >= this.rows) return Surface.Pavement;
     return this.cells[cy * this.cols + cx] as Surface;
   }

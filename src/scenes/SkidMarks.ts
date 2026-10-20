@@ -32,11 +32,16 @@ export class SkidMarks {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly terrain: Terrain,
+    private terrain: Terrain,
     private readonly depth: number,
   ) {
     this.pen = scene.make.graphics({}, false);
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroy());
+  }
+
+  /** The next region's lie of the land (see streamer.ts). */
+  use(terrain: Terrain): void {
+    this.terrain = terrain;
   }
 
   add(x1: number, y1: number, x2: number, y2: number, color: number, alpha: number, width: number): void {

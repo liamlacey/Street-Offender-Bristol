@@ -31,7 +31,7 @@ export class TrafficLayer {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly traffic: Traffic,
+    private traffic: Traffic,
     /** The height of the ground (or the deck, on level 1) under a point, px. */
     private readonly base: (x: number, y: number, level: number) => number,
     /** Whether a point's at the end of a bridge, where its deck meets the road (within `reach` px). */
@@ -39,6 +39,11 @@ export class TrafficLayer {
     private readonly depths: TrafficDepths,
   ) {
     this.lamps = [scene.add.graphics(), scene.add.graphics()];
+  }
+
+  /** The next region's traffic (see streamer.ts): the vehicles carried over keep their pictures. */
+  use(traffic: Traffic): void {
+    this.traffic = traffic;
   }
 
   update(view: Phaser.Geom.Rectangle, perspective: Perspective, level: number, time: number): void {

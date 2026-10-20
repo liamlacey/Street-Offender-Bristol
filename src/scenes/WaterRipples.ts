@@ -34,7 +34,7 @@ export class WaterRipples {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly surfaces: SurfaceGrid,
+    private surfaces: SurfaceGrid,
     /** The height of the ground (the water) under a point, px. */
     private readonly base: (x: number, y: number) => number,
     private readonly depth: number,
@@ -55,6 +55,11 @@ export class WaterRipples {
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, 4, 4);
     });
+  }
+
+  /** The next region's surfaces (see streamer.ts). */
+  use(surfaces: SurfaceGrid): void {
+    this.surfaces = surfaces;
   }
 
   private wet(x: number, y: number): boolean {

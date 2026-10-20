@@ -11,9 +11,8 @@ import {
   lateralSpeed,
   stepCar,
 } from '../car/CarPhysics';
-import mapData from '../map/bristol.json';
 import { TREE_SPECIES } from '../map/osm';
-import { type GameMap, type Road, VEHICLE_ROADS } from '../map/osm';
+import { type GameMap, type PropKind, type Road, VEHICLE_ROADS } from '../map/osm';
 import {
   CircleGrid,
   type ContactPoint,
@@ -29,13 +28,16 @@ import {
 } from '../physics/collisions';
 import { Buildings } from '../world/Buildings';
 import { DeckLayer } from '../world/DeckLayer';
-import { Decks, waterOf } from '../world/decks';
-import { GroundLayer, paintSurfaces } from '../world/GroundLayer';
+import type { Decks } from '../world/decks';
+import { GroundLayer, surfacesWork } from '../world/GroundLayer';
 import { Perspective } from '../world/perspective';
 import { Terrain } from '../world/terrain';
 import { SURFACE_KIND, Surface, type SurfaceGrid } from '../world/surface';
 import { type Light, lightAt } from '../world/lights';
-import { CHUNK, type LooseProp, type Post, type World, beacons, buildWorld, chunkKey } from '../world/world';
+import { CHUNK, type LooseProp, type Post, type World, beacons, chunkKey, homeOf } from '../world/world';
+import { Changes } from '../world/changes';
+import type { FirstIds, Progress, Region } from '../world/region';
+import { Streamer } from '../world/streamer';
 import { ART_SCALE, TEX, TREE_KINDS, TREE_RADIUS, createArt } from './art';
 import { CarEffects } from './CarEffects';
 import { Wreckage } from './Wreckage';
@@ -46,7 +48,7 @@ import { type Debris, type DebrisKind, debris, impactSpeed, racked } from '../wo
 import { ACTION_EVENT, HudScene, PAUSE_EVENT, RESET_EVENT, STREET_EVENT } from './HudScene';
 import type { MenuData } from './MenuScene';
 import type { LoadingScene } from './LoadingScene';
-import type { Spot } from '../world/overview';
+import { type Spot, jumpSpot } from '../world/overview';
 import { WALKER, stepWalker, tuningFor } from '../car/rides';
 import { SkidMarks } from './SkidMarks';
 import { TrafficLayer } from './TrafficLayer';
@@ -138,7 +140,7 @@ export class GameScene extends Phaser.Scene {
   /** The street furniture that never moves, and the height of the ground under each, px. */
   private props: Shown[] = [];
   /** What's up high on the fixed things: the cranes' jibs. */
-  private raised: { x: number; y: number; z: number; image: Phaser.GameObjects.Image; prop: number; gone?: boolean }[] = [];
+  private raised: (Shown & { prop: number })[] = [];
   /** What you hit on each level: the ground's, and the bridges' decks'. */
   private walls!: [SegmentGrid, SegmentGrid];
   private posts!: [CircleGrid, CircleGrid];
@@ -176,9 +178,9 @@ export class GameScene extends Phaser.Scene {
   /** Trees' pictures not in use, to use again. */
   private readonly treeArtPool: { image: Phaser.GameObjects.Image; trunk: Phaser.GameObjects.Image; bole: Phaser.GameObjects.Image }[] = [];
   /** Each traffic light's head, up its pole, with what it's showing. */
-  private signalHeads: { x: number; y: number; z: number; controller: number; group: number; light: Light; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
+  private signalHeads: { x: number; y: number; z: number; angle: number; controller: number; group: number; light: Light; image: Phaser.GameObjects.Image | null; gone?: boolean }[] = [];
   /** The Belisha beacons' globes, flashing. */
-  private beacons: { x: number; y: number; z: number; image: Phaser.GameObjects.Image; gone?: boolean }[] = [];
+  private beacons: { x: number; y: number; z: number; image: Phaser.GameObjects.Image | null; gone?: boolean }[] = [];
   private wreckage!: Wreckage;
   private kerbs!: Kerbs;
   private humps!: Humps;
@@ -210,7 +212,17 @@ export class GameScene extends Phaser.Scene {
   private ripples!: WaterRipples;
   private people!: People;
   private peopleLayer!: PeopleLayer;
-  private loose: { body: LooseProp; image: Phaser.GameObjects.Image }[] = [];
+  /** The loose things in the region (their pictures made as they come into view); and those moved out of it, put by (see `placeLoose`). */
+  private loose: { body: LooseProp; image: Phaser.GameObjects.Image | null }[] = [];
+  private away: { body: LooseProp; image: Phaser.GameObjects.Image | null }[] = [];
+  /** The map's loose things smashed to pieces, by where they stood (see homeOf). */
+  private readonly lostHomes = new Set<string>();
+  /** The region of the map round you, made ready by the streamer (see streamer.ts); what's been broken (see Changes). */
+  private streamer!: Streamer;
+  private region!: Region;
+  private readonly changes = new Changes();
+  /** The region's trees by their ids in the whole map. */
+  private readonly treeAt = new Map<number, number>();
   /** The trees, props and loose things by where they are (so only those round the view are looked at each frame), and those shown last frame. */
   private treeGrid!: Grid;
   private propGrid!: Grid;
@@ -269,50 +281,54 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Everything set up, a stage at a time, the loading screen's bar moving on
-   * between them (a frame drawn each time: see `stage`); then off you go.
+   * Everything set up: the region of the map round where you start fetched
+   * and made (see streamer.ts), the loading screen's bar moving on as it
+   * goes; then off you go.
    */
   private async build(): Promise<void> {
     const loading = this.scene.get('loading') as LoadingScene;
-    const stage = async (label: string, done: number) => {
-      loading.show(done, label);
-      // (Two frames: one for the loading screen to be drawn in.)
-      for (let k = 0; k < 2; k++) await new Promise((r) => requestAnimationFrame(r));
-    };
-    await stage('Reading the map', 0);
-    // Its own copy of the trees: knocking one down changes it.
-    const map = { ...(mapData as unknown as GameMap), trees: [...(mapData as unknown as GameMap).trees] };
-    this.world = buildWorld(map);
-    await stage('Laying the ground', LOADED.ground);
-    this.surfaces = paintSurfaces(this.world);
+    loading.show(0, 'Reading the map');
+    await frames(2);
+    this.streamer = await Streamer.open((world, bounds) => surfacesWork(world, bounds), () => this.firstIds());
+    const { spawn, width, height } = this.streamer.index;
+    const progress: Progress = { done: 0, label: 'Reading the map' };
+    const region = await this.streamer.load(spawn.x, spawn.y, progress, async () => {
+      loading.show(progress.done * 0.95, progress.label);
+      await frames(1);
+    });
+    loading.show(0.96, 'Looking round');
+    await frames(2);
     createArt(this);
-    this.walls = [new SegmentGrid(this.world.walls[0]), new SegmentGrid(this.world.walls[1])];
-    this.posts = [new CircleGrid(this.world.posts[0]), new CircleGrid(this.world.posts[1])];
-    this.terrain = new Terrain(map.terrain, map.pxPerMetre, map.ledges);
-    await stage('Painting the roads', LOADED.paint);
+    this.assign(region);
     this.ground = new GroundLayer(this, this.world, this.terrain, DEPTH.ground);
     this.skids = new SkidMarks(this, this.terrain, DEPTH.skids);
     this.effects = new CarEffects(this, this.skids, DEPTH.effects);
-    await stage('Putting up the buildings', LOADED.buildings);
-    this.buildings = new Buildings(this, this.world, this.terrain, DEPTH.buildings);
-    this.kerbs = new Kerbs(map);
-    this.humps = new Humps(map);
-    this.decks = new Decks(map.roads, (x, y) => this.groundAt(x, y), waterOf(map));
-    this.ledges = new Ledges(map);
+    this.buildings = new Buildings(this, region.buildings, DEPTH.buildings);
     this.ledgeLayer = new LedgeLayer(this, this.ledges, (x, y) => this.groundAt(x, y), DEPTH.ledges);
     this.deckLayer = new DeckLayer(this, this.decks);
     this.wallLayer = new WallLayer(this, this.walls, (x, y, level) => this.surfaceHeight(x, y, level), DEPTH.walls);
     this.wreckage = new Wreckage(this, this.walls, this.posts, this.effects, {
       groundAt: (x, y) => this.groundAt(x, y),
       addDebris: (d, level) => this.addDebris(d, level),
-      knockedDown: (post) => this.knockedDown(post),
-      treeFell: (index, x, y, h, angle) => {
-        const t = this.trees[index];
+      knockedDown: (post, level) => {
+        this.changes.postGone(post, level);
+        this.showDown(post);
+      },
+      wallGone: (wall) => this.changes.wallGone(wall),
+      wallAdded: (wall) => this.changes.wallAdded(wall),
+      // (A tree by its id in the whole map: see world.ts.)
+      treeFell: (id, x, y, h, angle) => {
+        const i = this.treeAt.get(id);
+        const t = i === undefined ? undefined : this.trees[i];
+        const felled = this.changes.trees.get(id) ?? { x, y, h, r: t?.foot.r };
+        Object.assign(felled, { x, y, h }, angle !== undefined ? { turn: angle } : {});
+        this.changes.trees.set(id, felled);
+        if (i === undefined || !t) return;
         const map = this.world.map;
         // It's going over: its shadow's gone from the ground.
-        if (map.trees[index * 4 + 2] > 0) {
-          map.trees[index * 4 + 2] = 0;
-          this.ground.repaint(t.x, t.y, map.trees[index * 4 + 3] + 64);
+        if (map.trees[i * 4 + 2] > 0) {
+          map.trees[i * 4 + 2] = 0;
+          this.ground.repaint(t.x, t.y, map.trees[i * 4 + 3] + 64);
         }
         Object.assign(t, { x, y, h });
         if (angle !== undefined) {
@@ -320,11 +336,15 @@ export class GameScene extends Phaser.Scene {
           t.art?.image.setRotation(angle);
         }
       },
-      treeHeight: (index) => this.trees[index].h,
-      treeRadius: (index) => this.trees[index].foot.r,
-      crownGone: (index) => {
-        this.trees[index].gone = true;
-        this.trees[index].art?.image.setVisible(false);
+      treeHeight: (id) => this.trees[this.treeAt.get(id) ?? -1]?.h ?? 0,
+      treeRadius: (id) => this.trees[this.treeAt.get(id) ?? -1]?.foot.r ?? 0,
+      crownGone: (id) => {
+        const felled = this.changes.trees.get(id);
+        if (felled) felled.gone = true;
+        const t = this.trees[this.treeAt.get(id) ?? -1];
+        if (!t) return;
+        t.gone = true;
+        t.art?.image.setVisible(false);
       },
       audio: () => this.audio,
       weight: () => VEHICLES[this.ride.kind].mass,
@@ -332,19 +352,6 @@ export class GameScene extends Phaser.Scene {
         if (kind === 'parapet') this.deckLayer.breakParapet(from, to);
       },
     }, DEPTH.props - 0.1, DEPTH.trees);
-    await stage('Planting the trees', LOADED.trees);
-    this.addProps();
-    this.addTrees();
-    this.addLights();
-    this.treeGrid = new Grid(this.trees.length, (i) => [this.trees[i].foot.x, this.trees[i].foot.y]);
-    this.propGrid = new Grid(this.props.length, (i) => [this.props[i].x, this.props[i].y]);
-    this.raisedGrid = new Grid(this.raised.length, (i) => [this.raised[i].x, this.raised[i].y]);
-    await stage('Starting the traffic', LOADED.traffic);
-    this.traffic = new Traffic(map);
-    await stage('Mooring the boats', LOADED.boats);
-    this.boats = new Boats(map);
-    await stage('Filling the streets', LOADED.people);
-    this.people = new People(map, { seats: this.world.loose });
     this.peopleLayer = new PeopleLayer(this, this.people, (x, y, level) => this.surfaceHeight(x, y, level), { ground: DEPTH.props + 0.05, deck: DEPTH.onDeck });
     this.ripples = new WaterRipples(this, this.surfaces, (x, y) => this.groundAt(x, y), DEPTH.ripples);
     this.boatLayer = new BoatLayer(this, this.boats, (x, y) => this.groundAt(x, y), DEPTH.boats);
@@ -354,8 +361,8 @@ export class GameScene extends Phaser.Scene {
       below: DEPTH.deckBelow - 0.05,
       beside: DEPTH.car - 0.05,
     });
+    this.enter(region, false);
 
-    const { spawn } = map;
     // Your armoured truck.
     this.car = Object.assign(createCar(spawn.x, spawn.y, spawn.heading), { length: VEHICLES.own.length, width: VEHICLES.own.width, invMass: 1 / VEHICLES.own.mass });
     this.safe = { ...spawn };
@@ -363,13 +370,12 @@ export class GameScene extends Phaser.Scene {
     this.carSprite = this.add.image(0, 0, TEX.car).setScale(1 / ART_SCALE).setDepth(DEPTH.car);
 
     const cam = this.cameras.main;
-    cam.setBounds(0, 0, map.width, map.height);
+    cam.setBounds(0, 0, width, height);
     cam.setBackgroundColor('#2b5c78');
     this.zoom = this.restZoom();
     cam.setZoom(this.zoom);
     cam.centerOn(this.car.x, this.car.y);
     this.updatePerspective();
-    await stage('Looking round', LOADED.view);
     this.ground.update(cam.worldView, this.perspective, true);
     const v0 = cam.worldView;
     this.people.populate({ x0: v0.left, y0: v0.top, x1: v0.right, y1: v0.bottom }, true);
@@ -419,19 +425,85 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /** Where the next region's ids start: well on from this one's (see the systems' `adopt`). */
+  private firstIds(): FirstIds {
+    const on = (n: number | undefined) => (n ?? 0) + 100_000;
+    return { traffic: on(this.traffic?.lastId), people: on(this.people?.lastId), boats: on(this.boats?.lastId) };
+  }
+
+  /** The region's parts, as the scene's own. */
+  private assign(r: Region): void {
+    this.region = r;
+    ({ world: this.world, terrain: this.terrain, surfaces: this.surfaces, walls: this.walls, posts: this.posts, decks: this.decks, ledges: this.ledges, kerbs: this.kerbs, humps: this.humps, traffic: this.traffic, boats: this.boats, people: this.people } = r);
+  }
+
+  /** Round the view, KEEP px out: what's carried over from one region to the next. */
+  private keepView(): { x0: number; y0: number; x1: number; y1: number } {
+    const v = this.cameras.main.worldView;
+    return { x0: v.left - KEEP, y0: v.top - KEEP, x1: v.right + KEEP, y1: v.bottom + KEEP };
+  }
+
+  /**
+   * Into a region of the map (see streamer.ts): broken as it's been broken
+   * (see Changes); and, carrying on (`carry`: not jumped here), with what's
+   * round the view carried over from the last one: the same traffic, people
+   * and boats, and the loose things where they lie. Everything drawn is
+   * pointed at it; the things standing about it are its own.
+   */
+  private enter(r: Region, carry: boolean): void {
+    const old = this.region === r ? undefined : this.region;
+    const keep = carry && old ? this.keepView() : null;
+    const down = this.changes.apply(r.walls, r.posts, r.map.region);
+    // The trees felled: their shadows gone (before the ground's painted).
+    const ids = r.map.ids.trees;
+    ids.forEach((id, i) => {
+      if (this.changes.trees.has(id)) r.map.trees[i * 4 + 2] = 0;
+    });
+    if (old && keep) {
+      r.traffic.adopt(old.traffic, keep);
+      r.people.adopt(old.people, keep);
+      r.boats.adopt(old.boats, keep);
+    }
+    this.assign(r);
+    this.placeProps();
+    this.placeTrees();
+    this.placeLights();
+    this.placeLoose(r, keep);
+    for (const { post } of down) this.showDown(post);
+    this.people.useSeats(this.loose.map((l) => l.body));
+    if (old) {
+      this.ground.use(this.world, this.terrain);
+      this.skids.use(this.terrain);
+      this.buildings.use(r.buildings);
+      this.ledgeLayer.use(this.ledges);
+      this.deckLayer.use(this.decks);
+      this.wallLayer.use(this.walls);
+      this.wreckage.use(this.walls, this.posts);
+      this.peopleLayer.use(this.people);
+      this.ripples.use(this.surfaces);
+      this.boatLayer.use(this.boats);
+      this.trafficLayer.use(this.traffic);
+    }
+  }
+
   /** The camera's zoom with the car stopped. */
   private restZoom(): number {
     const side = Math.min(this.scale.width, this.scale.height);
     return side / restView(side);
   }
 
-  /** Lamp posts, bollards, benches, bins and the rest. */
-  private addProps(): void {
+  /** Lamp posts, bollards, benches, bins and the rest, and the cranes' jibs: the region's (their pictures made as they come into view). */
+  private placeProps(): void {
+    for (const t of [...this.props, ...this.raised]) t.image?.destroy();
+    this.props = [];
+    this.raised = [];
+    this.shownProps.clear();
+    this.shownRaised.clear();
     for (const p of this.world.fixed) {
       // Those on a bridge stand on its deck, and are drawn over it.
       const deck = p.level === 1 ? this.decks.over(p.x, p.y) : null;
       const z = deck ? this.decks.height(deck.deck, deck.along) : this.groundAt(p.x, p.y);
-      // Its picture's made as it comes into view (a big map has thousands of them). (A bike rack with the bikes locked to it.)
+      // (A bike rack with the bikes locked to it.)
       const make = () => {
         const image = this.add
           .image(p.x, p.y, p.kind === 'bikes' ? `${TEX.prop('bikes')}-${racked(p.x, p.y)}` : TEX.prop(p.kind))
@@ -444,43 +516,72 @@ export class GameScene extends Phaser.Scene {
       };
       this.props.push({ x: p.x, y: p.y, z, image: null, make });
       if (p.kind === 'crane' && p.height) {
+        const height = p.height;
         // Its jib, up high, reaching out over the water from where it's pinned.
-        const jib = this.add
-          .image(p.x, p.y, TEX.jib)
-          .setOrigin(0.04, 0.5)
-          .setRotation(p.angle ?? 0)
-          .setDepth(DEPTH.buildings + 0.5)
-          .setVisible(false);
-        jib.setDisplaySize(p.height * 1.25, 1.4 * 8);
-        this.raised.push({ x: p.x, y: p.y, z: z + p.height, image: jib, prop: this.props.length - 1 });
+        const jib = () => {
+          const image = this.add
+            .image(p.x, p.y, TEX.jib)
+            .setOrigin(0.04, 0.5)
+            .setRotation(p.angle ?? 0)
+            .setDepth(DEPTH.buildings + 0.5);
+          image.setDisplaySize(height * 1.25, 1.4 * 8);
+          return image;
+        };
+        this.raised.push({ x: p.x, y: p.y, z: z + height, image: null, make: jib, prop: this.props.length - 1 });
       }
     }
-    this.world.loose.forEach((body, i) => {
-      const image = this.add
-        .image(body.x, body.y, TEX.prop(body.kind))
-        .setScale(1 / ART_SCALE)
-        .setRotation(body.angle)
-        .setDepth(body.level === 1 ? DEPTH.onDeck : DEPTH.props)
-        .setVisible(false);
-      this.loose.push({ body, image });
-      const key = chunkKey(Math.floor(body.x / CHUNK), Math.floor(body.y / CHUNK));
-      const list = this.looseByChunk.get(key);
-      if (list) list.push(i);
-      else this.looseByChunk.set(key, [i]);
-    });
+    this.propGrid = new Grid(this.props.length, (i) => [this.props[i].x, this.props[i].y]);
+    this.raisedGrid = new Grid(this.raised.length, (i) => [this.raised[i].x, this.raised[i].y]);
   }
 
-  /** The traffic lights and Belisha beacons, up on their poles. */
-  private addLights(): void {
+  /**
+   * The loose things (benches, bins, and the bits of what's been broken): the
+   * region's own, as they stand; and those moved (or broken off something)
+   * wherever they've ended up, carried from region to region (those outside
+   * this one put by till they're in one again); and, carrying on, those round
+   * the view as they are (people sit on the benches).
+   */
+  private placeLoose(r: Region, keep: { x0: number; y0: number; x1: number; y1: number } | null): void {
+    const { x0, y0, x1, y1 } = r.map.region;
+    const inKeep = (b: LooseProp) => !!keep && b.x >= keep.x0 && b.x <= keep.x1 && b.y >= keep.y0 && b.y <= keep.y1;
+    const taken = new Set(this.lostHomes);
+    const loose: GameScene['loose'] = [];
+    const away: GameScene['loose'] = [];
+    for (const l of [...this.loose, ...this.away]) {
+      const b = l.body;
+      if (b.gone) {
+        if (b.home) this.lostHomes.add(b.home);
+        if (b.home) taken.add(b.home);
+        l.image?.destroy();
+        continue;
+      }
+      // One of the map's, where it stood (and not by you): this region has it.
+      if (b.home && !b.moved && homeOf(b) === b.home && !inKeep(b)) {
+        l.image?.destroy();
+        continue;
+      }
+      if (b.home) taken.add(b.home);
+      if (b.x >= x0 && b.x < x1 && b.y >= y0 && b.y < y1) loose.push(l);
+      else {
+        l.image?.destroy();
+        away.push({ body: b, image: null });
+      }
+    }
+    for (const body of r.world.loose) if (!body.home || !taken.has(body.home)) loose.push({ body, image: null });
+    this.loose = loose;
+    this.away = away;
+    this.shownLoose.clear();
+    this.reindexLoose();
+  }
+
+  /** The traffic lights' heads and the Belisha beacons' globes, up on their poles: the region's (their pictures made as they come into view). */
+  private placeLights(): void {
+    for (const l of [...this.signalHeads, ...this.beacons]) l.image?.destroy();
+    this.signalHeads = [];
+    this.beacons = [];
     const { signals } = this.world.map;
-    for (const s of signals) {
-      const image = this.add.image(s.x, s.y, TEX.light('red')).setScale(1.3 / ART_SCALE).setRotation(s.angle).setDepth(DEPTH.trees).setVisible(false);
-      this.signalHeads.push({ x: s.x, y: s.y, z: this.groundAt(s.x, s.y) + LIGHT_HEIGHT, controller: s.controller, group: s.group, light: 'red', image });
-    }
-    for (const b of beacons(this.world.map)) {
-      const image = this.add.image(b.x, b.y, TEX.beacon(true)).setScale(1.3 / ART_SCALE).setDepth(DEPTH.trees).setVisible(false);
-      this.beacons.push({ x: b.x, y: b.y, z: this.groundAt(b.x, b.y) + BEACON_HEIGHT, image });
-    }
+    for (const s of signals) this.signalHeads.push({ x: s.x, y: s.y, z: this.groundAt(s.x, s.y) + LIGHT_HEIGHT, angle: s.angle, controller: s.controller, group: s.group, light: 'red', image: null });
+    for (const b of beacons(this.world.map)) this.beacons.push({ x: b.x, y: b.y, z: this.groundAt(b.x, b.y) + BEACON_HEIGHT, image: null });
   }
 
   /** Sets each light near the view to what its controller says, and the beacons flashing. */
@@ -491,47 +592,72 @@ export class GameScene extends Phaser.Scene {
     const near = (x: number, y: number) => x > view.left - 120 && x < view.right + 120 && y > view.top - 120 && y < view.bottom + 120;
     for (const l of this.signalHeads) {
       const show = !l.gone && near(l.x, l.y);
-      if (l.image.visible !== show) l.image.setVisible(show);
-      if (!show) continue;
-      const light = lightAt(controllers[l.controller], l.controller, l.group, time);
-      if (light !== l.light) {
-        l.light = light;
-        l.image.setTexture(TEX.light(light));
+      if (!show) {
+        l.image?.destroy();
+        l.image = null;
+        continue;
       }
+      const light = lightAt(controllers[l.controller], l.controller, l.group, time);
+      if (!l.image) l.image = this.add.image(l.x, l.y, TEX.light(light)).setScale(1.3 / ART_SCALE).setRotation(l.angle).setDepth(DEPTH.trees);
+      else if (light !== l.light) l.image.setTexture(TEX.light(light));
+      l.light = light;
       const s = p.lift(l.z);
       l.image.setPosition(p.x(l.x, s), p.y(l.y, s));
     }
     const on = time % 1 < 0.5;
     for (const b of this.beacons) {
       const show = !b.gone && near(b.x, b.y);
-      if (b.image.visible !== show) b.image.setVisible(show);
-      if (!show) continue;
+      if (!show) {
+        b.image?.destroy();
+        b.image = null;
+        continue;
+      }
+      b.image ??= this.add.image(b.x, b.y, TEX.beacon(on)).setScale(1.3 / ART_SCALE).setDepth(DEPTH.trees);
       b.image.setTexture(TEX.beacon(on));
       const s = p.lift(b.z);
       b.image.setPosition(p.x(b.x, s), p.y(b.y, s));
     }
   }
 
-  private addTrees(): void {
-    const t = this.world.map.trees;
+  /** The region's trees (those felled, where they fell). */
+  private placeTrees(): void {
+    // Their pictures back for the region's trees.
+    for (const t of this.trees) {
+      if (!t.art) continue;
+      t.art.image.setVisible(false);
+      t.art.trunk.setVisible(false);
+      t.art.bole.setVisible(false);
+      this.treeArtPool.push(t.art);
+      t.art = null;
+    }
+    this.trees = [];
+    this.treeAt.clear();
+    this.shownTrees.clear();
+    const { trees: t, ids } = this.region.map;
     // Those whose species is known, drawn as that.
     const species = new Map<number, string>();
     const known = this.world.map.treeSpecies ?? [];
     for (let k = 0; k + 1 < known.length; k += 2) species.set(known[k], TREE_SPECIES[known[k + 1]]);
     for (let i = 0; i < t.length; i += 4) {
+      const id = ids.trees[i / 4];
+      const felled = this.changes.trees.get(id);
+      this.treeAt.set(id, i / 4);
       this.trees.push({
-        x: t[i],
-        y: t[i + 1],
+        x: felled?.x ?? t[i],
+        y: felled?.y ?? t[i + 1],
         z: this.groundAt(t[i], t[i + 1]),
-        h: t[i + 3],
-        foot: { x: t[i], y: t[i + 1], r: t[i + 2] },
+        h: felled?.h ?? t[i + 3],
+        gone: felled?.gone,
+        foot: { x: t[i], y: t[i + 1], r: felled?.r ?? t[i + 2] },
         art: null,
-        tex: species.has(i / 4) ? TEX.species(species.get(i / 4)!) : TEX.tree((i / 4) % TREE_KINDS),
-        scale: t[i + 2] / TREE_RADIUS / ART_SCALE,
+        // (By its id: the same look in every region it's in.)
+        tex: species.has(i / 4) ? TEX.species(species.get(i / 4)!) : TEX.tree(id % TREE_KINDS),
+        scale: (felled?.r ?? t[i + 2]) / TREE_RADIUS / ART_SCALE,
         alpha: 1,
-        turn: ((i * 1.7) % 6.28) - 3.14,
+        turn: felled?.turn ?? ((id * 4 * 1.7) % 6.28) - 3.14,
       });
     }
+    this.treeGrid = new Grid(this.trees.length, (i) => [this.trees[i].foot.x, this.trees[i].foot.y]);
   }
 
   /** A tree's pictures, now it's in view: its crown, and its trunk up from its foot into the crown, under it. */
@@ -552,9 +678,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, deltaMs: number): void {
-    // (Still setting up: see `build`.)
+    // (Still setting up: see `build`; or putting you down somewhere else: see `jumpTo`.)
     if (!this.ready) return;
     const dt = Math.min(deltaMs / 1000, 0.1);
+    // Gone far enough from the middle of the region: the next one made ready, a little each frame; and once it is, into it.
+    const next = this.streamer.update(this.car.x, this.car.y, MAKING);
+    if (next) this.enter(next, true);
     this.readInput();
     this.accumulator = Math.min(this.accumulator + dt, PHYSICS_DT * MAX_STEPS_PER_FRAME);
     while (this.accumulator >= PHYSICS_DT) {
@@ -653,7 +782,8 @@ export class GameScene extends Phaser.Scene {
     if (this.scene.isPaused() || performance.now() - this.menuClosed < 250) return;
     const car = this.car;
     const data: MenuData = {
-      map: this.world.map,
+      map: this.streamer.index,
+      overview: () => this.streamer.overview(),
       you: { x: car.x, y: car.y, heading: car.heading },
       going: this.onFoot ? 'foot' : this.ride.kind === 'bike' ? 'ride' : 'drive',
       done: (to) => {
@@ -677,8 +807,41 @@ export class GameScene extends Phaser.Scene {
     return 'context' in sound ? sound.context : null;
   }
 
-  /** Put down somewhere else on the map, in what you're driving (or on foot), stopped; the streets there filled. */
+  /**
+   * Put down somewhere else on the map, in what you're driving (or on foot),
+   * stopped; the streets there filled. Somewhere outside the region in use,
+   * the region round it's made first (the loading screen up meanwhile).
+   */
   private jumpTo(to: Spot): void {
+    // (Put down on the road there as the region has it: the menu's map's roads are only as fine as it's drawn.)
+    const going = this.onFoot ? 'foot' : this.ride.kind === 'bike' ? 'ride' : 'drive';
+    const exactly = (map: GameMap): Spot => ({ ...(jumpSpot(map, to.x, to.y, going) ?? to), ...(to.name ? { name: to.name } : {}) });
+    if (this.streamer.inside(to.x, to.y)) return this.putDown(exactly(this.world.map));
+    this.ready = false;
+    this.scene.launch('loading');
+    this.scene.bringToTop('loading');
+    const loading = this.scene.get('loading') as LoadingScene;
+    const progress: Progress = { done: 0, label: 'Reading the map' };
+    void this.streamer
+      .load(to.x, to.y, progress, async () => {
+        loading.show(progress.done, progress.label);
+        await frames(1);
+      })
+      .then((region) => {
+        this.enter(region, false);
+        this.putDown(exactly(region.map));
+        this.ground.update(this.cameras.main.worldView, this.perspective, true);
+        this.scene.stop('loading');
+        this.ready = true;
+      })
+      .catch((e) => {
+        console.error(e);
+        loading.failed();
+      });
+  }
+
+  /** Put down at a spot in the region in use. */
+  private putDown(to: Spot): void {
     const car = this.car;
     Object.assign(car, { x: to.x, y: to.y, heading: to.heading, vx: 0, vy: 0, spin: 0 });
     this.prev = { x: to.x, y: to.y, heading: to.heading };
@@ -819,7 +982,8 @@ export class GameScene extends Phaser.Scene {
       if (body.level !== this.level || body.gone) continue;
       // Hit hard enough, a bench smashes to pieces, and what's already broken breaks up further.
       if (this.wreckage.smash(body, car, impactSpeed(car, body.x, body.y, body.r + (body.length ?? 0) / 2, body.vx, body.vy))) {
-        image.destroy();
+        image?.destroy();
+        this.loose[i].image = null;
         continue;
       }
       const knock = collideCarWithBody(car, body, undefined, this.contact);
@@ -1106,10 +1270,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** The nearest thing you could get into from where you're standing: a vehicle (driven, or parked), or a bike lying on the ground. */
-  private reachable(): Vehicle | { body: LooseProp; image: Phaser.GameObjects.Image } | null {
+  private reachable(): Vehicle | GameScene['loose'][number] | null {
     if (!this.onFoot) return null;
     const { x, y } = this.car;
-    let best: Vehicle | { body: LooseProp; image: Phaser.GameObjects.Image } | null = null;
+    let best: Vehicle | GameScene['loose'][number] | null = null;
     let bestD = REACH;
     for (const v of this.traffic.near(x, y, 120)) {
       if (v.level !== this.level) continue;
@@ -1129,12 +1293,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Into a vehicle (pulling its driver out, if it's being driven), or onto a bike lying there. */
-  private getIn(target: Vehicle | { body: LooseProp; image: Phaser.GameObjects.Image }): void {
+  private getIn(target: Vehicle | GameScene['loose'][number]): void {
     const car = this.car;
     if ('body' in target) {
       const { body, image } = target;
       body.gone = true;
-      image.destroy();
+      image?.destroy();
+      target.image = null;
       this.ride = { kind: 'bike', colour: Math.floor(Math.random() * COLOURS.bike.length) };
       this.wreck = newWreck();
       Object.assign(car, { x: body.x, y: body.y, heading: body.angle, vx: 0, vy: 0, spin: 0 });
@@ -1540,15 +1705,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** What showed a knocked-down post goes: a lamp, a traffic light's head, a beacon (a tree's crown falls instead). */
-  private knockedDown(post: Post): void {
+  private showDown(post: Post): void {
     switch (post.thing) {
       case 'signal':
         this.signalHeads[post.index].gone = true;
-        this.signalHeads[post.index].image.setVisible(false);
         break;
       case 'beacon':
         this.beacons[post.index].gone = true;
-        this.beacons[post.index].image.setVisible(false);
         break;
       case 'tree':
       case 'stump':
@@ -1684,13 +1847,23 @@ export class GameScene extends Phaser.Scene {
     }
     this.shownLoose.clear();
     for (const i of loose) {
-      const { body, image } = this.loose[i];
+      const l = this.loose[i];
+      const { body } = l;
       if (body.gone) continue;
       const show = body.x > view.left - pad && body.x < view.right + pad && body.y > view.top - pad && body.y < view.bottom + pad;
-      if (image.visible !== show) image.setVisible(show);
+      // Its picture made as it comes into view, and let go once it's out of it.
+      if (!show) {
+        l.image?.destroy();
+        l.image = null;
+      } else
+        l.image ??= this.add
+          .image(body.x, body.y, body.home ? TEX.prop(body.kind as PropKind) : TEX.debris(body.kind as DebrisKind))
+          .setScale(1 / ART_SCALE)
+          .setDepth(body.level === 1 ? DEPTH.onDeck : DEPTH.props);
+      const image = l.image;
       if (!show && !body.moved) continue;
       this.shownLoose.add(i);
-      if (!show) continue;
+      if (!show || !image) continue;
       const deck = body.level === 1 ? this.decks.over(body.x, body.y) : null;
       const s = p.lift(deck ? this.decks.height(deck.deck, deck.along) : this.groundAt(body.x, body.y));
       image.setPosition(p.x(body.x, s), p.y(body.y, s)).setRotation(body.angle);
@@ -1741,8 +1914,16 @@ const shapes = new Map<string, Shape>();
 
 /** Out of what you're driving only going slower than this, px/s (a fast walk). */
 const GET_OUT_SPEED = 3 * 8;
-/** How far through setting up each stage starts (of 1): about as long as each takes. */
-const LOADED = { ground: 0.06, paint: 0.29, buildings: 0.3, trees: 0.33, traffic: 0.34, boats: 0.6, people: 0.68, view: 0.82 };
+/** Round the view, how far what's there is carried over from one region of the map to the next, px (see `enter`). */
+const KEEP = 100 * 8;
+/** How long the next region's made ready for each frame, ms (see streamer.ts). */
+const MAKING = 5;
+
+/** Waits `n` frames (for the loading screen to be drawn). */
+async function frames(n: number): Promise<void> {
+  for (let k = 0; k < n; k++) await new Promise((r) => requestAnimationFrame(r));
+}
+
 /** How far off a siren can be heard, px. */
 const SIREN_HEARD = 260 * 8;
 /** Into something only from within this of it, px. */

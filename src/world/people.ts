@@ -16,6 +16,7 @@
 import { type GameMap, type Pts, VEHICLE_ROADS, pointInRing } from '../map/osm';
 import type { Light } from './lights';
 import { offsetLine } from './world';
+import { type Work, drain, every } from './work';
 
 const M = 8;
 /** A vehicle standing still: its middle, which way it points, how long and half as wide, px; its level. */
@@ -216,6 +217,11 @@ const SEAT_WEIGHT = 0.9;
 const NEAR_CELL = 4 * M;
 const key = (x: number, y: number) => `${Math.floor(x / GRID)},${Math.floor(y / GRID)}`;
 
+/** A line's name, by where it is (the same walk or ring, made again, has the same one). */
+function ptsKey(pts: Pts): string {
+  return `${pts[0]},${pts[1]},${pts[pts.length - 2]},${pts[pts.length - 1]},${pts.length}`;
+}
+
 export class People {
   readonly people: Person[] = [];
   readonly walks: Walk[] = [];
@@ -257,21 +263,20 @@ export class People {
   readonly hits: { person: Person; speed: number; by?: number; how: 'hit' | 'over'; loss: number }[] = [];
 
   /** The benches and picnic tables people sit at, and the picnics on the grass. */
-  private readonly seats: Seat[];
+  private seats: Seat[];
   private readonly seatGrid = new Map<string, number[]>();
   readonly picnics: Picnic[] = [];
 
   constructor(
     private readonly map: GameMap,
-    options: { rand?: () => number; seats?: Seat[] } = {},
+    options: { rand?: () => number; seats?: Seat[]; firstId?: number } = {},
+    /** Not set up yet (see `setup`). */
+    later = false,
   ) {
     this.rand = options.rand ?? Math.random;
-    this.seats = (options.seats ?? []).filter((b) => (b.kind === 'bench' || b.kind === 'picnic') && b.level === 0);
-    this.seats.forEach((b, i) => {
-      const list = this.seatGrid.get(key(b.x, b.y)) ?? [];
-      list.push(i);
-      this.seatGrid.set(key(b.x, b.y), list);
-    });
+    this.nextId = options.firstId ?? 1;
+    this.seats = [];
+    this.useSeats(options.seats ?? []);
     for (const a of map.areas) {
       if (a.kind !== 'yard') continue;
       const ring = a.rings[0];
@@ -280,18 +285,36 @@ export class People {
       this.yards.push({ ring, x0, y0, x1, y1 });
     }
     this.platforms = (map.busStations ?? []).flatMap((st) => st.bays.map((b) => b.platform));
-    this.buildWalks();
-    this.buildSpots();
-    this.buildCrossings();
+    if (!later) drain(this.setup());
+  }
+
+  /** Sets them up, a little at a time (see work.ts): the walks, the spots people stand about at, the crossings. */
+  *setup(): Work {
+    yield* this.buildWalks();
+    yield* this.buildSpots();
+    yield* this.buildCrossings();
+  }
+
+  /** The benches and picnic tables people sit at (the scene's loose things: see GameScene). */
+  useSeats(seats: Seat[]): void {
+    this.seats = seats.filter((b) => (b.kind === 'bench' || b.kind === 'picnic') && b.level === 0);
+    this.seatGrid.clear();
+    this.seats.forEach((b, i) => {
+      const list = this.seatGrid.get(key(b.x, b.y)) ?? [];
+      list.push(i);
+      this.seatGrid.set(key(b.x, b.y), list);
+    });
   }
 
   // --- What's where ---
 
-  private buildWalks(): void {
+  private *buildWalks(): Work {
     const { roads } = this.map;
     // The carriageways first: the walks are kept off them.
-    roads.forEach((r) => {
-      if (!VEHICLE_ROADS.has(r.kind) || r.kind === 'track') return;
+    const pause = every(25);
+    for (const r of roads) {
+      if (pause()) yield;
+      if (!VEHICLE_ROADS.has(r.kind) || r.kind === 'track') continue;
       this.roads.push({ pts: r.pts, half: r.width / 2, level: r.bridge ? 1 : 0 });
       const k = this.roads.length - 1;
       const index = (x: number, y: number) => {
@@ -307,7 +330,7 @@ export class People {
           for (const [ox, oy] of [[0, 0], [r.width, 0], [-r.width, 0], [0, r.width], [0, -r.width]]) index(x + ox, y + oy);
         }
       }
-    });
+    }
     /** A walk, less where it runs over a road away from a crossing: in pieces. */
     const add = (line: Pts, busy: number, road: number, level: number) => {
       const pieces: Pts[] = [];
@@ -339,10 +362,11 @@ export class People {
       for (const pts of pieces) if (pts.length >= 4 && lengthOf(pts) > 3 * M) this.addWalk(pts, busy, road, level);
     };
     // Over the bridges too (a road bridge's pavements are decks of their own: see Decks), on their level.
-    roads.forEach((r, i) => {
+    for (const [i, r] of roads.entries()) {
+      if (pause()) yield;
       const level = r.bridge ? 1 : 0;
       if (VEHICLE_ROADS.has(r.kind)) {
-        if (!r.pavement) return;
+        if (!r.pavement) continue;
         // More people along the busier streets, as with the traffic.
         const busy = Math.min(4, 0.7 + (r.activity ?? 0) * 0.25);
         const off = r.width / 2 + PAVEMENT / 2;
@@ -350,7 +374,7 @@ export class People {
         if (r.pavement !== 'left') add(offsetLine(r.pts, -off), busy, i, level);
       } else if (r.kind === 'pedestrian') add(r.pts, 2.5, -1, level);
       else if (r.kind === 'footway' || r.kind === 'steps' || r.kind === 'cycleway') add(r.pts, r.kind === 'cycleway' ? 0.3 : 0.9, r.kind === 'cycleway' ? -2 : -1, level);
-    });
+    }
   }
 
   private addWalk(pts: Pts, busy: number, road: number, level: number): void {
@@ -375,8 +399,9 @@ export class People {
     }
   }
 
-  private buildSpots(): void {
+  private *buildSpots(): Work {
     const { map } = this;
+    const pause = every(40);
     // The parks and squares: people wander about them, and stand about in groups.
     for (const a of map.areas) {
       if (a.kind !== 'park' && a.kind !== 'plaza' && a.kind !== 'grass' && a.kind !== 'garden' && a.kind !== 'pitch' && a.kind !== 'play') continue;
@@ -398,6 +423,7 @@ export class People {
     // Outside the shops, cafés and bars, on the pavement; at the sights, in groups.
     const v = map.venues ?? [];
     for (let i = 0; i + 2 < v.length; i += 3) {
+      if (pause()) yield;
       const [x, y, kind] = [v[i], v[i + 1], v[i + 2]];
       const near = this.nearestWalk(x, y, (kind ? 30 : 16) * M);
       if (!near) continue;
@@ -411,6 +437,7 @@ export class People {
     // By the water: on the quays, looking out over it.
     for (const p of map.props) {
       if (p.kind !== 'mooring' && p.kind !== 'lifering') continue;
+      if (pause()) yield;
       const water = this.towardWater(p.x, p.y);
       if (water === null) continue;
       const [x, y] = [p.x - Math.cos(water) * 1.5 * M, p.y - Math.sin(water) * 1.5 * M];
@@ -440,9 +467,11 @@ export class People {
     this.spotGrid.set(key(s.x, s.y), list);
   }
 
-  private buildCrossings(): void {
+  private *buildCrossings(): Work {
     const { map } = this;
+    const pause = every(60);
     for (const c of map.crossings) {
+      if (pause()) yield;
       const r = c.road !== undefined ? map.roads[c.road] : undefined;
       if (r?.bridge) continue;
       const [nx, ny] = [-Math.sin(c.angle), Math.cos(c.angle)];
@@ -675,6 +704,61 @@ export class People {
         p.stop = i;
       }
     }
+  }
+
+  /**
+   * Takes over from the last region's people (see streamer.ts): those in
+   * `keep` (round the view) are who was there, carried over onto this one's
+   * walks, crossings and stops (the same, made again: matched by where they
+   * are); those this one had put there of its own go. Anyone whose walk isn't
+   * here finds the nearest.
+   */
+  adopt(old: People, keep: PeopleView): void {
+    const inside = (x: number, y: number) => x >= keep.x0 && x <= keep.x1 && y >= keep.y0 && y <= keep.y1;
+    for (let i = this.people.length - 1; i >= 0; i--) if (inside(this.people[i].x, this.people[i].y)) this.people.splice(i, 1);
+    for (let i = this.picnics.length - 1; i >= 0; i--) if (inside(this.picnics[i].x, this.picnics[i].y)) this.picnics.splice(i, 1);
+    const walkAt = new Map(this.walks.map((w, k) => [ptsKey(w.pts), k]));
+    const crossingAt = new Map(this.crossings.map((c, k) => [`${c.ax},${c.ay},${c.bx},${c.by}`, k]));
+    const stopAt = new Map(this.stops.map(([x, y], k) => [`${x},${y}`, k]));
+    const areaAt = new Map(this.areas.map((r, k) => [ptsKey(r), k]));
+    const picnics = new Set<Picnic>();
+    for (const p of old.people) {
+      if (p.gone || !inside(p.x, p.y)) continue;
+      let lost = false;
+      if (p.line >= 0) {
+        const k = walkAt.get(ptsKey(old.walks[p.line].pts));
+        if (k === undefined) [p.line, lost] = [-1, lost || p.mode === 'walk'];
+        else p.line = k;
+      }
+      if (p.crossing >= 0) {
+        const c = old.crossings[p.crossing];
+        const k = crossingAt.get(`${c.ax},${c.ay},${c.bx},${c.by}`);
+        if (k === undefined) [p.crossing, lost] = [-1, lost || p.mode === 'kerb'];
+        else p.crossing = k;
+      }
+      if (p.stop >= 0) {
+        const [x, y] = old.stops[p.stop];
+        const k = stopAt.get(`${x},${y}`);
+        if (k === undefined) [p.stop, lost] = [-1, lost || p.mode === 'queue'];
+        else p.stop = k;
+      }
+      if (p.area >= 0) {
+        const k = areaAt.get(ptsKey(old.areas[p.area]));
+        if (k === undefined) [p.area, lost] = [-1, lost || p.mode === 'wander'];
+        else p.area = k;
+      }
+      if (p.picnic) picnics.add(p.picnic);
+      this.people.push(p);
+      if (lost) this.rejoin(p);
+    }
+    for (const c of old.picnics) if (inside(c.x, c.y)) picnics.add(c);
+    this.picnics.push(...picnics);
+    this.nextId = Math.max(this.nextId, old.nextId);
+  }
+
+  /** The last id given someone (see `adopt`). */
+  get lastId(): number {
+    return this.nextId;
   }
 
   /** Someone (or a group) at a spot, standing about; in a park or square, some wander off about it. */

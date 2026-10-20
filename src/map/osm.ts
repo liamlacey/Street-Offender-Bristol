@@ -593,10 +593,12 @@ export interface BusRoute {
  * base64 (it's a lot of numbers, and this keeps the file small).
  */
 export interface TerrainData {
-  /** Map px between grid points; the first is at (0, 0). */
+  /** Map px between grid points; the first is at (0, 0), or (i0, j0) cells from it (a region of the map: see regions.ts). */
   cell: number;
   cols: number;
   rows: number;
+  i0?: number;
+  j0?: number;
   /** Metres above sea level of the lowest point. */
   base: number;
   heights: string;

@@ -7,6 +7,7 @@
 
 import { type Area, type GameMap, type Lane, type Pts, type Road, pointInRing, ridgeAxis } from '../map/osm';
 import { lineLength, pointAlong, subPolyline } from './world';
+import { type Work, drain } from './work';
 
 /** A car park's bays: how wide, how deep, and the aisle between rows, px. */
 export const BAY_WIDTH = 2.5 * 8;
@@ -178,9 +179,19 @@ export function atBusStop(map: GameMap, x: number, y: number): boolean {
 
 /** Every bay on the map. */
 export function parkingSpaces(map: GameMap): Space[] {
+  return drain(parkingWork(map));
+}
+
+/** The same, a little at a time (see work.ts). */
+export function* parkingWork(map: GameMap): Work<Space[]> {
   const out: Space[] = [];
-  for (const a of map.areas) if (a.kind === 'parking') out.push(...carParkBays(map, a).spaces);
+  for (const a of map.areas) {
+    if (a.kind !== 'parking') continue;
+    out.push(...carParkBays(map, a).spaces);
+    yield;
+  }
   for (const r of map.roads) {
+    if (r.lanes?.some((l) => l.kind === 'parking')) yield;
     for (const lane of r.lanes ?? []) {
       if (lane.kind !== 'parking') continue;
       const s = r.laneSpans ?? [];

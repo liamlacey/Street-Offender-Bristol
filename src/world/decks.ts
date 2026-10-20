@@ -16,6 +16,7 @@
 import { DECK_STEP, type GameMap, type Pts, type Road, pointInRing } from '../map/osm';
 import type { Segment } from '../physics/collisions';
 import { lineLength, offsetLine, pointAlong } from './world';
+import { type Work, drain } from './work';
 
 /** A road's pavement, how wide, px (as the ground's drawn). */
 const PAVEMENT = 2.4 * 8;
@@ -282,8 +283,14 @@ export class Decks {
 
   /** The parapets along both sides of each deck where it's up off the ground (open at the ends), as walls for the cars on it. */
   parapets(): Segment[] {
+    return drain(this.parapetsWork());
+  }
+
+  /** The same, a little at a time (see work.ts). */
+  *parapetsWork(): Work<Segment[]> {
     const walls: Segment[] = [];
     for (const d of this.decks) {
+      yield;
       const p = d.road.pts;
       const out = d.half + PARAPET_OUT;
       const raised = this.raised(d);

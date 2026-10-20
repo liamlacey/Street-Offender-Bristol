@@ -5,7 +5,7 @@
  * left of it as the traffic drives.
  */
 
-import type { AreaKind, GameMap, Pts, RoadKind } from '../map/osm';
+import type { AreaKind, GameMap, Pts, Road, RoadKind } from '../map/osm';
 
 /** The map's pixels for each of the game's (8 a metre): one for every 1.5 m. */
 export const OVERVIEW_SCALE = 1 / 12;
@@ -30,8 +30,87 @@ export interface Spot {
   name?: string;
 }
 
+/** A road, as the overview has it. */
+export type OverviewRoad = Pick<Road, 'kind' | 'pts' | 'width' | 'bridge' | 'passage' | 'arcade' | 'oneway' | 'name'>;
+
+/**
+ * What the overview's drawn from: the whole map, but only what's drawn, and
+ * that only as finely as it's drawn (lines simplified to within a pixel of
+ * it; the smallest buildings left out). Made from the map when the game's
+ * built (see vite.config.ts), and fetched only when the menu's map is opened.
+ */
+export interface Overview {
+  width: number;
+  height: number;
+  areas: { kind: AreaKind; rings: Pts[] }[];
+  buildings: { rings: Pts[] }[];
+  roads: OverviewRoad[];
+}
+
+/** How finely the overview's lines are kept, px: about a pixel of it; and the smallest building on it, px² (25 m²). */
+const FINE = 1 / OVERVIEW_SCALE;
+const SPECK = 25 * M * M;
+
+export function overviewOf(map: GameMap): Overview {
+  const fine = (pts: Pts, closed: boolean) => simplify(pts, FINE, closed).map(Math.round);
+  const area = (ring: Pts) => {
+    let a = 0;
+    for (let k = 0; k + 1 < ring.length; k += 2) {
+      const j = (k + 2) % ring.length;
+      a += ring[k] * ring[j + 1] - ring[j] * ring[k + 1];
+    }
+    return Math.abs(a / 2);
+  };
+  return {
+    width: map.width,
+    height: map.height,
+    areas: map.areas.filter((a) => AREAS[a.kind] || a.kind === 'water' || a.kind === 'island').map((a) => ({ kind: a.kind, rings: a.rings.map((r) => fine(r, true)).filter((r) => r.length >= 6) })),
+    // (A building smaller than a garage is a speck on it: left out.)
+    buildings: map.buildings.filter((b) => b.bottom <= 0 && area(b.rings[0]) > SPECK).map((b) => ({ rings: b.rings.map((r) => fine(r, true)).filter((r) => r.length >= 6) })),
+    roads: map.roads
+      .filter((r) => r.pts.length >= 4)
+      .map((r) => ({
+        kind: r.kind,
+        pts: fine(r.pts, false),
+        width: r.width,
+        ...(r.bridge ? { bridge: r.bridge } : {}),
+        ...(r.passage ? { passage: r.passage } : {}),
+        ...(r.arcade ? { arcade: r.arcade } : {}),
+        ...(r.oneway ? { oneway: r.oneway } : {}),
+        ...(r.name ? { name: r.name } : {}),
+      })),
+  };
+}
+
+/** A line with only the points it needs to stay within `tolerance` px of itself (Douglas-Peucker). */
+function simplify(pts: Pts, tolerance: number, closed: boolean): Pts {
+  const n = pts.length / 2;
+  if (n <= (closed ? 4 : 2)) return pts;
+  const keep = new Uint8Array(n);
+  keep[0] = keep[n - 1] = 1;
+  const stack: [number, number][] = [[0, n - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop()!;
+    const [ax, ay, bx, by] = [pts[a * 2], pts[a * 2 + 1], pts[b * 2], pts[b * 2 + 1]];
+    const [dx, dy] = [bx - ax, by - ay];
+    const len = Math.hypot(dx, dy);
+    let [far, at] = [0, -1];
+    for (let k = a + 1; k < b; k++) {
+      const [px, py] = [pts[k * 2], pts[k * 2 + 1]];
+      const d = len ? Math.abs(dx * (ay - py) - dy * (ax - px)) / len : Math.hypot(px - ax, py - ay);
+      if (d > far) [far, at] = [d, k];
+    }
+    if (at < 0 || far <= tolerance) continue;
+    keep[at] = 1;
+    stack.push([a, at], [at, b]);
+  }
+  const out: Pts = [];
+  for (let k = 0; k < n; k++) if (keep[k]) out.push(pts[k * 2], pts[k * 2 + 1]);
+  return out;
+}
+
 /** Where you'd be put down for (x, y): on the nearest road you can be on (not up on a bridge, nor under a building), or null if there's none. */
-export function jumpSpot(map: GameMap, x: number, y: number, going: Going): Spot | null {
+export function jumpSpot(map: { roads: OverviewRoad[] }, x: number, y: number, going: Going): Spot | null {
   const kinds = ALONG[going];
   let best: { d: number; x: number; y: number; heading: number; road: number } | null = null;
   map.roads.forEach((r, i) => {
@@ -62,7 +141,7 @@ export function jumpSpot(map: GameMap, x: number, y: number, going: Going): Spot
 }
 
 /** The name of the nearest named street within 60 m of (x, y), if any. */
-export function placeName(map: GameMap, x: number, y: number): string | undefined {
+export function placeName(map: { roads: OverviewRoad[] }, x: number, y: number): string | undefined {
   let best = 60 * M;
   let name: string | undefined;
   for (const r of map.roads) {
@@ -121,7 +200,7 @@ function trace(ctx: Ctx, rings: Pts[], s: number): void {
 }
 
 /** The whole map, drawn at `s` of its size: the ground, green and water, buildings, then the roads (and bridges over the rest). */
-export function drawOverview(ctx: Ctx, map: GameMap, s = OVERVIEW_SCALE): void {
+export function drawOverview(ctx: Ctx, map: Overview, s = OVERVIEW_SCALE): void {
   ctx.fillStyle = LAND;
   ctx.fillRect(0, 0, map.width * s, map.height * s);
   for (const a of map.areas) {
@@ -147,7 +226,6 @@ export function drawOverview(ctx: Ctx, map: GameMap, s = OVERVIEW_SCALE): void {
   ctx.strokeStyle = BUILDING_EDGE;
   ctx.lineWidth = 0.5;
   for (const b of map.buildings) {
-    if (b.bottom > 0) continue;
     trace(ctx, b.rings, s);
     ctx.fill('evenodd');
     ctx.stroke();

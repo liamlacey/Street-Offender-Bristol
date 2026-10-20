@@ -11,6 +11,7 @@ import type { Building, GameMap, LineKind, Prop, PropKind, Pts, Road } from '../
 import { Decks, waterOf } from './decks';
 import { Terrain } from './terrain';
 import type { DebrisKind, ThingKind, WallKind } from './damage';
+import { type Work, drain, every } from './work';
 
 /** Size of the pieces the ground is drawn in, and indexed by, px. */
 export const CHUNK = 512;
@@ -87,6 +88,8 @@ export interface Wall extends Segment {
   level: number;
   /** How tall, px, if measured (the usual for its kind otherwise). */
   height?: number;
+  /** Not the map's: put there since (what's left of a broken wall, a fallen tree's trunk). */
+  added?: boolean;
 }
 
 export interface LooseProp extends Body {
@@ -100,6 +103,13 @@ export interface LooseProp extends Body {
   moved: boolean;
   /** When it broke off something, seconds (game time), if it did. */
   born?: number;
+  /** Where it stood on the map (see `homeOf`), if it's one of the map's (not a piece of something). */
+  home?: string;
+}
+
+/** A loose thing's place on the map: what it is and where it stood (the same in each region of the map it's in). */
+export function homeOf(p: { kind: string; x: number; y: number }): string {
+  return `${p.kind},${p.x},${p.y}`;
 }
 
 /** What's in one chunk of the map: indices into the map's lists. */
@@ -239,9 +249,15 @@ export function cutWall(s: Segment, passages: Road[]): Segment[] {
   return pieces;
 }
 
-export function buildWorld(map: GameMap): World {
+export function buildWorld(map: GameMap, terrain?: Terrain): World {
+  return drain(worldWork(map, terrain));
+}
+
+/** The same, a little at a time (see work.ts). */
+export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
+  const pause = every(150);
   // Which level things are on: on a bridge's deck, or the ground.
-  const terrain = new Terrain(map.terrain, map.pxPerMetre, map.ledges);
+  const terrain = shared ?? new Terrain(map.terrain, map.pxPerMetre, map.ledges);
   const decks = new Decks(map.roads, (x, y) => terrain.at(x, y) * terrain.px, waterOf(map));
   const onDeck = (x: number, y: number) => decks.over(x, y) !== null;
   const passages = map.roads.filter((r) => r.passage);
@@ -281,7 +297,10 @@ export function buildWorld(map: GameMap): World {
   };
   // Buildings, with their archways open, stand in the way on both levels.
   const buildings: Wall[] = [];
-  for (const b of map.buildings) if (b.solid) for (const ring of b.rings) addRing(buildings, ring, 0, true, 0, undefined, true);
+  for (const b of map.buildings) {
+    if (b.solid) for (const ring of b.rings) addRing(buildings, ring, 0, true, 0, undefined, true);
+    if (pause()) yield;
+  }
   // Garden walls, fences and railings: on a bridge if they run along one (its handrails), otherwise on the ground.
   for (const line of map.lines) {
     const r = LINE_THICKNESS[line.kind];
@@ -289,24 +308,27 @@ export function buildWorld(map: GameMap): World {
     const mid = Math.floor(line.pts.length / 4) * 2;
     const level = onDeck(line.pts[mid], line.pts[mid + 1]) ? 1 : 0;
     addRing(level ? deck : ground, line.pts, r, false, level, line.kind as WallKind, false, line.height);
+    if (pause()) yield;
   }
   // The edge of the map.
   const edge: Wall[] = [];
   addRing(edge, [0, 0, map.width, 0, map.width, map.height, 0, map.height], 0, true, 0);
   const walls: [Wall[], Wall[]] = [
     [...buildings, ...ground, ...edge],
-    [...buildings, ...deck, ...decks.parapets().map((p) => ({ ...p, level: 1, kind: 'parapet' as const })), ...edge],
+    [...buildings, ...deck, ...(yield* decks.parapetsWork()).map((p) => ({ ...p, level: 1, kind: 'parapet' as const })), ...edge],
   ];
 
   // Trees grow on the ground; anything else standing on a bridge is on the bridge.
   const posts: [Post[], Post[]] = [[], []];
   const levelOf = (x: number, y: number) => (onDeck(x, y) ? 1 : 0);
-  for (let i = 0; i < map.trees.length; i += 4) posts[0].push({ x: map.trees[i], y: map.trees[i + 1], r: TRUNK, thing: 'tree', index: i / 4 });
+  // (A tree's by its id in the whole map, in a region of it: it's the same tree, if it's knocked down, in the next region it's in.)
+  const treeIds = (map as GameMap & { ids?: { trees: number[] } }).ids?.trees;
+  for (let i = 0; i < map.trees.length; i += 4) posts[0].push({ x: map.trees[i], y: map.trees[i + 1], r: TRUNK, thing: 'tree', index: treeIds?.[i / 4] ?? i / 4 });
   map.signals.forEach((s, index) => posts[levelOf(s.x, s.y)].push({ x: s.x, y: s.y, r: SIGNAL_POLE, thing: 'signal', index }));
   beacons(map).forEach((b, index) => posts[levelOf(b.x, b.y)].push({ x: b.x, y: b.y, r: BEACON_POLE, thing: 'beacon', index }));
   const loose: LooseProp[] = [];
   const fixed: FixedProp[] = [];
-  map.props.forEach((p, i) => {
+  map.props.forEach((p) => {
     const level = levelOf(p.x, p.y);
     const post = POST_RADIUS[p.kind];
     if (post !== undefined) posts[level].push({ x: p.x, y: p.y, r: post, thing: p.kind as ThingKind, index: fixed.length });
@@ -315,17 +337,21 @@ export function buildWorld(map: GameMap): World {
     const l = LOOSE[p.kind];
     if (l) {
       // Benches face along the nearest wall or path; without knowing which (unless the map says), turn each its own way.
-      loose.push({ kind: p.kind, x: p.x, y: p.y, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: p.angle ?? ((i * 2.399) % Math.PI) - Math.PI / 2, spin: 0, moved: false, level });
+      // (Turned by where it is, not its place in the list: the same in each region of the map it's in.)
+      const turn = (Math.abs(Math.round(p.x * 7 + p.y * 13)) * 2.399) % Math.PI;
+      loose.push({ kind: p.kind, x: p.x, y: p.y, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: p.angle ?? turn - Math.PI / 2, spin: 0, moved: false, level, home: homeOf(p) });
     } else {
       fixed.push({ ...p, level });
     }
   });
 
-  return { map, walls, posts, loose, fixed, chunks: indexChunks(map) };
+  yield;
+  return { map, walls, posts, loose, fixed, chunks: yield* indexChunks(map) };
 }
 
 /** Which chunks each thing reaches into (with its shadow, for buildings). */
-function indexChunks(map: GameMap): Map<string, ChunkIndex> {
+function* indexChunks(map: GameMap): Work<Map<string, ChunkIndex>> {
+  const pause = every(800);
   const chunks = new Map<string, ChunkIndex>();
   const add = (list: keyof ChunkIndex, i: number, x0: number, y0: number, x1: number, y1: number) => {
     for (let cx = Math.floor(x0 / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
@@ -359,11 +385,13 @@ function indexChunks(map: GameMap): Map<string, ChunkIndex> {
     const [x0, y0, x1, y1] = bounds(l.pts);
     add('lines', i, x0 - 8, y0 - 8, x1 + 8, y1 + 8);
   });
-  map.buildings.forEach((b, i) => {
+  yield;
+  for (const [i, b] of map.buildings.entries()) {
     const [x0, y0, x1, y1] = bounds(b.rings[0]);
     const [sx, sy] = shadowOffset(b.top);
     add('buildings', i, x0 - 2, y0 - 2, x1 + Math.max(0, sx) + 2, y1 + Math.max(0, sy) + 2);
-  });
+    if (pause()) yield;
+  }
   // With their zig-zags, which run along the road either side.
   map.crossings.forEach((c, i) => {
     const reach = c.width + 14 * 8;
@@ -377,6 +405,7 @@ function indexChunks(map: GameMap): Map<string, ChunkIndex> {
     const [x, y, r, h] = [map.trees[i], map.trees[i + 1], map.trees[i + 2], map.trees[i + 3]];
     const [sx, sy] = shadowOffset(h * 0.7);
     add('trees', i / 4, x - r, y - r, x + sx + r, y + sy + r);
+    if (pause()) yield;
   }
   const banks = map.banks ?? [];
   for (let i = 0; i < banks.length; i += 3) add('banks', i / 3, banks[i] - 8, banks[i + 1] - 8, banks[i] + 8, banks[i + 1] + 8);

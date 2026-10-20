@@ -14,10 +14,11 @@ import type { Wreck } from '../car/dents';
 import { type BusRoute, type BusStation, type GameMap, type Pts, type Road, type RoadKind, type Service, pointInRing } from '../map/osm';
 import { type Body, bodyHull } from '../physics/collisions';
 import type { Light } from './lights';
-import { type Space, parkingSpaces } from './parking';
-import { type Kerbside, kerbsides } from './posts';
+import { type Space, parkingWork } from './parking';
+import { type Kerbside, kerbsidesWork } from './posts';
 import { Terrain } from './terrain';
 import { lineLength, offsetLine, subPolyline } from './world';
+import { type Work, drain, every } from './work';
 
 const M = 8;
 
@@ -435,12 +436,21 @@ function nearestOn(p: Path, x: number, y: number): { s: number; d: number } {
  * junctions to leave room for the turns across them.
  */
 export function buildLanes(map: GameMap, paths = false, joins: Join[] = []): { lanes: Lane[]; nodes: Node[] } {
+  return drain(lanesWork(map, paths, joins));
+}
+
+/** The same, a little at a time (see work.ts). */
+export function* lanesWork(map: GameMap, paths = false, joins: Join[] = []): Work<{ lanes: Lane[]; nodes: Node[] }> {
+  const pause = every(120);
+  const joinsOf = new Map<number, Join[]>();
+  for (const j of joins) joinsOf.set(j.road, [...(joinsOf.get(j.road) ?? []), j]);
   // The roads; or (a network of their own, for the bikes) the cycle paths.
   const roads = map.roads
     .map((r, i) => ({ r, i }))
     .filter(({ r }) => (paths ? r.kind === 'cycleway' : DRIVEN.has(r.kind) || r.bus) && r.pts.length >= 4)
     // Each road with a point put in where a cycle path joins it (if it's not one of its points already): a junction for the bikes.
-    .map(({ r, i }) => ({ r: !paths && joins.some((j) => j.road === i && j.t > 0 && j.t < 1) ? { ...r, pts: withJoins(r.pts, joins.filter((j) => j.road === i)) } : r, i }));
+    .map(({ r, i }) => ({ r: !paths && joinsOf.get(i)?.some((j) => j.t > 0 && j.t < 1) ? { ...r, pts: withJoins(r.pts, joinsOf.get(i)!) } : r, i }));
+  yield;
   const key = (x: number, y: number) => `${x},${y}`;
   const uses = new Map<string, number>();
   for (const { r } of roads) for (let k = 0; k < r.pts.length; k += 2) uses.set(key(r.pts[k], r.pts[k + 1]), (uses.get(key(r.pts[k], r.pts[k + 1])) ?? 0) + 1);
@@ -464,6 +474,7 @@ export function buildLanes(map: GameMap, paths = false, joins: Join[] = []): { l
   // The edges: each road, cut where it meets another.
   const edges: { road: Road; index: number; pts: Pts; a: number; b: number }[] = [];
   for (const { r, i } of roads) {
+    if (pause()) yield;
     let start = 0;
     const n = r.pts.length / 2;
     for (let k = 1; k < n; k++) {
@@ -479,6 +490,7 @@ export function buildLanes(map: GameMap, paths = false, joins: Join[] = []): { l
       start = k;
     }
   }
+  yield;
   // How far back from each junction the lanes stop: clear of the roads across it.
   const clear = nodes.map(() => 0);
   const away: { width: number; ux: number; uy: number }[][] = nodes.map(() => []);
@@ -492,6 +504,7 @@ export function buildLanes(map: GameMap, paths = false, joins: Join[] = []): { l
       away[n].push({ width: e.road.width, ux: (x1 - x0) / len, uy: (y1 - y0) / len });
     }
   }
+  yield;
   // Where two roads leave a junction at a sharp angle, their carriageways overlap for a way out from it: the lanes stop beyond that.
   away.forEach((list, n) => {
     if (nodes[n].degree < 3) return;
@@ -513,13 +526,14 @@ export function buildLanes(map: GameMap, paths = false, joins: Join[] = []): { l
   }
 
   const lanes: Lane[] = [];
-  edges.forEach((e, edge) => {
+  for (const [edge, e] of edges.entries()) {
+    if (pause()) yield;
     const r = e.road;
     const length = lineLength(e.pts);
     const trimA = Math.min(clear[e.a], length * 0.4);
     const trimB = Math.min(clear[e.b], length * 0.4);
     const middle = subPolyline(e.pts, trimA, length - trimB);
-    if (middle.length < 4) return;
+    if (middle.length < 4) continue;
     // What's painted along each side (bus, cycle and parking lanes) isn't the traffic's.
     const reserved = (side: 1 | -1) => (r.lanes ?? []).filter((l) => l.side === side && l.kind !== 'shared').reduce((sum, l) => sum + l.width, 0);
     const [ahead, against] = r.lanesAcross ?? (r.oneway ? [r.width >= 7.5 * M ? 2 : 1, 0] : [1, 1]);
@@ -565,7 +579,7 @@ export function buildLanes(map: GameMap, paths = false, joins: Join[] = []): { l
         nodes[lane.from].out.push(lane.id);
       }
     }
-  });
+  }
 
   if (paths) return { lanes, nodes };
   // (Each lane's bounding box, and its road's half width: only the lanes near a point are looked along. A big map has thousands.)
@@ -580,7 +594,9 @@ export function buildLanes(map: GameMap, paths = false, joins: Join[] = []): { l
     lane.box = b;
   }
   // The traffic lights' stop lines, on the lanes coming to them.
-  map.signals.forEach((sig, signal) => {
+  const often = every(20);
+  for (const [signal, sig] of map.signals.entries()) {
+    if (often()) yield;
     const [x0, y0, x1, y1] = sig.stop;
     const [mx, my] = [(x0 + x1) / 2, (y0 + y1) / 2];
     const [ux, uy] = [Math.cos(sig.angle), Math.sin(sig.angle)];
@@ -592,7 +608,7 @@ export function buildLanes(map: GameMap, paths = false, joins: Join[] = []): { l
       if (tx * ux + ty * uy < 0.8) continue;
       lane.stops.push({ s, signal });
     }
-  });
+  }
   // A box for bikes in front of a stop line (an advanced stop line): its front line, where they stop.
   for (const m of (map.paint ?? []).filter((p) => p.kind === 'asl')) {
     const [ux, uy] = [Math.cos(m.angle), Math.sin(m.angle)];
@@ -613,6 +629,7 @@ export function buildLanes(map: GameMap, paths = false, joins: Join[] = []): { l
   const at = new Map<number, Lane[]>();
   for (const l of lanes) for (const n of [l.from, l.to]) at.set(n, [...(at.get(n) ?? []), l]);
   for (const lane of lanes) {
+    if (pause()) yield;
     const end = nodes[lane.to];
     if (end.degree >= 3 && !lane.stops.some((st) => st.s > lane.length - 25 * M)) {
       const others = (at.get(lane.to) ?? []).filter((l) => l.edge !== lane.edge);
@@ -648,6 +665,12 @@ const SNAP = 12 * M;
 
 /** Where the cycle paths join the roads (on the same level). */
 export function cycleJoins(map: GameMap): Join[] {
+  return drain(cycleJoinsWork(map));
+}
+
+/** The same, a little at a time (see work.ts). */
+export function* cycleJoinsWork(map: GameMap): Work<Join[]> {
+  const pause = every(60);
   const joins: Join[] = [];
   const roads = map.roads
     .map((r, i) => ({ r, i }))
@@ -666,27 +689,64 @@ export function cycleJoins(map: GameMap): Join[] {
       count.set(key, (count.get(key) ?? 0) + (k === 0 || k === r.pts.length - 2 ? 2 : 1));
     }
   }
-  // The roads' junctions and ends.
-  const junctions = [...count].filter(([, n]) => n >= 2).map(([key]) => {
+  yield;
+  // The roads by where their boxes reach (in squares of CELL px): a path's end looks only at those near it.
+  const CELL = 256;
+  const cellOf = (x: number, y: number) => `${Math.floor(x / CELL)},${Math.floor(y / CELL)}`;
+  const roadCells = new Map<string, typeof roads>();
+  for (const road of roads) {
+    const reach = road.r.width / 2 + 4 * M;
+    for (let gx = Math.floor((road.box[0] - reach) / CELL); gx <= Math.floor((road.box[2] + reach) / CELL); gx++) {
+      for (let gy = Math.floor((road.box[1] - reach) / CELL); gy <= Math.floor((road.box[3] + reach) / CELL); gy++) {
+        const list = roadCells.get(`${gx},${gy}`);
+        if (list) list.push(road);
+        else roadCells.set(`${gx},${gy}`, [road]);
+      }
+    }
+  }
+  // The roads' junctions and ends (and the joins, as they're found), by where they are: a join snaps to one near it.
+  const points = new Map<string, { x: number; y: number; road: number; seg: number; t: number }[]>();
+  const addPoint = (q: { x: number; y: number; road: number; seg: number; t: number }) => {
+    const k = cellOf(q.x, q.y);
+    const list = points.get(k);
+    if (list) list.push(q);
+    else points.set(k, [q]);
+  };
+  const nearPoint = (x: number, y: number) => {
+    for (let gx = Math.floor((x - SNAP) / CELL); gx <= Math.floor((x + SNAP) / CELL); gx++) {
+      for (let gy = Math.floor((y - SNAP) / CELL); gy <= Math.floor((y + SNAP) / CELL); gy++) {
+        const q = points.get(`${gx},${gy}`)?.find((q) => Math.hypot(q.x - x, q.y - y) < SNAP);
+        if (q) return q;
+      }
+    }
+    return undefined;
+  };
+  for (const [key, n] of count) {
+    if (n < 2) continue;
     const [x, y] = key.split(',').map(Number);
-    return { x, y, ...at.get(key)! };
-  });
+    addPoint({ x, y, ...at.get(key)! });
+  }
+  yield;
   for (const c of map.roads) {
     if (c.kind !== 'cycleway' || c.pts.length < 4) continue;
+    if (pause()) yield;
     const n = c.pts.length;
     for (let k = 0; k < n; k += 2) {
       const [cx, cy] = [c.pts[k], c.pts[k + 1]];
       const shared = at.get(`${cx},${cy}`);
       if (shared) {
         const r = map.roads[shared.road];
-        if (!!r.bridge === !!c.bridge) joins.push({ ...shared, px: cx, py: cy, cx, cy, half: r.width / 2 });
+        if (!!r.bridge === !!c.bridge) {
+          joins.push({ ...shared, px: cx, py: cy, cx, cy, half: r.width / 2 });
+          addPoint({ x: cx, y: cy, road: shared.road, seg: shared.seg, t: shared.t });
+        }
         continue;
       }
       if (k !== 0 && k !== n - 2) continue;
       // A path's end by a road: joined to the nearest point on it.
       let best: Join | null = null;
       let bestD = Infinity;
-      for (const { r, i, box } of roads) {
+      for (const { r, i, box } of roadCells.get(cellOf(cx, cy)) ?? []) {
         if (!!r.bridge !== !!c.bridge) continue;
         const reach = r.width / 2 + 4 * M;
         if (cx < box[0] - reach || cx > box[2] + reach || cy < box[1] - reach || cy > box[3] + reach) continue;
@@ -703,9 +763,10 @@ export function cycleJoins(map: GameMap): Join[] {
         // (At one of the road's points: that one. Near a junction, or another path's join: there, so the road isn't cut into scraps.)
         const r = map.roads[best.road];
         if (best.t === 0 || best.t === 1) [best.px, best.py] = [r.pts[(best.seg + best.t) * 2], r.pts[(best.seg + best.t) * 2 + 1]];
-        const near = [...junctions, ...joins.map((j) => ({ x: j.px, y: j.py, road: j.road, seg: j.seg, t: j.t }))].find((q) => Math.hypot(q.x - best!.px, q.y - best!.py) < SNAP);
+        const near = nearPoint(best.px, best.py);
         if (near) Object.assign(best, { px: near.x, py: near.y, road: near.road, seg: near.seg, t: near.t });
         joins.push(best);
+        addPoint({ x: best.px, y: best.py, road: best.road, seg: best.seg, t: best.t });
       }
     }
   }
@@ -880,17 +941,21 @@ export interface TrafficOptions {
   max?: number;
   buses?: number;
   rand?: () => number;
+  /** The lie of the land, if it's been made already. */
+  terrain?: Terrain;
+  /** Its vehicles' ids from this on (so a region's traffic's never shares one with the last's: see `adopt`). */
+  firstId?: number;
 }
 
 export class Traffic {
-  readonly lanes: Lane[];
-  readonly nodes: Node[];
+  lanes!: Lane[];
+  nodes!: Node[];
   readonly vehicles: Vehicle[] = [];
   readonly parked: Vehicle[] = [];
   private readonly turns = new Map<string, Path>();
-  private readonly rand: () => number;
-  private readonly max: number;
-  private readonly maxBuses: number;
+  private rand!: () => number;
+  private max!: number;
+  private maxBuses!: number;
   private nextId = 0;
   private spawnTimer = 0;
   private started = false;
@@ -901,13 +966,13 @@ export class Traffic {
   private readonly lanesOf = new Map<string, Lane[]>();
   private readonly waitingAt = new Map<number, Vehicle>();
   private readonly entering = new Map<number, { v: Vehicle; d: number; via: Path }[]>();
-  private readonly terrain: Terrain;
-  private readonly routes: BusRoute[];
-  private readonly roadWidths: number[];
-  private readonly roadPts: Pts[];
+  private terrain!: Terrain;
+  private routes!: BusRoute[];
+  private roadWidths!: number[];
+  private roadPts!: Pts[];
   /** Those on a call (their sirens going), this frame. */
   private sirens: Vehicle[] = [];
-  private readonly routeLanes: { lane: Lane; leg: number }[][];
+  private routeLanes!: { lane: Lane; leg: number }[][];
   /** The bus stations; and which a yard lane's in. */
   readonly stations: Station[] = [];
   readonly posts: Post[] = [];
@@ -921,12 +986,20 @@ export class Traffic {
   /** Cyclists knocked off their bikes since this was last emptied (and taken off the road): the bike, how it was going, and how hard it was hit. */
   readonly unseated: { bike: Vehicle; impulse: number }[] = [];
 
-  constructor(map: GameMap, options: TrafficOptions = {}) {
-    const joins = cycleJoins(map);
-    ({ lanes: this.lanes, nodes: this.nodes } = buildLanes(map, false, joins));
+  /** The traffic on a map (or, `later`, not yet: see `setup`). */
+  constructor(map: GameMap, options: TrafficOptions = {}, later = false) {
+    if (!later) drain(this.setup(map, options));
+  }
+
+  /** Sets it up, a little at a time (see work.ts): the lanes, the bus stations, the parked cars, the emergency services' posts. */
+  *setup(map: GameMap, options: TrafficOptions = {}): Work {
+    const pause = every(40);
+    const joins = yield* cycleJoinsWork(map);
+    yield;
+    ({ lanes: this.lanes, nodes: this.nodes } = yield* lanesWork(map, false, joins));
     // And the cycle paths, a network of their own (numbered on from the roads'), joined to the roads where they meet them: for the bikes.
     {
-      const paths = buildLanes(map, true, joins);
+      const paths = yield* lanesWork(map, true, joins);
       const [lanes, nodes, edges] = [this.lanes.length, this.nodes.length, this.lanes.reduce((n, l) => Math.max(n, l.edge + 1), 0)];
       for (const n of paths.nodes) this.nodes.push({ ...n, out: n.out.map((i) => i + lanes) });
       for (const l of paths.lanes) {
@@ -948,7 +1021,9 @@ export class Traffic {
       }
       for (const l of this.lanes) if (l.path && linked.has(l.to)) l.giveWay = true;
     }
-    this.terrain = new Terrain(map.terrain, map.pxPerMetre, map.ledges);
+    yield;
+    this.terrain = options.terrain ?? new Terrain(map.terrain, map.pxPerMetre, map.ledges);
+    this.nextId = options.firstId ?? 0;
     for (const l of this.lanes) {
       const k = `${l.edge}:${l.dir}`;
       this.lanesOf.set(k, [...(this.lanesOf.get(k) ?? []), l].sort((a, b) => a.index - b.index));
@@ -966,15 +1041,18 @@ export class Traffic {
     this.max = options.max ?? 55;
     this.maxBuses = options.buses ?? MAX_BUSES;
     const yards = map.areas.filter((a) => a.kind === 'yard').map((a) => a.rings[0]);
+    yield;
     for (const st of map.busStations ?? []) {
+      yield;
       const station = this.station(st, this.stations.length, yards);
       if (!station) continue;
       this.stations.push(station);
       for (const id of station.yard) this.yardOf.set(id, station.index);
     }
     // The parked cars: most of the bays taken, more where it's busier.
-    const spaces = parkingSpaces(map);
+    const spaces = yield* parkingWork(map);
     for (const space of spaces) {
+      if (pause()) yield;
       if (this.rand() > space.taken) continue;
       const kind = pick(this.rand, (Object.keys(VEHICLES) as VehicleKind[]).map((k) => [k, VEHICLES[k].parked * (space.length >= VEHICLES[k].length + 2 ? 1 : 0)]));
       if (!kind) continue;
@@ -989,14 +1067,16 @@ export class Traffic {
     const kerbLanes = this.lanes.filter((l) => !l.path && !l.bus && l.level === 0 && DRIVEN.has(map.roads[l.road].kind));
     const all: Kerbside<Lane>[] = [];
     for (const service of map.services ?? []) {
+      yield;
       const kind: VehicleKind = service.kind === 'police' ? 'police' : service.kind === 'fire' ? 'fire' : 'ambulance';
       const { length, width } = VEHICLES[kind];
-      const spots = kerbsides(map, kerbLanes, service, length, width, spaces, all, POST_PLACES[service.kind === 'ambulance' && service.emergency ? 'emergency' : service.kind]);
+      const spots = yield* kerbsidesWork(map, kerbLanes, service, length, width, spaces, all, POST_PLACES[service.kind === 'ambulance' && service.emergency ? 'emergency' : service.kind]);
       if (!spots.length) continue;
       all.push(...spots);
       const ways = new Map<number, { toward: Map<number, Lane>; from: Lane[] }>();
       for (const spot of spots) {
         if (ways.has(spot.lane.id)) continue;
+        yield;
         const { toward, dist } = this.wayTo([spot.lane], POST_FROM[1] * 1.5);
         ways.set(spot.lane.id, { toward, from: [...dist.entries()].filter(([, d]) => d >= POST_FROM[0] && d <= POST_FROM[1]).map(([id]) => this.lanes[id]) });
       }
@@ -1255,11 +1335,10 @@ export class Traffic {
   private wayTo(ends: Lane[], max: number, skip: (l: Lane) => boolean = () => false): { toward: Map<number, Lane>; dist: Map<number, number> } {
     const toward = new Map<number, Lane>();
     const dist = new Map<number, number>(ends.map((l) => [l.id, 0]));
-    const queue: [number, Lane][] = ends.map((l) => [0, l]);
-    while (queue.length) {
-      // (A queue kept in order: it's only the streets round about.)
-      queue.sort((a, b) => b[0] - a[0]);
-      const [d, x] = queue.pop()!;
+    const queue = new LaneHeap();
+    for (const l of ends) queue.push(0, l);
+    while (queue.size) {
+      const [d, x] = queue.pop();
       if (d > (dist.get(x.id) ?? Infinity)) continue;
       for (const p of this.into.get(x.from) ?? []) {
         if (skip(p) || p.path || p.bus || (p.edge === x.edge && p.dir !== x.dir)) continue;
@@ -1267,7 +1346,7 @@ export class Traffic {
         if (nd > max || nd >= (dist.get(p.id) ?? Infinity)) continue;
         dist.set(p.id, nd);
         toward.set(p.id, x);
-        queue.push([nd, p]);
+        queue.push(nd, p);
       }
     }
     return { toward, dist };
@@ -2675,6 +2754,129 @@ export class Traffic {
     return x > view.x0 - pad && x < view.x1 + pad && y > view.y0 - pad && y < view.y1 + pad;
   }
 
+  /**
+   * Takes over from the last region's traffic (see streamer.ts): what's in
+   * `keep` (the ground round the view) is what was there, the same vehicles,
+   * carried over onto this traffic's lanes (the same lanes, made again: they're
+   * matched by where they are); what this one had put there of its own goes.
+   * Beyond it, it's this one's (out of sight: no one sees the difference).
+   * One whose way can't be found here (it's off the region's roads) finds its
+   * way back to the nearest lane, as after a knock.
+   */
+  adopt(old: Traffic, keep: TrafficView): void {
+    const inside = (x: number, y: number) => x >= keep.x0 && x <= keep.x1 && y >= keep.y0 && y <= keep.y1;
+    for (const v of [...this.vehicles]) if (inside(v.x, v.y)) this.remove(v);
+    for (const v of [...this.parked]) {
+      if (!inside(v.x, v.y)) continue;
+      this.take(v);
+      if (v.spot?.taken === v.id) v.spot.taken = null;
+    }
+    const byKey = new Map<string, Lane>(this.lanes.map((l) => [laneKey(l), l]));
+    const lane = (l: Lane | undefined): Lane | undefined => (l ? (byKey.get(laneKey(l)) ?? this.likeLane(l)) : undefined);
+    const bayOf = (b: StationBay): StationBay | undefined => {
+      const l = lane(b.lane);
+      for (const st of this.stations) for (const nb of st.bays) if (nb.lane === l) return nb;
+      return undefined;
+    };
+    /** Its post here, and its place there (or none). */
+    const posted = (v: Vehicle): boolean => {
+      const was = v.post === undefined ? undefined : old.posts[v.post];
+      const post = was ? this.posts.findIndex((p) => p.service === was.service || Math.hypot(p.x - was.x, p.y - was.y) < M) : -1;
+      const spot = post >= 0 && v.spot ? this.posts[post].spots.find((q) => Math.hypot(q.x - v.spot!.x, q.y - v.spot!.y) < 0.5 * M) : undefined;
+      if (!spot || (spot.taken !== null && spot.taken !== v.id)) {
+        [v.post, v.spot, v.parking] = [undefined, undefined, false];
+        return false;
+      }
+      [v.post, v.spot] = [post, spot];
+      spot.taken = v.id;
+      return true;
+    };
+    for (const v of old.parked) {
+      if (!inside(v.x, v.y)) continue;
+      if (v.post !== undefined) posted(v);
+      if (v.route.length) v.route = this.carried(v.route, lane);
+      this.parked.push(v);
+      this.parkedById.set(v.id, v);
+    }
+    for (const v of old.vehicles) {
+      if (!inside(v.x, v.y)) continue;
+      if (v.post !== undefined) posted(v);
+      const route = this.carried(v.route, lane);
+      const bus = v.bus;
+      if (bus) {
+        const st = bus.station === undefined ? undefined : old.stations[bus.station];
+        const here = st ? this.stations.findIndex((s) => Math.hypot(s.x - st.x, s.y - st.y) < M) : -1;
+        const bay = bus.bay ? bayOf(bus.bay) : undefined;
+        if (st && here < 0) [bus.station, bus.done] = [undefined, true];
+        else if (st) bus.station = here;
+        if (bus.bay && bay && (bay.taken === null || bay.taken === v.id)) {
+          bus.bay = bay;
+          bay.taken = v.id;
+        } else if (bus.bay) [bus.bay, bus.stood, bus.done] = [undefined, undefined, true];
+        bus.stops = bus.stops.flatMap((q) => {
+          const l = q.path.lane ? lane(q.path.lane) : undefined;
+          return l ? [{ ...q, path: l }] : [];
+        });
+      }
+      if (v.rev) {
+        const l = lane(v.rev.lane);
+        if (l && bus?.bay) v.rev.lane = l;
+        else v.rev = undefined;
+      }
+      if (v.mode === 'reverse' && !v.rev) v.mode = 'rejoin';
+      v.ends = false;
+      v.back = v.back?.lane ? (lane(v.back.lane) ?? null) : v.back;
+      if (route.length) {
+        v.route = route;
+        if (v.mode === 'drive') this.plan(v);
+      } else {
+        // Lost: back to the nearest lane going its way.
+        const near = this.lanes.filter((l) => l.level === v.level && !!l.path === (v.kind === 'bike' && !!v.route[0]?.lane?.path)).map((l) => ({ l, ...nearestOn(l, v.x, v.y) }));
+        const best = near.filter((n) => n.d < 15 * M && Math.cos(Math.atan2(pathAt(n.l, n.s)[3], pathAt(n.l, n.s)[2]) - v.angle) > 0.3).sort((a, b) => a.d - b.d)[0];
+        if (!best) continue;
+        Object.assign(v, { route: [best.l], s: best.s, mode: v.mode === 'knocked' ? 'knocked' : 'rejoin', back: null, stuck: 0 });
+      }
+      this.vehicles.push(v);
+      this.byId.set(v.id, v);
+    }
+    this.nextId = Math.max(this.nextId, old.nextId);
+    this.started = true;
+  }
+
+  /** A way (its lanes and the turns between them) from the last region's traffic onto this one's: as far as its lanes are here (ending on a lane). */
+  private carried(route: Path[], lane: (l: Lane | undefined) => Lane | undefined): Path[] {
+    const out: Path[] = [];
+    for (const p of route) {
+      if (!p.lane) {
+        out.push(p);
+        continue;
+      }
+      const l = lane(p.lane);
+      if (!l) break;
+      out.push(l);
+    }
+    while (out.length && !out[out.length - 1].lane) out.pop();
+    return out;
+  }
+
+  /** The lane here most like one of the last region's (where its ends are a little different: it's by the region's edge). */
+  private likeLane(l: Lane): Lane | undefined {
+    const [ax, ay, bx, by] = [l.pts[0], l.pts[1], l.pts[l.pts.length - 2], l.pts[l.pts.length - 1]];
+    let best: Lane | undefined;
+    let bestD = 3 * M;
+    for (const o of this.lanes) {
+      if (o.dir !== l.dir || o.index !== l.index || !!o.path !== !!l.path || o.level !== l.level) continue;
+      const d = Math.max(Math.hypot(o.pts[0] - ax, o.pts[1] - ay), Math.hypot(o.pts[o.pts.length - 2] - bx, o.pts[o.pts.length - 1] - by));
+      if (d < bestD) [best, bestD] = [o, d];
+    }
+    return best;
+  }
+
+  /** The last id given a vehicle (see `adopt`). */
+  get lastId(): number {
+    return this.nextId;
+  }
+
   /** Fills the streets round you at once next time (you've jumped somewhere else). */
   refill(): void {
     this.started = false;
@@ -2760,6 +2962,50 @@ export class Traffic {
       this.spawn(c.lane, s, undefined, { route: c.route, leg: c.leg });
     }
   }
+}
+
+/** Lanes by how far off they are, nearest first out. */
+class LaneHeap {
+  private readonly items: [number, Lane][] = [];
+
+  get size(): number {
+    return this.items.length;
+  }
+
+  push(d: number, lane: Lane): void {
+    const a = this.items;
+    a.push([d, lane]);
+    for (let i = a.length - 1; i > 0; ) {
+      const up = (i - 1) >> 1;
+      if (a[up][0] <= a[i][0]) break;
+      [a[up], a[i]] = [a[i], a[up]];
+      i = up;
+    }
+  }
+
+  pop(): [number, Lane] {
+    const a = this.items;
+    const top = a[0];
+    const last = a.pop()!;
+    if (a.length) {
+      a[0] = last;
+      for (let i = 0; ; ) {
+        const [l, r] = [i * 2 + 1, i * 2 + 2];
+        let m = i;
+        if (l < a.length && a[l][0] < a[m][0]) m = l;
+        if (r < a.length && a[r][0] < a[m][0]) m = r;
+        if (m === i) break;
+        [a[m], a[i]] = [a[i], a[m]];
+        i = m;
+      }
+    }
+    return top;
+  }
+}
+
+/** A lane's name, by where it is (the same lane, made again from the same roads, has the same one). */
+function laneKey(l: Lane): string {
+  return `${l.pts[0]},${l.pts[1]},${l.pts[l.pts.length - 2]},${l.pts[l.pts.length - 1]},${l.index},${l.path ? 1 : 0}`;
 }
 
 /** Picks one of some things by weight. */

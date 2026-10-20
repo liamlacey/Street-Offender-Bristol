@@ -24,12 +24,17 @@ export class BoatLayer {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly boats: Boats,
+    private boats: Boats,
     /** The height of the ground (the water) under a point, px. */
     private readonly base: (x: number, y: number) => number,
     private readonly depth: number,
   ) {
     this.wakeGraphics = scene.add.graphics().setDepth(depth - 0.05);
+  }
+
+  /** The next region's boats (see streamer.ts): those carried over keep their pictures. */
+  use(boats: Boats): void {
+    this.boats = boats;
   }
 
   update(view: Phaser.Geom.Rectangle, perspective: Perspective, time: number): void {

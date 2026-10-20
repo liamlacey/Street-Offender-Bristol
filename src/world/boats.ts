@@ -26,6 +26,7 @@ import { BOAT_SIZE, type Berth, type BoatKind } from '../map/berths';
 import type { GameMap, Pts } from '../map/osm';
 import type { Body } from '../physics/collisions';
 import { PAUSE, collideBodies } from './traffic';
+import { type Work, drain } from './work';
 
 export interface Boat extends Body {
   id: number;
@@ -100,16 +101,26 @@ export const BOAT_COLOURS: Record<BoatKind, [string, string][]> = {
 /** A small, quick random number generator, for tests that want the same each time. */
 type Rand = () => number;
 
+/** In a region of the map, the ferries call only at the stops this far in from its edges, px (their ways there are in it). */
+const FERRY_IN = 200 * 8;
 /** Shore cells, px (1 m). */
 const SHORE_CELL = 8;
 
-/** Sets the cells (cols × rows, `cell` px, the first's corner at (ox, oy)) whose middles are inside the rings (even-odd) to `value`. */
-function fillRings(cells: Uint8Array, cols: number, rows: number, cell: number, rings: Pts[], value: number, ox = 0, oy = 0): void {
+/** Sets the cells (cols × rows, `cell` px, the first's corner at (ox, oy)) whose middles are inside the rings (even-odd) to `value`, a little at a time (see work.ts). */
+function* fillRingsWork(cells: Uint8Array, cols: number, rows: number, cell: number, rings: Pts[], value: number, ox = 0, oy = 0): Work {
+  // (A pause every so many crossings worked out: a river's a long ring, and the grid's a metre a cell.)
+  let done = 0;
+  const edges = rings.reduce((n, r) => n + r.length / 2, 0);
   let [y0, y1] = [Infinity, -Infinity];
   for (const ring of rings) for (let i = 1; i < ring.length; i += 2) [y0, y1] = [Math.min(y0, ring[i]), Math.max(y1, ring[i])];
   const r0 = Math.max(0, Math.floor((y0 - oy) / cell));
   const r1 = Math.min(rows - 1, Math.ceil((y1 - oy) / cell));
   for (let r = r0; r <= r1; r++) {
+    done += edges;
+    if (done > 60_000) {
+      done = 0;
+      yield;
+    }
     const y = oy + (r + 0.5) * cell;
     const xs: number[] = [];
     for (const ring of rings) {
@@ -150,13 +161,21 @@ export class WaterGrid {
   private readonly ox: number;
   private readonly oy: number;
 
-  constructor(map: GameMap, berths: Berth[] = []) {
+  /** The grid (`later`, not filled in yet: see `build`). */
+  constructor(
+    private readonly map: GameMap,
+    private readonly berths: Berth[] = [],
+    later = false,
+  ) {
     let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
     for (const a of map.areas) {
       if (a.kind !== 'water') continue;
       for (let i = 0; i < a.rings[0].length; i += 2) [x0, y0, x1, y1] = [Math.min(x0, a.rings[0][i]), Math.min(y0, a.rings[0][i + 1]), Math.max(x1, a.rings[0][i]), Math.max(y1, a.rings[0][i + 1])];
     }
-    if (x0 > x1) [x0, y0, x1, y1] = [0, 0, CELL, CELL];
+    // (Only as much as is in the region of the map, if it's a region: a river runs on a long way.)
+    const region = (map as GameMap & { region?: { x0: number; y0: number; x1: number; y1: number } }).region;
+    if (region) [x0, y0, x1, y1] = [Math.max(x0, region.x0), Math.max(y0, region.y0), Math.min(x1, region.x1), Math.min(y1, region.y1)];
+    if (x0 > x1 || y0 > y1) [x0, y0, x1, y1] = [0, 0, CELL, CELL];
     this.ox = Math.max(0, Math.floor(x0 / CELL) - 1) * CELL;
     this.oy = Math.max(0, Math.floor(y0 / CELL) - 1) * CELL;
     const [w, h] = [Math.min(map.width, x1 + 2 * CELL) - this.ox, Math.min(map.height, y1 + 2 * CELL) - this.oy];
@@ -165,28 +184,47 @@ export class WaterGrid {
     this.wetCols = this.cols * (CELL / SHORE_CELL);
     this.wetRows = this.rows * (CELL / SHORE_CELL);
     this.wet = new Uint8Array(this.wetCols * this.wetRows);
-    const shore = (rings: Pts[], value: number) => fillRings(this.wet, this.wetCols, this.wetRows, SHORE_CELL, rings, value, this.ox, this.oy);
-    for (const a of map.areas) if (a.kind === 'water') shore(a.rings, 1);
-    for (const a of map.areas) if (a.kind === 'pontoon' || a.kind === 'pier') shore(a.rings, 0);
+    this.clear = new Uint8Array(this.cols * this.rows);
+    this.part = new Uint16Array(this.cols * this.rows);
+    if (!later) drain(this.build());
+  }
+
+  /** Fills it in, a little at a time (see work.ts). */
+  *build(): Work {
+    const { map, berths } = this;
+    const shore = (rings: Pts[], value: number) => fillRingsWork(this.wet, this.wetCols, this.wetRows, SHORE_CELL, rings, value, this.ox, this.oy);
+    const fill = (cells: Uint8Array, rings: Pts[], value: number) => fillRingsWork(cells, this.cols, this.rows, CELL, rings, value, this.ox, this.oy);
+    for (const a of map.areas) if (a.kind === 'water') (yield* shore(a.rings, 1), yield);
+    for (const a of map.areas) if (a.kind === 'pontoon' || a.kind === 'pier') (yield* shore(a.rings, 0), yield);
+    yield;
     // The ships moored for good (mapped as buildings), and anything else built out over the water.
     const built = map.buildings.filter((b) => b.solid);
-    for (const b of built) shore(b.rings, 0);
+    for (const [k, b] of built.entries()) {
+      yield* shore(b.rings, 0);
+      if (k % 150 === 149) yield;
+    }
+    yield;
     const wet = new Uint8Array(this.cols * this.rows);
-    for (const a of map.areas) if (a.kind === 'water') this.fill(wet, a.rings, 1);
-    for (const a of map.areas) if (a.kind === 'pontoon' || a.kind === 'pier') this.fill(wet, a.rings, 0);
-    for (const b of built) this.fill(wet, b.rings, 0);
+    for (const a of map.areas) if (a.kind === 'water') (yield* fill(wet, a.rings, 1), yield);
+    for (const a of map.areas) if (a.kind === 'pontoon' || a.kind === 'pier') (yield* fill(wet, a.rings, 0), yield);
+    for (const [k, b] of built.entries()) {
+      yield* fill(wet, b.rings, 0);
+      if (k % 150 === 149) yield;
+    }
     // The moored boats (and where they will be), half a metre round.
-    for (const b of berths) {
+    for (const [k, b] of berths.entries()) {
+      if (k % 60 === 59) yield;
       const [L, W] = BOAT_SIZE[b.kind].map((m) => m * map.pxPerMetre + map.pxPerMetre);
       const [ux, uy] = [Math.cos(b.angle), Math.sin(b.angle)];
       const ring = [[1, 1], [1, -1], [-1, -1], [-1, 1]].flatMap(([p, q]) => [b.x + (ux * L * p) / 2 - (uy * W * q) / 2, b.y + (uy * L * p) / 2 + (ux * W * q) / 2]);
-      this.fill(wet, [ring], 0);
+      yield* fill(wet, [ring], 0);
     }
+    yield;
     // How far each cell is from the nearest dry one (the edge of the map's dry too), in cells.
-    this.clear = new Uint8Array(wet.length);
     const queue = new Int32Array(wet.length);
     let [head, tail] = [0, 0];
     for (let i = 0; i < wet.length; i++) {
+      if ((i & 65535) === 0) yield;
       const [c, r] = [i % this.cols, Math.floor(i / this.cols)];
       if (!wet[i]) continue;
       this.clear[i] = 255;
@@ -196,13 +234,16 @@ export class WaterGrid {
       }
     }
     for (let i = 0; i < wet.length; i++) {
+      if ((i & 16383) === 0) yield;
       if (!wet[i] || this.clear[i] === 1) continue;
       if (this.next(i, (j) => !wet[j])) {
         this.clear[i] = 1;
         queue[tail++] = i;
       }
     }
+    yield;
     while (head < tail) {
+      if ((head & 16383) === 0) yield;
       const i = queue[head++];
       this.next(i, (j) => {
         if (this.clear[j] > this.clear[i] + 1) {
@@ -211,14 +252,16 @@ export class WaterGrid {
         }
       });
     }
-    this.part = new Uint16Array(wet.length);
+    yield;
     let parts = 0;
     for (let i = 0; i < wet.length; i++) {
+      if ((i & 16383) === 0) yield;
       if (this.part[i] || this.clear[i] < CLEAR) continue;
       this.part[i] = Math.min(65535, ++parts);
       [head, tail] = [0, 0];
       queue[tail++] = i;
       while (head < tail) {
+        if ((head & 4095) === 0) yield;
         this.next(queue[head++], (j) => {
           if (this.part[j] || this.clear[j] < CLEAR) return;
           this.part[j] = Math.min(65535, parts);
@@ -242,9 +285,6 @@ export class WaterGrid {
     return false;
   }
 
-  private fill(cells: Uint8Array, rings: Pts[], value: number): void {
-    fillRings(cells, this.cols, this.rows, CELL, rings, value, this.ox, this.oy);
-  }
 
   /** Whether there's water at a point (not land, a pontoon or a pier). */
   water(x: number, y: number): boolean {
@@ -456,18 +496,35 @@ export class Boats {
   /** Adrift boats that hit the shore since the scene last looked: where, and how hard. */
   readonly grounded: { boat: Boat; x: number; y: number; impulse: number }[] = [];
 
-  constructor(map: GameMap, options: { rand?: Rand; occupied?: number } = {}) {
+  constructor(
+    map: GameMap,
+    private readonly options: { rand?: Rand; occupied?: number; firstId?: number } = {},
+    /** Not set up yet (see `setup`). */
+    later = false,
+  ) {
     this.rand = options.rand ?? Math.random;
+    this.nextId = options.firstId ?? 1;
     this.px = map.pxPerMetre;
     this.berths = map.berths ?? [];
+    // The ferries' stops (in a region of the map, those in it, well in from its edges: a ferry plies between them).
+    const region = (map as GameMap & { region?: { x0: number; y0: number; x1: number; y1: number } }).region;
+    const inside = (x: number, y: number) => !region || (x > region.x0 + FERRY_IN && x < region.x1 - FERRY_IN && y > region.y0 + FERRY_IN && y < region.y1 - FERRY_IN);
     this.stops = (map.ferries ?? []).map((f) => {
       const out: [number, number, number][] = [];
-      for (let i = 0; i + 2 < f.stops.length; i += 3) out.push([f.stops[i], f.stops[i + 1], f.stops[i + 2]]);
+      for (let i = 0; i + 2 < f.stops.length; i += 3) if (inside(f.stops[i], f.stops[i + 1])) out.push([f.stops[i], f.stops[i + 1], f.stops[i + 2]]);
       return out;
     });
     const stopBerths: Berth[] = this.stops.flat().map(([x, y, angle]) => ({ x, y, angle, kind: 'ferry' }));
-    this.grid = new WaterGrid(map, [...this.berths, ...stopBerths]);
+    this.grid = new WaterGrid(map, [...this.berths, ...stopBerths], true);
     this.taken = this.berths.map(() => -1);
+    this.clock = EVERY * 0.3;
+    if (!later) drain(this.setup());
+  }
+
+  /** Sets them up, a little at a time (see work.ts): the water's grid, the boats at their moorings, and some (`underway`) out on the water. */
+  *setup(underway = 3): Work {
+    yield* this.grid.build();
+    const options = this.options;
     const occupied = options.occupied ?? 0.8;
     this.berths.forEach((b, i) => {
       if (this.rand() < occupied || b.kind === 'tug' || b.kind === 'ferry') this.moor(this.add(b.kind, b.x, b.y, b.angle), i);
@@ -479,9 +536,53 @@ export class Boats {
       const f = this.add('ferry', x, y, angle);
       f.ferry = { route, stop: 0, dir: 1, dwell: DWELL * this.rand() };
     });
-    this.clock = EVERY * 0.3;
     // Some already out on the water.
-    for (let k = 0; k < 3; k++) this.castOff(this.rand() * 0.6 + 0.2);
+    for (let k = 0; k < underway; k++) (this.castOff(this.rand() * 0.6 + 0.2), yield);
+  }
+
+  /** The last id given a boat (see `adopt`). */
+  get lastId(): number {
+    return this.nextId;
+  }
+
+  /**
+   * Takes over from the last region's boats (see streamer.ts): those in `keep`
+   * (round the view) are what was there, carried over onto this one's berths
+   * and ferry stops (matched by where they are); this one's own there go. One
+   * bound for a berth that isn't here drifts.
+   */
+  adopt(old: Boats, keep: { x0: number; y0: number; x1: number; y1: number }): void {
+    const inside = (x: number, y: number) => x >= keep.x0 && x <= keep.x1 && y >= keep.y0 && y <= keep.y1;
+    for (let i = this.boats.length - 1; i >= 0; i--) {
+      const b = this.boats[i];
+      if (!inside(b.x, b.y)) continue;
+      if (b.berth >= 0 && this.taken[b.berth] === b.id) this.taken[b.berth] = -1;
+      this.boats.splice(i, 1);
+    }
+    const berthAt = new Map(this.berths.map((b, i) => [`${b.x},${b.y}`, i]));
+    for (const b of old.boats) {
+      if (!inside(b.x, b.y)) continue;
+      if (b.ferry) {
+        const [x, y] = old.stops[b.ferry.route]?.[b.ferry.stop] ?? [NaN, NaN];
+        const stops = this.stops[b.ferry.route] ?? [];
+        const k = stops.findIndex(([sx, sy]) => sx === x && sy === y);
+        if (k >= 0) b.ferry.stop = k;
+        else if (stops.length >= 2) b.ferry.stop = stops.map(([sx, sy], i) => [Math.hypot(sx - b.x, sy - b.y), i]).sort((p, q) => p[0] - q[0])[0][1];
+        else [b.ferry, b.mode, b.curve, b.path] = [undefined, 'adrift', [], []];
+      } else if (b.berth >= 0) {
+        const was = old.berths[b.berth];
+        const k = berthAt.get(`${was.x},${was.y}`);
+        if (k !== undefined && (this.taken[k] < 0 || this.taken[k] === b.id)) {
+          b.berth = k;
+          this.taken[k] = b.id;
+        } else {
+          b.berth = -1;
+          if (b.mode !== 'moored') [b.mode, b.curve, b.path] = ['adrift', [], []];
+        }
+      }
+      this.boats.push(b);
+    }
+    this.nextId = Math.max(this.nextId, old.nextId);
   }
 
   private add(kind: BoatKind, x: number, y: number, angle: number): Boat {

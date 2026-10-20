@@ -9,6 +9,7 @@ import { SurfaceGrid } from './surface';
 import type { Terrain } from './terrain';
 import { TerrainSheet } from './TerrainSheet';
 import { CHUNK, type ChunkIndex, type World, chunkKey } from './world';
+import { type Work, drain } from './work';
 
 /** How many pieces of ground are kept drawn at once (each is 1 MB of texture). */
 const KEEP = 48;
@@ -39,8 +40,8 @@ export class GroundLayer {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly world: World,
-    private readonly terrain: Terrain,
+    private world: World,
+    private terrain: Terrain,
     private readonly depth: number,
   ) {
     try {
@@ -55,6 +56,16 @@ export class GroundLayer {
       this.noWorker();
     }
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroy());
+  }
+
+  /**
+   * The next region of the map (see streamer.ts). The pieces already drawn are
+   * kept: they're the same (they're only ever round the view, well inside both).
+   */
+  use(world: World, terrain: Terrain): void {
+    this.world = world;
+    this.terrain = terrain;
+    this.tell({ type: 'map', map: world.map });
   }
 
   /**
@@ -181,29 +192,59 @@ export class GroundLayer {
   }
 }
 
-/** Paints the whole map in its surfaces' flat colours, a metre to a pixel, and reads it back as the surface grid. */
-export function paintSurfaces(world: World): SurfaceGrid {
+/** Rows of the surface grid painted at a time (see `surfacesWork`). */
+const STRIP = 192;
+
+/** Paints the map (or the part of it from (x0, y0) to (x1, y1), px) in its surfaces' flat colours, a metre to a pixel, and reads it back as the surface grid. */
+export function paintSurfaces(world: World, bounds?: { x0: number; y0: number; x1: number; y1: number }): SurfaceGrid {
+  return drain(surfacesWork(world, bounds));
+}
+
+/** The same, a strip at a time (see work.ts): only what reaches into each strip is drawn on it. */
+export function* surfacesWork(world: World, bounds?: { x0: number; y0: number; x1: number; y1: number }): Work<SurfaceGrid> {
   const { map } = world;
   const cell = map.pxPerMetre;
-  const cols = Math.ceil(map.width / cell);
-  const rows = Math.ceil(map.height / cell);
+  const b = bounds ?? { x0: 0, y0: 0, x1: map.width, y1: map.height };
+  const [ox, oy] = [Math.floor(Math.max(0, b.x0) / cell) * cell, Math.floor(Math.max(0, b.y0) / cell) * cell];
+  const cols = Math.ceil((Math.min(map.width, b.x1) - ox) / cell);
+  const rows = Math.ceil((Math.min(map.height, b.y1) - oy) / cell);
+  const cells = new Uint8Array(cols * rows);
+  // What reaches how far down: each area's and road's top and bottom.
+  const span = (rings: number[][]): [number, number] => {
+    let [lo, hi] = [Infinity, -Infinity];
+    for (const r of rings) for (let k = 1; k < r.length; k += 2) [lo, hi] = [Math.min(lo, r[k]), Math.max(hi, r[k])];
+    return [lo, hi];
+  };
+  const areas = map.areas.map((a) => span(a.rings));
+  const roads = map.roads.map((r) => {
+    const [lo, hi] = span([r.pts]);
+    return [lo - r.width * 2, hi + r.width * 2] as [number, number];
+  });
+  yield;
   const canvas = document.createElement('canvas');
   canvas.width = cols;
-  canvas.height = rows;
+  canvas.height = Math.min(rows, STRIP);
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-  const all: ChunkIndex = {
-    areas: map.areas.map((_, i) => i),
-    roads: map.roads.map((_, i) => i),
-    lines: [],
-    buildings: [],
-    crossings: [],
-    signals: [],
-    trees: [],
-    paint: [],
-    banks: [],
-  };
-  drawGround(ctx, map, all, surfacePalette(), 0, 0, map.width, map.height, 1 / cell);
-  const grid = SurfaceGrid.fromPixels(ctx.getImageData(0, 0, cols, rows).data, cols, rows, cell);
+  const palette = surfacePalette();
+  for (let r0 = 0; r0 < rows; r0 += STRIP) {
+    const n = Math.min(STRIP, rows - r0);
+    const [top, bottom] = [oy + r0 * cell, oy + (r0 + n) * cell];
+    const index: ChunkIndex = {
+      areas: areas.flatMap(([lo, hi], i) => (hi >= top && lo <= bottom ? [i] : [])),
+      roads: roads.flatMap(([lo, hi], i) => (hi >= top && lo <= bottom ? [i] : [])),
+      lines: [],
+      buildings: [],
+      crossings: [],
+      signals: [],
+      trees: [],
+      paint: [],
+      banks: [],
+    };
+    drawGround(ctx, map, index, palette, ox, top, cols * cell, n * cell, 1 / cell);
+    const strip = SurfaceGrid.fromPixels(ctx.getImageData(0, 0, cols, n).data, cols, n, cell);
+    cells.set(strip.cells, r0 * cols);
+    yield;
+  }
   canvas.width = canvas.height = 0;
-  return grid;
+  return new SurfaceGrid(cells, cols, rows, cell, ox, oy);
 }

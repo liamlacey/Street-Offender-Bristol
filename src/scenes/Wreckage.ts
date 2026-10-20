@@ -69,8 +69,11 @@ export interface WreckageHooks {
   groundAt(x: number, y: number): number;
   /** Puts a piece of something broken into the world, loose, on a level. */
   addDebris(d: Debris, level: number): void;
-  /** Takes away what showed a post (a tree's crown, a lamp, a traffic light's head) once it's down. */
-  knockedDown(post: Post): void;
+  /** Takes away what showed a post (a tree's crown, a lamp, a traffic light's head) once it's down (on its level). */
+  knockedDown(post: Post, level: number): void;
+  /** A wall's been knocked through; something's been put in the way (what's left of a wall, a fallen trunk). */
+  wallGone?(wall: Wall): void;
+  wallAdded?(wall: Wall): void;
   /** Moves a falling tree's crown: over (x, y), its treetop `h` px up (the crown's a little below it); and, once it's down, lying at `angle`. */
   treeFell(index: number, x: number, y: number, h: number, angle?: number): void;
   /** The height of a tree, px, and its crown's radius. */
@@ -108,14 +111,20 @@ export class Wreckage {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly walls: [SegmentGrid, SegmentGrid],
-    private readonly posts: [CircleGrid, CircleGrid],
+    private walls: [SegmentGrid, SegmentGrid],
+    private posts: [CircleGrid, CircleGrid],
     private readonly effects: CarEffects,
     private readonly hooks: WreckageHooks,
     private readonly depth: number,
     /** What's drawn up high (a falling lamp, a light's head). */
     private readonly aboveDepth: number,
   ) {}
+
+  /** What's in the way in the next region of the map (see streamer.ts). */
+  use(walls: [SegmentGrid, SegmentGrid], posts: [CircleGrid, CircleGrid]): void {
+    this.walls = walls;
+    this.posts = posts;
+  }
 
   /**
    * Call each physics step, after the car's moved and before it's bounced
@@ -208,7 +217,7 @@ export class Wreckage {
 
   private knockDown(post: Post, car: CarState, tough: Toughness, speed: number, level: number): void {
     post.gone = true;
-    this.hooks.knockedDown(post);
+    this.hooks.knockedDown(post, level);
     const rand = this.rand.frac.bind(this.rand);
     const z = this.hooks.groundAt(post.x, post.y);
     if (post.thing === 'tree') {
@@ -268,7 +277,11 @@ export class Wreckage {
     const kind = wall.kind!;
     const { left, from, to } = crumble(wall, x, y, gapFor(kind, speed, this.hooks.weight()));
     wall.gone = true;
-    for (const piece of left) this.walls[level].add(piece as Wall);
+    this.hooks.wallGone?.(wall);
+    for (const piece of left) {
+      this.walls[level].add(piece as Wall);
+      this.hooks.wallAdded?.(piece as Wall);
+    }
     const rand = this.rand.frac.bind(this.rand);
     const [mx, my] = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
     const gap = Math.hypot(to[0] - from[0], to[1] - from[1]);
@@ -337,6 +350,7 @@ export class Wreckage {
   private treeLanded(index: number, fall: ReturnType<typeof fallenTree>, z: number, height: number, radius: number, standing: Toughness, vx: number, vy: number): void {
     const wall = { ...fall.trunk, level: 0 } as Wall;
     this.walls[0].add(wall);
+    this.hooks.wallAdded?.(wall);
     const length = Math.hypot(fall.trunk.bx - fall.trunk.ax, fall.trunk.by - fall.trunk.ay);
     const image = this.addWreck(TEX.trunk, (fall.trunk.ax + fall.trunk.bx) / 2, (fall.trunk.ay + fall.trunk.by) / 2, z, fall.angle, 1);
     image.setDisplaySize(length, 7);

@@ -121,12 +121,17 @@ export class PeopleLayer {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly people: People,
+    private people: People,
     /** The height of what's underfoot at a point on a level (the ground, a bridge's deck), px. */
     private readonly base: (x: number, y: number, level: number) => number,
     /** Drawn on the ground (under the bridges), and up on the decks. */
     private readonly depths: { ground: number; deck: number },
   ) {}
+
+  /** The next region's people (see streamer.ts): those carried over keep their pictures. */
+  use(people: People): void {
+    this.people = people;
+  }
 
   update(view: Phaser.Geom.Rectangle, perspective: Perspective): void {
     const pad = 20;

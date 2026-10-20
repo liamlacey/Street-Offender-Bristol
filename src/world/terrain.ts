@@ -5,6 +5,7 @@
  */
 
 import type { Ledge, TerrainData } from '../map/osm';
+import { type Work, drain } from './work';
 
 /** The cuts' index's cells, px. */
 const CUT_CELL = 32;
@@ -85,6 +86,9 @@ export class Terrain {
   readonly cell: number;
   readonly cols: number;
   readonly rows: number;
+  /** Where its first point is, cells from the map's corner (a region of the map's). */
+  private readonly i0: number;
+  private readonly j0: number;
 
   /** Map px per metre. */
   readonly px: number;
@@ -93,25 +97,37 @@ export class Terrain {
   private readonly cuts: Cuts;
   private readonly cut: Uint8Array;
 
-  constructor(data: TerrainData | undefined, px: number, ledges?: Ledge[]) {
+  /** The lie of the land (`later`: its heights not read yet, see `build`). */
+  constructor(data: TerrainData | undefined, px: number, ledges?: Ledge[], later = false) {
     this.px = px;
     this.cell = data?.cell ?? 64;
     this.cols = data?.cols ?? 1;
     this.rows = data?.rows ?? 1;
+    this.i0 = data?.i0 ?? 0;
+    this.j0 = data?.j0 ?? 0;
     this.z = new Float32Array(this.cols * this.rows);
     this.cuts = new Cuts(ledges);
     this.cut = new Uint8Array(this.cols * this.rows);
-    if (!data) return;
+    if (data && !later) drain(this.build(data, ledges));
+  }
+
+  /** Reads its heights, and finds where the ledges cut across the grid, a little at a time (see work.ts). */
+  *build(data: TerrainData, ledges?: Ledge[]): Work {
     const binary = atob(data.heights);
-    for (let k = 0; k < this.z.length; k++) this.z[k] = (binary.charCodeAt(k * 2) | (binary.charCodeAt(k * 2 + 1) << 8)) / 10;
+    for (let k = 0; k < this.z.length; k++) {
+      if ((k & 65535) === 65535) yield;
+      this.z[k] = (binary.charCodeAt(k * 2) | (binary.charCodeAt(k * 2 + 1) << 8)) / 10;
+    }
     // The squares each ledge runs through (only those round it are looked at).
     const c = this.cell;
-    for (const l of ledges ?? []) {
+    const [i0, j0] = [this.i0, this.j0];
+    for (const [n, l] of (ledges ?? []).entries()) {
+      if (n % 40 === 39) yield;
       for (let k = 0; k + 3 < l.pts.length; k += 2) {
         const [ax, ay, bx, by] = [l.pts[k], l.pts[k + 1], l.pts[k + 2], l.pts[k + 3]];
-        for (let j = Math.max(0, Math.floor(Math.min(ay, by) / c) - 1); j <= Math.min(this.rows - 2, Math.floor(Math.max(ay, by) / c)); j++) {
-          for (let i = Math.max(0, Math.floor(Math.min(ax, bx) / c) - 1); i <= Math.min(this.cols - 2, Math.floor(Math.max(ax, bx) / c)); i++) {
-            if (!this.cut[j * this.cols + i] && this.cuts.inSquare(i * c, j * c, c)) this.cut[j * this.cols + i] = 1;
+        for (let j = Math.max(0, Math.floor(Math.min(ay, by) / c) - 1 - j0); j <= Math.min(this.rows - 2, Math.floor(Math.max(ay, by) / c) - j0); j++) {
+          for (let i = Math.max(0, Math.floor(Math.min(ax, bx) / c) - 1 - i0); i <= Math.min(this.cols - 2, Math.floor(Math.max(ax, bx) / c) - i0); i++) {
+            if (!this.cut[j * this.cols + i] && this.cuts.inSquare((i + i0) * c, (j + j0) * c, c)) this.cut[j * this.cols + i] = 1;
           }
         }
       }
@@ -121,8 +137,8 @@ export class Terrain {
   /** The ground's height at (x, y), metres above the map's lowest point: between the grid's points round it on the same side of any ledge. */
   at(x: number, y: number): number {
     if (this.cols < 2 || this.rows < 2) return 0;
-    const gx = Math.max(0, Math.min(this.cols - 1.001, x / this.cell));
-    const gy = Math.max(0, Math.min(this.rows - 1.001, y / this.cell));
+    const gx = Math.max(0, Math.min(this.cols - 1.001, x / this.cell - this.i0));
+    const gy = Math.max(0, Math.min(this.rows - 1.001, y / this.cell - this.j0));
     const i = Math.floor(gx);
     const j = Math.floor(gy);
     const fx = gx - i;
@@ -132,10 +148,10 @@ export class Terrain {
     if (!this.cut[k]) return (z[k] * (1 - fx) + z[k + 1] * fx) * (1 - fy) + (z[k + this.cols] * (1 - fx) + z[k + this.cols + 1] * fx) * fy;
     // A ledge runs through: only the corners on this side of it.
     const c = this.cell;
-    const [px, py] = [gx * c, gy * c];
+    const [px, py] = [(gx + this.i0) * c, (gy + this.j0) * c];
     let [sum, weight] = [0, 0];
     const corner = (ci: number, cj: number, w: number) => {
-      if (w <= 0 || this.cuts.crosses(px, py, ci * c, cj * c)) return;
+      if (w <= 0 || this.cuts.crosses(px, py, (ci + this.i0) * c, (cj + this.j0) * c)) return;
       sum += z[cj * this.cols + ci] * w;
       weight += w;
     };
