@@ -723,6 +723,12 @@ but the water and the buildings.
   yard (walks are cut where they cross it; no one runs into it). As a bus pulls into its
   bay, 1 to 5 get off and walk up onto the platform and into the station (gone 2.5 m in);
   while it's there, someone comes out to it about every 3 s and gets on.
+- **Vehicles standing still** (parked, left where you got out, stopped; you, stopped)
+  up on the pavement or across their way: walked round. Looking 4 m ahead (and a
+  little behind, while it's beside them), they step aside just far enough to pass
+  0.45 m clear of its side (away from it if there's open ground there, else round its
+  other side), up to 3.5 m from their line, briskly, slowing till they're over; with
+  no way round, they wait. No one appears inside one.
 - **Danger**: only close by, and only in something (not you on foot): you going over 8 m/s within 3.5 m of them, or driving along a
   pavement (over 5 m/s, within 5 m): they run (4.2 m/s) away from you, roads or not (but
   not into the water or a wall), for 4 to 7 s, then go back to walking. A crash (or

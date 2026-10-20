@@ -48,6 +48,48 @@ describe('people', () => {
     expect((performance.now() - t0) / frames).toBeLessThan(2);
   });
 
+  it('walk round a vehicle parked up on the pavement (never through it), and on past it', () => {
+    const [x, y] = parkStreet;
+    const people = new People(map, { rand: seeded(5) });
+    const view = viewAt(x, y);
+    people.populate(view, true);
+    // The busiest pavement there: a van parked along it, up on it, a little way along.
+    const counts = new Map<number, number>();
+    for (const p of people.people) if (p.mode === 'walk') counts.set(p.line, (counts.get(p.line) ?? 0) + 1);
+    const line = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    const w = people.walks[line].pts;
+    const k = Math.floor(w.length / 4) * 2;
+    const [ax, ay, bx, by] = [w[k], w[k + 1], w[k + 2] ?? w[k - 2], w[k + 3] ?? w[k - 1]];
+    const van = { x: (ax + bx) / 2, y: (ay + by) / 2, angle: Math.atan2(by - ay, bx - ax), length: 5.8 * 8, r: 1.1 * 8, level: 0 };
+    people.blocks = [van];
+    const [ux, uy] = [Math.cos(van.angle), Math.sin(van.angle)];
+    const along = (p: { x: number; y: number }) => (p.x - van.x) * ux + (p.y - van.y) * uy;
+    const was = new Map<number, number>();
+    let passed = 0;
+    // (Those there already, as it's put down, aside.)
+    const h = van.length / 2 - van.r;
+    const inside = (p: { x: number; y: number }) => {
+      const s = Math.max(-h, Math.min(h, along(p)));
+      return Math.hypot(p.x - van.x - ux * s, p.y - van.y - uy * s) < van.r + 0.5 * 8;
+    };
+    const there = new Set(people.people.filter(inside).map((p) => p.id));
+    for (let t = 0; t < 90; t += 1 / 30) {
+      people.update(1 / 30, view, still(-1e6, -1e6), [], () => 'red', () => true);
+      for (const p of people.people) {
+        if (p.mode !== 'walk' || p.line !== line || there.has(p.id)) continue;
+        // Never inside it.
+        const s = Math.max(-h, Math.min(h, along(p)));
+        expect(Math.hypot(p.x - van.x - ux * s, p.y - van.y - uy * s)).toBeGreaterThan(van.r + 0.15 * 8);
+        // Past it, one way or the other.
+        const a = along(p);
+        const before = was.get(p.id);
+        if (before !== undefined && Math.sign(before) !== Math.sign(a) && Math.abs(before) > van.length / 2 && Math.abs(a) > 0.01) passed++;
+        if (Math.abs(a) > van.length / 2 + 4) was.set(p.id, a);
+      }
+    }
+    expect(passed).toBeGreaterThan(1);
+  });
+
   it('walk over the bridges, up on the decks, out of the way of what goes under them', () => {
     // Park Street's bridge over Frogmore Street: its pavements.
     const decks = new Decks(map.roads, () => 0);

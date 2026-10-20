@@ -18,6 +18,29 @@ import type { Light } from './lights';
 import { offsetLine } from './world';
 
 const M = 8;
+/** A vehicle standing still: its middle, which way it points, how long and half as wide, px; its level. */
+export interface Block {
+  x: number;
+  y: number;
+  angle: number;
+  length: number;
+  r: number;
+  level: number;
+}
+
+/** Walking round a vehicle standing in the way: looking this far ahead, keeping this far from its side, stepping at most this far from the line, px. */
+const ROUND_LOOK = 4 * 8;
+const ROUND_ROOM = 0.45 * 8;
+const ROUND_MOST = 3.5 * 8;
+
+/** How far (x, y) is from the line down a vehicle's middle (its length, less its rounded ends), px. */
+function bodyDist(b: Block, x: number, y: number): number {
+  const h = Math.max(0, b.length / 2 - b.r);
+  const [c, s] = [Math.cos(b.angle), Math.sin(b.angle)];
+  const t = Math.max(-h, Math.min(h, (x - b.x) * c + (y - b.y) * s));
+  return Math.hypot(x - b.x - c * t, y - b.y - s * t);
+}
+
 /** The pavement along a road: how wide, px (as it's drawn). */
 const PAVEMENT = 2.4 * M;
 /** How fast people walk, px/s (each a little faster or slower), and run. */
@@ -202,6 +225,13 @@ export class People {
   /** The bus stations' yards (and their bounds); and their bays' platforms, x, y. */
   private readonly yards: { ring: Pts; x0: number; y0: number; x1: number; y1: number }[] = [];
   private readonly platforms: [number, number][];
+  /**
+   * The vehicles standing still near the view (parked, left, stopped): walked
+   * round (see `roundBlocks`). Set each frame.
+   */
+  blocks: Block[] = [];
+  /** Where people can be (see `update`), as it was last given. */
+  private walkable: (x: number, y: number, level: number) => boolean = () => true;
   /** The bus stops: where people wait (on the pavement by the stop), x, y. */
   readonly stops: [number, number][] = [];
   /** The parks and squares people wander about. */
@@ -549,6 +579,8 @@ export class People {
       under: null,
       underAlong: 0,
     };
+    // (Never in a vehicle standing there: gone again at once.)
+    if (this.blocks.some((b) => Math.abs(b.x - x) < b.length && Math.abs(b.y - y) < b.length && bodyDist(b, x, y) < b.r + 0.3 * M)) p.gone = true;
     this.people.push(p);
     return p;
   }
@@ -763,6 +795,7 @@ export class People {
     levelAt: (level: number, x: number, y: number) => number = (level) => level,
   ): void {
     this.populate(view);
+    this.walkable = walkable;
     const all = [player, ...movers];
     // Danger: you, going fast right by them (or along the pavement at them); and anything on a call, its siren going.
     for (const m of [...(player.onFoot ? [] : [player]), ...movers.filter((o) => o.siren)]) {
@@ -847,13 +880,20 @@ export class People {
     const [px, py] = [w[(p.next - p.dir) * 2] ?? tx, w[(p.next - p.dir) * 2 + 1] ?? ty];
     const len = Math.hypot(tx - px, ty - py) || 1;
     const [ux, uy] = [(tx - px) / len, (ty - py) / len];
-    // Stepping round anyone in the way (and slowing behind someone slower): see `make way`.
-    const [shift, slow] = this.makeWay(p, ux, uy);
-    p.avoid += Math.max(-1.6 * M * dt, Math.min(1.6 * M * dt, shift - p.avoid));
-    // Steering for a point a couple of metres on along the line (or its next corner), to one side of it.
+    // Stepping round anyone in the way (and slowing behind someone slower): see `make way`; and round a vehicle standing there.
     const along = (p.x - px) * ux + (p.y - py) * uy;
-    const ahead = Math.min(len, along + 2 * M);
-    const off = Math.max(-1.05 * M, Math.min(1.05 * M, p.side + p.avoid));
+    const round = this.roundBlocks(p, px, py, ux, uy, along);
+    const [shift, slower] = round === null ? this.makeWay(p, ux, uy) : [round, Infinity];
+    // (No way round: they wait. Round one: briskly aside, slowing till they're far enough over.)
+    let slow = Number.isNaN(round) ? 0 : slower;
+    const rate = round !== null ? 3 * M : 1.6 * M;
+    if (!Number.isNaN(shift)) p.avoid += Math.max(-rate * dt, Math.min(rate * dt, shift - p.avoid));
+    if (round !== null && !Number.isNaN(shift) && Math.abs(shift - p.avoid) > 0.2 * M) slow = Math.min(slow, p.pace * 0.25);
+    // Steering for a point a couple of metres on along the line (or its next corner), to one side of it.
+    // (Going round a vehicle: steering for nearer on, to keep to the way round it.)
+    const ahead = Math.min(len, along + (round !== null ? 0.8 : 2) * M);
+    const wide = round !== null ? ROUND_MOST : 1.05 * M;
+    const off = Math.max(-wide, Math.min(wide, p.side + p.avoid));
     const [sx, sy] = [px + ux * ahead - uy * off, py + uy * ahead + ux * off];
     this.goTo(p, sx, sy, Math.min(p.pace, slow), dt, 0.05 * M);
     if (len - along < 0.6 * M) {
@@ -877,6 +917,48 @@ export class People {
         }
       }
     }
+  }
+
+  /**
+   * A vehicle standing in the way (up on the pavement, or across the path),
+   * walking along the line from (px, py), (ux, uy), `along` it: how far to
+   * step aside (from the line's middle, less their own side) to get past it
+   * with room, the nearer way that's open ground (away from it first); NaN if
+   * there's no way round (they wait); null if nothing's in the way.
+   */
+  private roundBlocks(p: Person, px: number, py: number, ux: number, uy: number, along: number): number | null {
+    if (!this.blocks.length) return null;
+    const [nx, ny] = [-uy, ux];
+    // What's a few metres ahead, near the way they're walking.
+    const near = this.blocks.filter((b) => b.level === p.level && Math.abs(b.x - p.x) < b.length / 2 + 6 * M && Math.abs(b.y - p.y) < b.length / 2 + 6 * M);
+    if (!near.length) return null;
+    const clear = (off: number) => {
+      for (let d = -0.75 * M; d <= ROUND_LOOK; d += 0.5 * M) {
+        const [x, y] = [px + ux * (along + d) + nx * off, py + uy * (along + d) + ny * off];
+        for (const b of near) if (bodyDist(b, x, y) < b.r + ROUND_ROOM) return false;
+      }
+      return true;
+    };
+    const now = p.side + p.avoid;
+    if (clear(now)) {
+      // (Already past or round it: keep the step they've taken while it's beside them.)
+      return p.avoid !== 0 && !clear(p.side) ? p.avoid : null;
+    }
+    // Which side it's on: step away from it first.
+    let across = 0;
+    for (const b of near) across += (b.x - p.x) * nx + (b.y - p.y) * ny;
+    const first = across > 0 ? -1 : 1;
+    for (let k = 1; k * 0.25 * M <= ROUND_MOST; k++) {
+      for (const side of [first, -first]) {
+        const off = p.side + side * k * 0.25 * M;
+        if (Math.abs(off) > ROUND_MOST || !clear(off)) continue;
+        // On open ground there (not the water, a wall, a building).
+        const [x, y] = [px + ux * (along + 1.5 * M) + nx * off, py + uy * (along + 1.5 * M) + ny * off];
+        if (!this.walkable(x, y, p.level)) continue;
+        return off - p.side;
+      }
+    }
+    return Number.NaN;
   }
 
   /**

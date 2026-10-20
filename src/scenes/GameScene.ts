@@ -55,7 +55,7 @@ import { BoatLayer } from './BoatLayer';
 import { WaterRipples } from './WaterRipples';
 import { GRAVITY, Ledges } from '../world/ledges';
 import { LedgeLayer } from '../world/LedgeLayer';
-import { type Mover, People } from '../world/people';
+import { type Block, type Mover, People } from '../world/people';
 import { type Pose, PeopleLayer, SIZE as PERSON_SIZE, personTexture } from './PeopleLayer';
 import { type Shape, STIFFNESS, type Wreck, hit as dentAt, newWreck, toBody, toWorld } from '../car/dents';
 import { paintWreck } from './dentArt';
@@ -966,6 +966,18 @@ export class GameScene extends Phaser.Scene {
         return Math.hypot(px - x, py - y) < w.r + 2;
       });
     };
+    // What's standing still near the view (parked, left, stopped; you, stopped): walked round.
+    const blocks: Block[] = [];
+    const [bx0, by0, bx1, by1] = [view.left - 100, view.top - 100, view.right + 100, view.bottom + 100];
+    for (const list of [this.traffic.parked, this.traffic.vehicles]) {
+      for (const v of list) {
+        if (v.x < bx0 || v.x > bx1 || v.y < by0 || v.y > by1 || v.kind === 'bike') continue;
+        if (Math.hypot(v.vx, v.vy) > 4 || (v.mode === 'drive' && v.speed > 4)) continue;
+        blocks.push({ x: v.x, y: v.y, angle: v.angle, length: v.length, r: v.r, level: v.level });
+      }
+    }
+    if (!this.onFoot && Math.hypot(car.vx, car.vy) < 4) blocks.push({ x: car.x, y: car.y, angle: car.heading, length: this.carLength(), r: this.carWidth() / 2, level: this.level });
+    this.people.blocks = blocks;
     try {
       this.people.update(dt, { x0: view.left, y0: view.top, x1: view.right, y1: view.bottom }, player, movers, light, walkable, (level, x, y) => this.decks.stepAt(level, x, y, this.groundAt(x, y)));
     } catch (e) {
