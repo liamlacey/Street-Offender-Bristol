@@ -405,6 +405,390 @@
         1,
         0.5
       ]
+    },
+    {
+      "name": "seamills",
+      "about": "About 970 m by 945 m to the north-west of seawalls: Sea Mills and the Portway along the Avon, the Downs' far edge.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.6495,
+        "maxlat": 51.4815,
+        "maxlon": -2.6355
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-18T17:29:49Z",
+      "lidarShift": [
+        -0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "sneydpark",
+      "about": "About 970 m by 945 m to the north of seawalls: Sneyd Park and Stoke Bishop's southern streets, the north end of the Downs.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.6355,
+        "maxlat": 51.4815,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-13T20:03:53Z",
+      "lidarShift": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "westburypark",
+      "about": "About 970 m by 945 m to the north of whiteladies: Westbury Park and the top of the Downs, Henleaze's southern edge.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.6215,
+        "maxlat": 51.4815,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-17T09:59:26Z",
+      "lidarShift": [
+        1,
+        1.5
+      ]
+    },
+    {
+      "name": "bishopston",
+      "about": "About 970 m by 945 m to the north of redland: Bishopston and Gloucester Road.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.6075,
+        "maxlat": 51.4815,
+        "maxlon": -2.5935
+      },
+      "osmNewestEdit": "2026-10-06T09:14:33Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        0.5,
+        1
+      ]
+    },
+    {
+      "name": "ashleydown",
+      "about": "About 970 m by 945 m to the north of montpelier: Ashley Down, Ashley Hill and the railway in its cutting.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.5935,
+        "maxlat": 51.4815,
+        "maxlon": -2.5795
+      },
+      "osmNewestEdit": "2026-10-19T15:12:04Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        -0.5,
+        1
+      ]
+    },
+    {
+      "name": "eastville",
+      "about": "About 970 m by 945 m to the north of stwerburghs: Eastville, the M32 and the Frome.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.5795,
+        "maxlat": 51.4815,
+        "maxlon": -2.5655
+      },
+      "osmNewestEdit": "2026-10-19T11:18:42Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        0.5,
+        2
+      ]
+    },
+    {
+      "name": "whitehall",
+      "about": "About 970 m by 945 m the north-east corner: Stapleton Road and the streets towards Whitehall.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.5655,
+        "maxlat": 51.4815,
+        "maxlon": -2.5515
+      },
+      "osmNewestEdit": "2026-10-19T23:45:26Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        0.5,
+        0
+      ]
+    },
+    {
+      "name": "easton",
+      "about": "About 970 m by 945 m to the east of stwerburghs: Easton, Stapleton Road and the railway.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.5655,
+        "maxlat": 51.473,
+        "maxlon": -2.5515
+      },
+      "osmNewestEdit": "2026-10-19T23:45:26Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        1.5,
+        0
+      ]
+    },
+    {
+      "name": "redfield",
+      "about": "About 970 m by 945 m to the east of lawrencehill: Easton and Redfield, Church Road.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.5655,
+        "maxlat": 51.4645,
+        "maxlon": -2.5515
+      },
+      "osmNewestEdit": "2026-10-19T11:18:42Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        3,
+        0.5
+      ]
+    },
+    {
+      "name": "bartonhill",
+      "about": "About 970 m by 945 m to the east of stphilips: Barton Hill, the Feeder Canal and Netham.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.5655,
+        "maxlat": 51.456,
+        "maxlon": -2.5515
+      },
+      "osmNewestEdit": "2026-10-20T18:55:09Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        4,
+        0
+      ]
+    },
+    {
+      "name": "stannes",
+      "about": "About 970 m by 945 m to the east of totterdown: Arnos Vale, St Anne's and the Avon's bends.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.5655,
+        "maxlat": 51.4475,
+        "maxlon": -2.5515
+      },
+      "osmNewestEdit": "2026-10-20T18:55:09Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        5,
+        0
+      ]
+    },
+    {
+      "name": "brislington",
+      "about": "About 970 m by 945 m to the east of knowle: Brislington West and the Bath Road.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.5655,
+        "maxlat": 51.439,
+        "maxlon": -2.5515
+      },
+      "osmNewestEdit": "2026-10-18T17:29:49Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        6,
+        0
+      ]
+    },
+    {
+      "name": "broomhill",
+      "about": "About 970 m by 945 m the south-east corner: the streets between Knowle and Brislington.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.5655,
+        "maxlat": 51.4305,
+        "maxlon": -2.5515
+      },
+      "osmNewestEdit": "2026-10-15T22:57:52Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        7,
+        0.5
+      ]
+    },
+    {
+      "name": "filwood",
+      "about": "About 970 m by 945 m to the south of knowle: Filwood and the edge of Hengrove.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.5795,
+        "maxlat": 51.4305,
+        "maxlon": -2.5655
+      },
+      "osmNewestEdit": "2026-10-15T14:51:21Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        7,
+        1
+      ]
+    },
+    {
+      "name": "knowlewest",
+      "about": "About 970 m by 945 m to the south of windmillhill: Knowle West.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.5935,
+        "maxlat": 51.4305,
+        "maxlon": -2.5795
+      },
+      "osmNewestEdit": "2026-10-15T14:51:21Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        4.5,
+        1.5
+      ]
+    },
+    {
+      "name": "headleypark",
+      "about": "About 970 m by 945 m to the south of bedminster: Headley Park and the Wells Road's western side, towards Bishopsworth.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.6075,
+        "maxlat": 51.4305,
+        "maxlon": -2.5935
+      },
+      "osmNewestEdit": "2026-10-15T14:51:21Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        4,
+        1.5
+      ]
+    },
+    {
+      "name": "bedminsterdown",
+      "about": "About 970 m by 945 m to the south of winterstoke: Bedminster Down and Bishopsworth Road.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.6215,
+        "maxlat": 51.4305,
+        "maxlon": -2.6075
+      },
+      "osmNewestEdit": "2026-10-18T11:24:31Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        3.5,
+        1.5
+      ]
+    },
+    {
+      "name": "colliters",
+      "about": "About 970 m by 945 m to the south of ashtonvale: Bedminster Down's western end and Colliter's Brook.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.6355,
+        "maxlat": 51.4305,
+        "maxlon": -2.6215
+      },
+      "osmNewestEdit": "2026-10-20T12:38:39Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        1.5,
+        0.5
+      ]
+    },
+    {
+      "name": "yanley",
+      "about": "About 970 m by 945 m the south-west corner: the fields south of Ashton Vale, towards Yanley.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.6495,
+        "maxlat": 51.4305,
+        "maxlon": -2.6355
+      },
+      "osmNewestEdit": "2026-10-20T12:38:39Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "longashton",
+      "about": "About 970 m by 945 m to the west of ashtonvale: the Long Ashton bypass and the fields towards Long Ashton.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.6495,
+        "maxlat": 51.439,
+        "maxlon": -2.6355
+      },
+      "osmNewestEdit": "2026-10-20T12:38:39Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "ashtoncourt",
+      "about": "About 970 m by 945 m to the west of bowerashton: the Ashton Court estate.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.6495,
+        "maxlat": 51.4475,
+        "maxlon": -2.6355
+      },
+      "osmNewestEdit": "2026-10-05T11:32:29Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        -1,
+        -1.5
+      ]
+    },
+    {
+      "name": "nightingale",
+      "about": "About 970 m by 945 m to the west of gorge: Nightingale Valley and the woods down to the Avon.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.6495,
+        "maxlat": 51.456,
+        "maxlon": -2.6355
+      },
+      "osmNewestEdit": "2026-10-14T00:40:22Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        -1,
+        1
+      ]
+    },
+    {
+      "name": "leighwoods",
+      "about": "About 970 m by 945 m to the west of observatory: Leigh Woods, across the gorge from Clifton.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.6495,
+        "maxlat": 51.4645,
+        "maxlon": -2.6355
+      },
+      "osmNewestEdit": "2026-10-14T00:40:22Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "abbotsleigh",
+      "about": "About 970 m by 945 m to the west of seawalls: the gorge and the Avon below Sea Walls, and the woods across it towards Abbots Leigh.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.6495,
+        "maxlat": 51.473,
+        "maxlon": -2.6355
+      },
+      "osmNewestEdit": "2026-10-18T17:29:49Z",
+      "fetched": "2026-10-20",
+      "lidarShift": [
+        0,
+        1
+      ]
     }
   ]
 }
