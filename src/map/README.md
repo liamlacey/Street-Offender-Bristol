@@ -259,7 +259,7 @@ where there's a crossing, people get 8 s with everything red (`src/world/lights.
 footbridges, jetties) is level 1, above whatever's below it (the water, another
 road: Park Street crosses Frog Lane on one). A deck runs straight from the
 ground's height at one end to its height at the other, has parapets along both
-sides, and you get on or off only within 8 m of an end that meets the ground
+sides (see below for its ends), and you get on or off only within 8 m of an end that meets the ground
 (`src/world/decks.ts`); driving under it in the middle you stay below, and it's
 drawn over you. Each level has its own walls and posts (buildings stand on both;
 garden walls, railings, lamps and the like belong to the deck when they're on
@@ -268,6 +268,15 @@ bridge, paving for the rest). The ground under a bridge isn't raised to meet it.
 A road bridge's pavements (worked out as for any road's: see Pavements) are decks of
 their own alongside it, 2.4 m wide and as high as it, paved; the parapets stand
 along their outsides (not between the road and its pavement).
+
+A bridge is often mapped running on past what it spans, over its abutments and
+on into a junction (Commercial Road's by the Louisiana). There it's on the
+ground: from an open end, up to 16 m in, where the deck's less than 1 m above
+the ground and not over the water, it has no parapets (drawn or to hit) and casts
+no shadow. (If none of a deck's more than 1 m up, as the survey has it, a flyover
+it sees as the ground, it keeps them all.) A deck's shadow is cast as if from 5 m
+up along the rest, fading to nothing over the 8 m towards an open end: no dark
+block on the road where it comes down to meet it.
 
 **Bridge decks, measured.** A deck's height every 2 m along it is the LIDAR's
 first-return surface there (the deck, not what's under it): the median of the

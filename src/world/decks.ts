@@ -13,7 +13,7 @@
  * Pure, so it's tested.
  */
 
-import { DECK_STEP, type Pts, type Road } from '../map/osm';
+import { DECK_STEP, type GameMap, type Pts, type Road, pointInRing } from '../map/osm';
 import type { Segment } from '../physics/collisions';
 import { lineLength, offsetLine, pointAlong } from './world';
 
@@ -22,6 +22,13 @@ const PAVEMENT = 2.4 * 8;
 
 /** You get on or off a deck within this far of one of its ends, px. */
 export const DECK_END = 8 * 8;
+/** A bridge mapped on past what it spans (into a junction, over its abutments) is on the ground there: within this far of an open end, px, */
+const END_TRIM = 16 * 8;
+/** where it's less than this above the ground, px, and not over the water. */
+const RAISED = 1 * 8;
+/** How high a deck's shadow is cast from (a bridge's usual height above what's under it), px; and over how far it fades to nothing at an end that's on the ground. */
+export const SHADOW_HEIGHT = 5 * 8;
+export const SHADOW_FADE = 8 * 8;
 /** The parapets stand this far out from the edge of the deck, px, and are this thick. */
 const PARAPET_OUT = 2;
 const PARAPET = 1.5;
@@ -42,6 +49,20 @@ export interface Deck {
   y0: number;
   x1: number;
   y1: number;
+  /** The stretches along it (from, to, px) where it's up off the ground, once worked out. */
+  raised?: [number, number][];
+}
+
+/** Whether a point's over the water (the harbour, the river: not a pool), for the decks: quick, by each stretch of water's box first. */
+export function waterOf(map: Pick<GameMap, 'areas'>): (x: number, y: number) => boolean {
+  const waters = map.areas
+    .filter((a) => a.kind === 'water')
+    .map((a) => {
+      let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+      for (let i = 0; i < a.rings[0].length; i += 2) [x0, y0, x1, y1] = [Math.min(x0, a.rings[0][i]), Math.min(y0, a.rings[0][i + 1]), Math.max(x1, a.rings[0][i]), Math.max(y1, a.rings[0][i + 1])];
+      return { rings: a.rings, box: [x0, y0, x1, y1] };
+    });
+  return (x, y) => waters.some((w) => x >= w.box[0] && x <= w.box[2] && y >= w.box[1] && y <= w.box[3] && w.rings.filter((r) => pointInRing(x, y, r)).length % 2 === 1);
 }
 
 /** Where a point is along a polyline (its distance along) and how far from it. */
@@ -62,8 +83,13 @@ export function nearestAlong(pts: Pts, x: number, y: number): { along: number; d
 export class Decks {
   readonly decks: Deck[] = [];
 
-  /** `ground` gives the ground's height (px) anywhere. */
-  constructor(roads: Road[], ground: (x: number, y: number) => number) {
+  private readonly ground: (x: number, y: number) => number;
+  private readonly wet: (x: number, y: number) => boolean;
+
+  /** `ground` gives the ground's height (px) anywhere; `wet`, whether a point's over the water (see waterOf). */
+  constructor(roads: Road[], ground: (x: number, y: number) => number, wet: (x: number, y: number) => boolean = () => false) {
+    this.ground = ground;
+    this.wet = wet;
     const all: [Road, number][] = [];
     roads.forEach((road, index) => {
       if (!road.bridge || road.pts.length < 4) return;
@@ -116,6 +142,11 @@ export class Decks {
       d.open0 = !touches(p[0], p[1], d);
       d.open1 = !touches(p[p.length - 2], p[p.length - 1], d);
     }
+  }
+
+  /** The ground's height (px) at (x, y), as the decks were made with. */
+  groundAt(x: number, y: number): number {
+    return this.ground(x, y);
   }
 
   /** The deck over (x, y), if any (within its width), and where along it. */
@@ -209,24 +240,74 @@ export class Decks {
     return false;
   }
 
-  /** The parapets along both sides of each deck (open at the ends), as walls for the cars on it. */
+  /**
+   * The stretch along a deck (from, to, px) that's up off the ground: all of
+   * it, but a bridge mapped running on past what it spans (on into a
+   * junction, over its abutments) is on the ground there: from an open end,
+   * up to END_TRIM in, where it's less than RAISED above the ground and not
+   * over the water, it's left out (no parapets, no shadow). If that'd leave
+   * none of it (the survey has the bridge as the ground: a flyover), it's
+   * all of it, as ever.
+   */
+  raised(d: Deck): [number, number][] {
+    if (d.raised) return d.raised;
+    const step = DECK_STEP / 2;
+    const onGround = (a: number) => {
+      const [x, y] = pointAlong(d.road.pts, a);
+      return !this.wet(x, y) && this.height(d, a) - this.ground(x, y) < RAISED;
+    };
+    // None of it up off the ground, as the survey has it (a flyover it sees as the ground): all of it, as ever.
+    let any = false;
+    for (let a = 0; a <= d.length && !any; a += step) any = !onGround(a);
+    if (!any) return (d.raised = [[0, d.length]]);
+    let from = 0;
+    if (d.open0) while (from <= Math.min(END_TRIM, d.length) && onGround(from)) from += step;
+    let to = d.length;
+    if (d.open1) while (to >= Math.max(d.length - END_TRIM, 0) && onGround(to)) to -= step;
+    // (Back to the last bit on the ground: the edge of what it spans.)
+    if (from > 0) from = Math.min(from - step / 2, END_TRIM);
+    if (to < d.length) to = Math.max(to + step / 2, d.length - END_TRIM);
+    return (d.raised = [[Math.max(0, from), Math.min(d.length, Math.max(to, from))]]);
+  }
+
+  /** How far off to the side a deck's shadow falls `along` it, as high as it's cast from (px): fading to nothing towards an end on the ground. */
+  shadowAt(d: Deck, along: number): number {
+    const [[from, to]] = this.raised(d);
+    if (along < from || along > to) return 0;
+    let k = 1;
+    if (from > 0 || d.open0) k = Math.min(k, (along - from) / SHADOW_FADE);
+    if (to < d.length || d.open1) k = Math.min(k, (to - along) / SHADOW_FADE);
+    return SHADOW_HEIGHT * Math.max(0, k);
+  }
+
+  /** The parapets along both sides of each deck where it's up off the ground (open at the ends), as walls for the cars on it. */
   parapets(): Segment[] {
     const walls: Segment[] = [];
     for (const d of this.decks) {
       const p = d.road.pts;
       const out = d.half + PARAPET_OUT;
+      const raised = this.raised(d);
+      let run = 0;
       for (let i = 0; i + 3 < p.length; i += 2) {
-        const [ax, ay, bx, by] = [p[i], p[i + 1], p[i + 2], p[i + 3]];
-        const len = Math.hypot(bx - ax, by - ay);
+        const [sx, sy, ex, ey] = [p[i], p[i + 1], p[i + 2], p[i + 3]];
+        const len = Math.hypot(ex - sx, ey - sy);
+        const start = run;
+        run += len;
         if (!len) continue;
-        const nx = -(by - ay) / len;
-        const ny = (bx - ax) / len;
-        for (const side of [-1, 1]) {
-          const w = { ax: ax + nx * out * side, ay: ay + ny * out * side, bx: bx + nx * out * side, by: by + ny * out * side, r: PARAPET };
-          // Not where it'd stand on another deck alongside (a cycleway or a pavement mapped as a bridge of its own, beside or within a road's): there's no edge there.
-          const [mx, my] = [(w.ax + w.bx) / 2, (w.ay + w.by) / 2];
-          if (this.decks.some((o) => o !== d && mx >= o.x0 && mx <= o.x1 && my >= o.y0 && my <= o.y1 && nearestAlong(o.road.pts, mx, my).distance <= o.half + PARAPET_OUT)) continue;
-          walls.push(w);
+        const nx = -(ey - sy) / len;
+        const ny = (ex - sx) / len;
+        // Each piece of this side that's up off the ground.
+        for (const [r0, r1] of raised) {
+          const [t0, t1] = [Math.max(0, (r0 - start) / len), Math.min(1, (r1 - start) / len)];
+          if (t1 <= t0) continue;
+          const [ax, ay, bx, by] = [sx + (ex - sx) * t0, sy + (ey - sy) * t0, sx + (ex - sx) * t1, sy + (ey - sy) * t1];
+          for (const side of [-1, 1]) {
+            const w = { ax: ax + nx * out * side, ay: ay + ny * out * side, bx: bx + nx * out * side, by: by + ny * out * side, r: PARAPET };
+            // Not where it'd stand on another deck alongside (a cycleway or a pavement mapped as a bridge of its own, beside or within a road's): there's no edge there.
+            const [mx, my] = [(w.ax + w.bx) / 2, (w.ay + w.by) / 2];
+            if (this.decks.some((o) => o !== d && mx >= o.x0 && mx <= o.x1 && my >= o.y0 && my <= o.y1 && nearestAlong(o.road.pts, mx, my).distance <= o.half + PARAPET_OUT)) continue;
+            walls.push(w);
+          }
         }
       }
     }

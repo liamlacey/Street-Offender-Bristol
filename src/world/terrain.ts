@@ -104,8 +104,18 @@ export class Terrain {
     if (!data) return;
     const binary = atob(data.heights);
     for (let k = 0; k < this.z.length; k++) this.z[k] = (binary.charCodeAt(k * 2) | (binary.charCodeAt(k * 2 + 1) << 8)) / 10;
-    if (this.cuts.none) return;
-    for (let j = 0; j + 1 < this.rows; j++) for (let i = 0; i + 1 < this.cols; i++) if (this.cuts.inSquare(i * this.cell, j * this.cell, this.cell)) this.cut[j * this.cols + i] = 1;
+    // The squares each ledge runs through (only those round it are looked at).
+    const c = this.cell;
+    for (const l of ledges ?? []) {
+      for (let k = 0; k + 3 < l.pts.length; k += 2) {
+        const [ax, ay, bx, by] = [l.pts[k], l.pts[k + 1], l.pts[k + 2], l.pts[k + 3]];
+        for (let j = Math.max(0, Math.floor(Math.min(ay, by) / c) - 1); j <= Math.min(this.rows - 2, Math.floor(Math.max(ay, by) / c)); j++) {
+          for (let i = Math.max(0, Math.floor(Math.min(ax, bx) / c) - 1); i <= Math.min(this.cols - 2, Math.floor(Math.max(ax, bx) / c)); i++) {
+            if (!this.cut[j * this.cols + i] && this.cuts.inSquare(i * c, j * c, c)) this.cut[j * this.cols + i] = 1;
+          }
+        }
+      }
+    }
   }
 
   /** The ground's height at (x, y), metres above the map's lowest point: between the grid's points round it on the same side of any ledge. */

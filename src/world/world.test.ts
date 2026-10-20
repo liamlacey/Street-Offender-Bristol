@@ -4,7 +4,7 @@ import bristol from '../map/bristol.json';
 import { buildingLook, clipHalfPlane, hatch, parseColour } from './buildingLook';
 import { Surface, SurfaceGrid, surfacePaint } from './surface';
 import { CHUNK, buildWorld, chunkKey, cutWall, lineLength, pointAlong, shadowOffset, subPolyline } from './world';
-import { DECK_END, Decks } from './decks';
+import { DECK_END, Decks, SHADOW_HEIGHT } from './decks';
 import { nearestOnSegment } from '../physics/collisions';
 
 const map = bristol as unknown as GameMap;
@@ -258,10 +258,39 @@ describe('Decks', () => {
     expect(level.slope(deck, 48)[0]).toBeLessThan(0);
   });
 
-  it('has parapets along both sides, open at the ends', () => {
-    const walls = decks.parapets();
-    expect(walls).toHaveLength(2);
-    expect(walls.map((w) => Math.abs(w.ay)).every((y) => y > 40)).toBe(true);
+  it('has parapets along both sides, open at the ends; none on the bits it runs on onto the land (into a junction), up to 16 m', () => {
+    const span = (d: Decks) => {
+      const walls = d.parapets();
+      return [walls.length, Math.min(...walls.map((w) => Math.min(w.ax, w.bx))), Math.max(...walls.map((w) => Math.max(w.ax, w.bx)))];
+    };
+    // Over a river from 60 to 340 px (3 m down), a 400 px bridge: on the land at either end.
+    const short: Road = { kind: 'primary', width: 80, pts: [0, 0, 400, 0], bridge: true };
+    const [n, from, to] = span(new Decks([short], (x) => x / 10 - (x > 60 && x < 340 ? 24 : 0)));
+    expect(n).toBe(2);
+    expect(from).toBeGreaterThan(40);
+    expect(from).toBeLessThan(70);
+    expect(to).toBeGreaterThan(330);
+    expect(to).toBeLessThan(360);
+    // The river further in: no more than 16 m's taken off either end.
+    const [, far0, far1] = span(new Decks([bridge], (x) => x / 10 - (x > 300 && x < 500 ? 24 : 0)));
+    expect(far0).toBeLessThan(16 * 8 + 1);
+    expect(far1).toBeGreaterThan(800 - 16 * 8 - 1);
+    // Over the water (level with it, as the survey can have it), it's up off it all the same.
+    const [, wet0, wet1] = span(new Decks([short], () => 0, (x) => x > 60 && x < 340));
+    expect(wet0).toBeLessThan(70);
+    expect(wet1).toBeGreaterThan(330);
+    // All of it on the ground as the survey has it (a flyover the survey sees as the ground): all of it, as ever.
+    expect(span(decks)).toEqual([2, 0, 800]);
+  });
+
+  it('casts a shadow along it, fading to nothing towards an end on the ground', () => {
+    const short: Road = { kind: 'primary', width: 80, pts: [0, 0, 400, 0], bridge: true };
+    const river = new Decks([short], (x) => x / 10 - (x > 60 && x < 340 ? 24 : 0));
+    const [d] = river.decks;
+    expect(river.shadowAt(d, 10)).toBe(0);
+    expect(river.shadowAt(d, 200)).toBe(SHADOW_HEIGHT);
+    expect(river.shadowAt(d, 70)).toBeGreaterThan(0);
+    expect(river.shadowAt(d, 70)).toBeLessThan(SHADOW_HEIGHT);
   });
 
   it('finds Park Street\'s bridge over Frogmore Street in Bristol', () => {

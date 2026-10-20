@@ -8,7 +8,8 @@
 
 import type { Body, Circle, Segment } from '../physics/collisions';
 import type { Building, GameMap, LineKind, Prop, PropKind, Pts, Road } from '../map/osm';
-import { Decks } from './decks';
+import { Decks, waterOf } from './decks';
+import { Terrain } from './terrain';
 import type { DebrisKind, ThingKind, WallKind } from './damage';
 
 /** Size of the pieces the ground is drawn in, and indexed by, px. */
@@ -240,7 +241,8 @@ export function cutWall(s: Segment, passages: Road[]): Segment[] {
 
 export function buildWorld(map: GameMap): World {
   // Which level things are on: on a bridge's deck, or the ground.
-  const decks = new Decks(map.roads, () => 0);
+  const terrain = new Terrain(map.terrain, map.pxPerMetre, map.ledges);
+  const decks = new Decks(map.roads, (x, y) => terrain.at(x, y) * terrain.px, waterOf(map));
   const onDeck = (x: number, y: number) => decks.over(x, y) !== null;
   const passages = map.roads.filter((r) => r.passage);
   // (The passages by where they are, in squares: each wall looks only at those near it.)

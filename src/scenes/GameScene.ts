@@ -29,7 +29,7 @@ import {
 } from '../physics/collisions';
 import { Buildings } from '../world/Buildings';
 import { DeckLayer } from '../world/DeckLayer';
-import { Decks } from '../world/decks';
+import { Decks, waterOf } from '../world/decks';
 import { GroundLayer, paintSurfaces } from '../world/GroundLayer';
 import { Perspective } from '../world/perspective';
 import { Terrain } from '../world/terrain';
@@ -271,7 +271,7 @@ export class GameScene extends Phaser.Scene {
     this.buildings = new Buildings(this, this.world, this.terrain, DEPTH.buildings);
     this.kerbs = new Kerbs(map);
     this.humps = new Humps(map);
-    this.decks = new Decks(map.roads, (x, y) => this.groundAt(x, y));
+    this.decks = new Decks(map.roads, (x, y) => this.groundAt(x, y), waterOf(map));
     this.ledges = new Ledges(map);
     this.ledgeLayer = new LedgeLayer(this, this.ledges, (x, y) => this.groundAt(x, y), DEPTH.ledges);
     this.deckLayer = new DeckLayer(this, this.decks);
