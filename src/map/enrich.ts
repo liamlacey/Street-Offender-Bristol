@@ -7,7 +7,7 @@
  */
 
 import { type HeightGrid, type Raster, bestShift, findTrees, heightAt, heightGrid, quantile, sample } from './lidar.ts';
-import { DECK_STEP, type GameMap, Projection, type Road, type Pts, type TerrainData, VEHICLE_ROADS, pointInRing, ridgeAxis, ringArea } from './osm.ts';
+import { DECK_STEP, type GameMap, type Ledge, Projection, type Road, type Pts, type TerrainData, VEHICLE_ROADS, pointInRing, ridgeAxis, ringArea } from './osm.ts';
 import { toNationalGrid } from './osgb.ts';
 
 export interface LidarReport {
@@ -20,6 +20,7 @@ export interface LidarReport {
   sheltersFound?: number;
   stepsCounted?: number;
   banks?: number;
+  ledges?: number;
 }
 
 /** Roofs that rise more than this from eaves to ridge are pitched, metres. */
@@ -178,6 +179,7 @@ export function addLidar(map: GameMap, dsm: Raster, dtm: Raster): LidarReport {
   report.sheltersFound = findShelters(map, g, blocked);
   report.stepsCounted = countSteps(map, dtm, grid);
   report.banks = findBanks(map, dtm, grid, blocked, g);
+  report.ledges = findLedges(map, dtm, grid);
   map.terrain = terrainOf(map, dtm, grid, dsm);
   return report;
 }
@@ -746,6 +748,200 @@ export function findBanks(map: GameMap, dtm: Raster, toGrid: (x: number, y: numb
   if (banks.length) map.banks = banks;
   else delete map.banks;
   return banks.length / 3;
+}
+
+/**
+ * A ledge drops at least LEDGE_DROP metres, falling at least LEDGE_STEEP metres a metre all the way from its top
+ * to its foot (the survey softens a wall into a slope a few metres wide), within LEDGE_RUN metres; it starts
+ * falling at once (LEDGE_START a metre) from ground no steeper than LEDGE_FLAT a metre above it.
+ */
+const LEDGE_DROP = 1;
+const LEDGE_STEEP = 0.6;
+const LEDGE_RUN = 5;
+const LEDGE_START = 0.35;
+const LEDGE_FLAT = 0.3;
+/** Its foot's where it falls less than this a metre. */
+const LEDGE_FOOT = 0.25;
+/** Shorter than this, metres, it's a bump in the survey, not a ledge. */
+const LEDGE_SHORTEST = 3;
+/** How far from the line it's kept to when it's simplified, metres. */
+const LEDGE_TOLERANCE = 0.6;
+
+/**
+ * Sharp drops in the bare ground (a quay's edge into the water, a retaining
+ * wall, the sides of the Bear Pit): every metre where flat ground falls away
+ * steeply, LEDGE_DROP or more, joined up into lines along their tops. Not at
+ * buildings (the survey's made up under them), bridges, steps, or walls OSM
+ * has (they're walls already); not from the water or a carriageway (only down
+ * into them). Returns how many it found.
+ */
+export function findLedges(map: GameMap, dtm: Raster, toGrid: (x: number, y: number) => [number, number]): number {
+  const px = map.pxPerMetre;
+  const cols = Math.ceil(map.width / px);
+  const rows = Math.ceil(map.height / px);
+  const z = new Float32Array(cols * rows);
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) z[j * cols + i] = sample(dtm, ...toGrid((i + 0.5) * px, (j + 0.5) * px));
+  // Where there are none: 1 where it can't be a ledge's top (or foot), 2 where it can't be its top (the water, a carriageway: it can be its foot).
+  const no = new Uint8Array(cols * rows);
+  const mark = (x: number, y: number, v: number, r: number) => {
+    const [i0, j0] = [Math.floor(x / px), Math.floor(y / px)];
+    for (let j = j0 - r; j <= j0 + r; j++) for (let i = i0 - r; i <= i0 + r; i++) if (i >= 0 && j >= 0 && i < cols && j < rows && no[j * cols + i] !== 1) no[j * cols + i] = v;
+  };
+  const along = (p: Pts, v: number, r: number, half = 0) => {
+    for (let k = 0; k + 3 < p.length; k += 2) {
+      const [ax, ay, bx, by] = [p[k], p[k + 1], p[k + 2], p[k + 3]];
+      const len = Math.hypot(bx - ax, by - ay) || 1;
+      const [nx, ny] = [-(by - ay) / len, (bx - ax) / len];
+      for (let d = 0; d <= len; d += px / 2) for (let w = -half; w <= half; w += px / 2) mark(ax + ((bx - ax) * d) / len + nx * w, ay + ((by - ay) * d) / len + ny * w, v, r);
+    }
+  };
+  for (const a of map.areas) if (a.kind === 'water' || a.kind === 'pool') for (const [x, y] of pointsInside(a.rings, px)) mark(x, y, 2, 0);
+  for (const b of map.buildings) {
+    if (b.bottom > 0) continue;
+    for (const [x, y] of pointsInside(b.rings, px)) mark(x, y, 1, 1);
+    for (const ring of b.rings) along([...ring, ring[0], ring[1]], 1, 1);
+  }
+  for (const r of map.roads) {
+    if (r.bridge) along(r.pts, 1, 2, r.width / 2 + 2 * px);
+    else if (r.kind === 'steps') along(r.pts, 1, 2, r.width / 2);
+    // Not its top on a carriageway (the road would drop away under you); its foot can be.
+    else if (VEHICLE_ROADS.has(r.kind)) along(r.pts, 2, 0, r.width / 2);
+  }
+  for (const l of map.lines) if (l.kind === 'wall' || l.kind === 'fence' || l.kind === 'hedge') along(l.pts, 1, 1);
+
+  const at = (i: number, j: number) => (i >= 0 && j >= 0 && i < cols && j < rows ? z[j * cols + i] : NaN);
+  const DIRS = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+  // Each ledge's top: which way's down (DIRS' index), and how far it drops, metres.
+  const way = new Int8Array(cols * rows).fill(-1);
+  const drop = new Float32Array(cols * rows);
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      const k = j * cols + i;
+      if (no[k]) continue;
+      const top = z[k];
+      if (top !== top) continue;
+      let best = -1;
+      let most = 0;
+      DIRS.forEach(([di, dj], d) => {
+        const len = di && dj ? Math.SQRT2 : 1;
+        // Flat above it, and falling at once.
+        if (!(at(i - di, j - dj) - top <= LEDGE_FLAT * len)) return;
+        if (!(top - at(i + di, j + dj) >= LEDGE_START * len)) return;
+        // Down to its foot.
+        let n = 1;
+        while (n * len < LEDGE_RUN && at(i + di * n, j + dj * n) - at(i + di * (n + 1), j + dj * (n + 1)) >= LEDGE_FOOT * len) n++;
+        const fall = top - at(i + di * n, j + dj * n);
+        if (!(fall >= LEDGE_DROP) || fall / (n * len) < LEDGE_STEEP || fall <= most) return;
+        if (no[(j + dj * n) * cols + i + di * n] === 1) return;
+        [best, most] = [d, fall];
+      });
+      if (best >= 0) {
+        way[k] = best;
+        drop[k] = most;
+      }
+    }
+  }
+  // Joined up into lines, through neighbouring tops falling the same way (the diagonal only where there's no corner to go round).
+  const same = (a: number, b: number) => {
+    if (b < 0 || way[b] < 0) return false;
+    const d = (way[a] - way[b] + 8) % 8;
+    return Math.min(d, 8 - d) <= 2;
+  };
+  const links = new Map<number, number[]>();
+  const link = (a: number, b: number) => {
+    links.set(a, [...(links.get(a) ?? []), b]);
+    links.set(b, [...(links.get(b) ?? []), a]);
+  };
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      const k = j * cols + i;
+      if (way[k] < 0) continue;
+      const right = i + 1 < cols ? k + 1 : -1;
+      const down = j + 1 < rows ? k + cols : -1;
+      if (same(k, right)) link(k, right);
+      if (same(k, down)) link(k, down);
+      for (const [di, c] of [[1, k + cols + 1], [-1, k + cols - 1]] as const) {
+        if (i + di < 0 || i + di >= cols || j + 1 >= rows || !same(k, c)) continue;
+        const corner = (o: number) => way[o] >= 0 && same(k, o) && same(c, o);
+        if (!corner(k + di) && !corner(k + cols)) link(k, c);
+      }
+    }
+  }
+  // Walked into chains: from each end (or anywhere, round a loop), till the next end or a fork.
+  const used = new Set<string>();
+  const key = (a: number, b: number) => (a < b ? `${a},${b}` : `${b},${a}`);
+  const chains: number[][] = [];
+  const walk = (start: number, next: number) => {
+    const chain = [start];
+    let [prev, cur] = [start, next];
+    used.add(key(start, next));
+    for (;;) {
+      chain.push(cur);
+      const on = (links.get(cur) ?? []).filter((n) => n !== prev && !used.has(key(cur, n)));
+      if ((links.get(cur) ?? []).length !== 2 || !on.length) break;
+      used.add(key(cur, on[0]));
+      [prev, cur] = [cur, on[0]];
+    }
+    chains.push(chain);
+  };
+  for (const [k, ns] of links) if (ns.length !== 2) for (const n of ns) if (!used.has(key(k, n))) walk(k, n);
+  for (const [k, ns] of links) for (const n of ns) if (!used.has(key(k, n))) walk(k, n);
+
+  const ledges: Ledge[] = [];
+  for (const chain of chains) {
+    // Each point at the edge itself: half a metre on from the top's middle, the way it falls.
+    const pts = chain.flatMap((k) => {
+      const [di, dj] = DIRS[way[k]];
+      const l = Math.hypot(di, dj);
+      return [((k % cols) + 0.5 + (di / l) * 0.5) * px, (Math.floor(k / cols) + 0.5 + (dj / l) * 0.5) * px];
+    });
+    let length = 0;
+    for (let n = 2; n < pts.length; n += 2) length += Math.hypot(pts[n] - pts[n - 2], pts[n + 1] - pts[n - 1]);
+    if (length < LEDGE_SHORTEST * px) continue;
+    // Running so it falls away on its right.
+    const [mi, mj] = DIRS[way[chain[Math.floor(chain.length / 2)]]];
+    const m = Math.floor(chain.length / 2) * 2;
+    const [tx, ty] = m + 3 < pts.length ? [pts[m + 2] - pts[m], pts[m + 3] - pts[m + 1]] : [pts[m] - pts[m - 2], pts[m + 1] - pts[m - 1]];
+    const flip = -ty * mi + tx * mj < 0;
+    const drops = chain.map((k) => drop[k]);
+    if (flip) {
+      const back: number[] = [];
+      for (let n = pts.length - 2; n >= 0; n -= 2) back.push(pts[n], pts[n + 1]);
+      pts.splice(0, pts.length, ...back);
+      drops.reverse();
+    }
+    const keep = simplify(pts, LEDGE_TOLERANCE * px);
+    ledges.push({ pts: keep.flatMap((n) => [Math.round(pts[n * 2]), Math.round(pts[n * 2 + 1])]), drop: keep.map((n) => Math.round(drops[n] * px)) });
+  }
+  if (ledges.length) map.ledges = ledges;
+  else delete map.ledges;
+  return ledges.length;
+}
+
+/** Which of a line's points to keep (Douglas–Peucker): those that stray more than `tolerance` from the straight line between the kept ones. */
+function simplify(pts: number[], tolerance: number): number[] {
+  const n = pts.length / 2;
+  const keep = new Uint8Array(n);
+  keep[0] = keep[n - 1] = 1;
+  const stack: [number, number][] = [[0, n - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop()!;
+    const [ax, ay, bx, by] = [pts[a * 2], pts[a * 2 + 1], pts[b * 2], pts[b * 2 + 1]];
+    const len = Math.hypot(bx - ax, by - ay);
+    let [far, at] = [0, -1];
+    for (let i = a + 1; i < b; i++) {
+      const [x, y] = [pts[i * 2], pts[i * 2 + 1]];
+      const d = len ? Math.abs((bx - ax) * (ay - y) - (ax - x) * (by - ay)) / len : Math.hypot(x - ax, y - ay);
+      if (d > far) [far, at] = [d, i];
+    }
+    if (at >= 0 && far > tolerance) {
+      keep[at] = 1;
+      stack.push([a, at], [at, b]);
+    }
+  }
+  const out: number[] = [];
+  keep.forEach((k, i) => k && out.push(i));
+  return out;
 }
 
 /** The cells no tree can stand in: buildings (and a metre round them), water, and the roads' carriageways. */

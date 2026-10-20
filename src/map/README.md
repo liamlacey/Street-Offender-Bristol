@@ -10,7 +10,7 @@ as the old. If the method changes, change this file in the same commit.
 | --- | --- | --- | --- |
 | Streets, paths, ground, water, buildings, trees, street furniture | [OpenStreetMap](https://www.openstreetmap.org), the API's `map` call (`api.openstreetmap.org/api/0.6/map?bbox=…`), plus `relation/<id>/full` for multipolygons only partly in the area | ODbL: credit "© OpenStreetMap contributors" | Everything that's on the map |
 | Heights of roofs and treetops | Environment Agency, **LIDAR Composite First Return DSM, 1 m** (WCS, coverage `…__Lidar_Composite_Elevation_FZ_DSM_1m`) | Open Government Licence v3.0 | Building heights, roof shapes, trees' heights, finding trees, walls' and hedges' heights, finding bus shelters |
-| Height of the bare ground | Environment Agency, **LIDAR Composite DTM, 1 m** (WCS, coverage `…__Lidar_Composite_Elevation_DTM_1m`) | Open Government Licence v3.0 | Heights above ground (with the DSM), the hills, retaining walls' heights, counting steps, steep banks |
+| Height of the bare ground | Environment Agency, **LIDAR Composite DTM, 1 m** (WCS, coverage `…__Lidar_Composite_Elevation_DTM_1m`) | Open Government Licence v3.0 | Heights above ground (with the DSM), the hills, retaining walls' heights, counting steps, steep banks, ledges (sharp drops) |
 | Landmarks' and streets' colours | Written by hand in `landmarks.ts` | Ours | What OSM doesn't say about how places look |
 | Corrections | The owner's own knowledge of the streets, written by hand in `landmarks.ts` (`CORRECTIONS`) | Ours | What's different on the ground from OSM (yet): King Street and King William Avenue pedestrianised |
 
@@ -360,6 +360,38 @@ ground):
   3 of the 8 points round it falling the same way (within 45°); not within 2 m
   of a building (3 m in all), the water, a carriageway, a wall or the quay. Drawn
   as hachures, short strokes down the slope; you can drive over them.
+- Ledges (sharp drops: quays' edges, retaining walls, the sides of the Bear Pit,
+  railway cuttings; `ledges`): the bare ground every metre, on the map's own
+  grid. A point's a ledge's top where the ground just above it (a metre back) is
+  no steeper than 0.3 m a metre, it falls at least 0.35 m a metre straight away,
+  and, followed down to its foot (where it falls less than 0.25 m a metre, within
+  5 m), it's dropped 1 m or more at 0.6 m a metre or steeper (the survey softens a
+  wall into a slope a couple of metres wide): the way it falls the steepest of
+  the 8 ways round it. Not at a building (or a metre round one: the survey's made
+  up under them), a bridge (and 2 m round it), steps, or a wall, fence or hedge
+  OSM has; its top not in the water or on a carriageway (its foot can be). Tops
+  side by side, falling within 90° of the same way, are joined into lines
+  (diagonally only where there's no corner to go round); lines shorter than 3 m
+  are dropped, and the rest simplified (Douglas–Peucker, 0.6 m), each point half
+  a metre on from its top's middle, the way it falls, running so the ground falls
+  away on their right, with how far it drops there.
+
+**In the game, the ledges** (`src/world/ledges.ts`, drawn by `LedgeLayer.ts`): go
+over one from the top (your middle crossing its edge) and you fall as far as it
+drops, at real gravity (9.81 m/s²), carrying on the way you were going, still
+stopped by walls and buildings alongside. You land with a thump as hard as you
+fell: in a vehicle its nose is dented (the landing speed × 2.2) and it's slowed
+(by up to 60%, less the heavier it is); on a bike you're thrown off it landing
+faster than 5 m/s; on foot from higher than 1.5 m, you're knocked down. Come at
+one from below and it's a wall (your middle on its low side: pushed out of it,
+bounced back a little). People don't walk within 0.6 m of one. On foot you can't
+go over one into the water (you can't swim). Falling into the water you sink
+(in a vehicle), or you're put back (on foot). Off the side of a bridge's deck
+(through its parapet, knocked down) you fall from its height to what's below;
+off a quay into the harbour, as far as the nearest ledge there (within 6 m)
+drops, or 1.5 m. Drawn: a pale edge along the top, the face below it, a third
+of its drop deep (up to 1.25 m), lifted through the perspective, and a shadow
+beyond. The hills (below) are still smoothed across them.
 
 **The hills.** The bare ground's height every 4 m (the average of the 16 one-metre
 readings round each point), gaps filled from their neighbours, and smoothed twice.
@@ -821,7 +853,8 @@ what's where), `ground.ts` and `groundArt.ts` (painting the ground in 512 px
 pieces, and the surface grid that says what's underfoot), `GroundLayer.ts`
 (painting pieces as they come into view, shading the hills: in a worker,
 `groundWorker.ts` with `groundPiece.ts`, so painting never holds up a frame), `terrain.ts`,
-`perspective.ts` and `TerrainSheet.ts` (the hills, and the old games'
+`ledges.ts` and `LedgeLayer.ts` (the sharp drops: falling off them, hitting them
+from below, and drawing them; tested in `ledges.test.ts`), `perspective.ts` and `TerrainSheet.ts` (the hills, and the old games'
 perspective: higher than the car is nearer the camera, so drawn pushed out from
 the middle of the view), `buildingLook.ts` and `Buildings.ts` (the buildings),
 `traffic.ts` (the traffic and the parked cars; tested in `traffic.test.ts`) and

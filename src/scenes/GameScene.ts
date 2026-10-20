@@ -53,6 +53,8 @@ import { COLOURS, Traffic, VEHICLES, type Vehicle, type VehicleKind, collideBodi
 import { type Boat, Boats } from '../world/boats';
 import { BoatLayer } from './BoatLayer';
 import { WaterRipples } from './WaterRipples';
+import { GRAVITY, Ledges } from '../world/ledges';
+import { LedgeLayer } from '../world/LedgeLayer';
 import { type Mover, People } from '../world/people';
 import { type Pose, PeopleLayer, SIZE as PERSON_SIZE, personTexture } from './PeopleLayer';
 import { type Shape, STIFFNESS, type Wreck, hit as dentAt, newWreck, toBody, toWorld } from '../car/dents';
@@ -71,6 +73,8 @@ const DEPTH = {
   /** On the water, under the bridges. */
   boats: 1.5,
   props: 2,
+  /** The drops' faces (quays, retaining walls). */
+  ledges: 2.15,
   /** Garden walls, hedges, fences and railings. */
   walls: 2.2,
   /** A bridge's deck, with the car on it. */
@@ -138,6 +142,10 @@ export class GameScene extends Phaser.Scene {
   private walls!: [SegmentGrid, SegmentGrid];
   private posts!: [CircleGrid, CircleGrid];
   private decks!: Decks;
+  private ledges!: Ledges;
+  private ledgeLayer!: LedgeLayer;
+  /** Falling (off a drop, a bridge, a quay): how high above the ground below, px, how fast, px/s (up), and from how high. */
+  private air: { z: number; vz: number; drop: number } | null = null;
   private deckLayer!: DeckLayer;
   /** Which level the car's on: 0 the ground, 1 a bridge's deck. */
   private level = 0;
@@ -264,6 +272,8 @@ export class GameScene extends Phaser.Scene {
     this.kerbs = new Kerbs(map);
     this.humps = new Humps(map);
     this.decks = new Decks(map.roads, (x, y) => this.groundAt(x, y));
+    this.ledges = new Ledges(map);
+    this.ledgeLayer = new LedgeLayer(this, this.ledges, (x, y) => this.groundAt(x, y), DEPTH.ledges);
     this.deckLayer = new DeckLayer(this, this.decks);
     this.wallLayer = new WallLayer(this, this.walls, (x, y, level) => this.surfaceHeight(x, y, level), DEPTH.walls);
     this.wreckage = new Wreckage(this, this.walls, this.posts, this.effects, {
@@ -547,6 +557,7 @@ export class GameScene extends Phaser.Scene {
     this.updateProps(view);
     this.updateLights(view);
     this.wallLayer.update(view, this.perspective);
+    this.ledgeLayer.update(view, this.perspective);
     this.trafficLayer.update(view, this.perspective, this.level, this.time.now / 1000);
     this.boatLayer.update(view, this.perspective, this.time.now / 1000);
     this.ripples.update(view, this.perspective, dt);
@@ -630,6 +641,7 @@ export class GameScene extends Phaser.Scene {
     this.safe = { ...this.prev };
     this.level = 0;
     this.downFor = 0;
+    this.air = null;
     this.surface = this.surfaces.at(to.x, to.y);
     this.effects.reset();
     if (this.sinking >= 0) {
@@ -661,6 +673,10 @@ export class GameScene extends Phaser.Scene {
       car.y += car.vy * dt;
       return;
     }
+    if (this.air) return this.stepAir(dt);
+    const [x0, y0] = [car.x, car.y];
+    // Up on a bridge: how high (to fall from, if you go off its side).
+    const high = this.level === 1 ? this.carHeight() : 0;
     const before = this.surface;
     // On a bridge, its deck's surface and slope; otherwise the ground's.
     const on = this.level === 1 ? this.decks.over(car.x, car.y) : null;
@@ -703,6 +719,17 @@ export class GameScene extends Phaser.Scene {
       this.hit(wall);
       this.dent(null, this.contact.x, this.contact.y, wall);
     }
+    if (this.level === 0) {
+      // Over the edge of a drop: falling.
+      const over = this.ledges.wentOver(x0, y0, car.x, car.y);
+      if (over && over.drop > 0.5 * 8) return this.fall(over.drop);
+      // A drop, come at from below: a wall.
+      const ledge = (this.ledges.collide(car, this.contact) * 1.3) / (car.invMass ?? 1);
+      if (ledge > 0) {
+        this.hit(ledge);
+        this.dent(null, this.contact.x, this.contact.y, ledge);
+      }
+    }
     const post = collideCarWithStatic(car, this.posts[this.level], undefined, this.contact);
     if (post > 0) {
       this.hit(post);
@@ -740,6 +767,8 @@ export class GameScene extends Phaser.Scene {
       // So no tyre mark joins one level to the other.
       this.effects.reset();
     }
+    // Off the side of a bridge (through its parapet, knocked down): falling.
+    if (high && this.level === 0 && high - this.groundAt(car.x, car.y) > 0.5 * 8) return this.fall(high - this.groundAt(car.x, car.y));
     for (const i of this.nearbyLoose(car.x, car.y)) {
       const { body, image } = this.loose[i];
       if (body.level !== this.level || body.gone) continue;
@@ -757,10 +786,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.surface === Surface.Deep && this.level === 0) {
-      this.sinking = 0;
-      this.audio?.splash(Math.hypot(car.vx, car.vy) + 150);
-      this.audio?.sink();
-      this.effects.splashAt(car.x, car.y, 30);
+      // Off the quay: down into the water first (as far as the edge there drops, measured; or a quay's usual 1.5 m).
+      this.fall(this.ledges.dropNear(car.x, car.y, 6 * 8) || 1.5 * 8);
     } else if (this.surface === Surface.Pool && before !== Surface.Pool) {
       this.audio?.splash(Math.hypot(car.vx, car.vy));
       this.effects.splashAt(car.x, car.y, 12);
@@ -923,6 +950,8 @@ export class GameScene extends Phaser.Scene {
     // Open ground: not the water, not a building's (or a wall's) way; up on a bridge, its deck, inside the parapets.
     const walkable = (x: number, y: number, level: number) => {
       if (level === 1 ? !this.decks.over(x, y) : this.surfaces.at(x, y) === Surface.Deep) return false;
+      // Not over the edge of a drop.
+      if (level === 0 && this.ledges.by(x, y, 0.6 * 8)) return false;
       return !this.walls[level].near(x, y, 4).some((w) => {
         const [px, py] = nearestOnSegment(x, y, w);
         return Math.hypot(px - x, py - y) < w.r + 2;
@@ -1010,7 +1039,7 @@ export class GameScene extends Phaser.Scene {
 
   /** The button (or F, or E): out of what you're driving, or into what you're by. */
   private getInOrOut(): void {
-    if (this.sinking >= 0 || this.downFor > 0) return;
+    if (this.sinking >= 0 || this.downFor > 0 || this.air) return;
     if (!this.onFoot) {
       if (Math.hypot(this.car.vx, this.car.vy) < GET_OUT_SPEED) this.getOut(false);
       return;
@@ -1120,7 +1149,9 @@ export class GameScene extends Phaser.Scene {
   /** On foot: turning and walking (or running); not into the water, nor through walls; knocked over by the traffic. */
   private stepOnFoot(dt: number): void {
     const car = this.car;
+    if (this.air) return this.stepAir(dt);
     const [px, py] = [car.x, car.y];
+    const high = this.level === 1 ? this.carHeight() : 0;
     if (this.downFor > 0) {
       this.downFor -= dt;
       car.vx *= Math.exp(-5 * dt);
@@ -1154,6 +1185,76 @@ export class GameScene extends Phaser.Scene {
     this.stride += Math.hypot(car.x - px, car.y - py);
     this.level = this.decks.stepAt(this.level, car.x, car.y, this.groundAt(car.x, car.y));
     this.surface = this.level === 1 ? Surface.Road : this.surfaces.at(car.x, car.y);
+    if (this.level !== 0) return;
+    // Off the side of a bridge, or over the edge of a drop: falling (but not off a quay: you can't swim, so that's as far as you go).
+    if (high && high - this.groundAt(car.x, car.y) > 0.5 * 8) return this.fall(high - this.groundAt(car.x, car.y));
+    const over = this.ledges.wentOver(px, py, car.x, car.y);
+    if (over && this.surfaces.at(car.x + over.nx * 16, car.y + over.ny * 16) === Surface.Deep) [car.x, car.y, car.vx, car.vy] = [px, py, 0, 0];
+    else if (over) this.fall(over.drop);
+    else this.ledges.collide(car);
+  }
+
+  /** Off the edge: falling from `drop` px up. */
+  private fall(drop: number): void {
+    this.air = { z: drop, vz: 0, drop };
+    this.hopLeft = 0;
+  }
+
+  /** In the air: carrying on the way it was going, faster and faster down; still stopped by a wall or a building alongside. */
+  private stepAir(dt: number): void {
+    const car = this.car;
+    const a = this.air!;
+    car.x += car.vx * dt;
+    car.y += car.vy * dt;
+    car.heading += car.spin * dt;
+    a.vz -= GRAVITY * dt;
+    a.z += a.vz * dt;
+    this.level = 0;
+    collideCarWithWalls(car, this.walls[0]);
+    if (a.z > 0) return;
+    this.air = null;
+    this.land(-a.vz, a.drop);
+  }
+
+  /**
+   * Down: into the water (sinking, or put back, on foot); otherwise a thump,
+   * as hard as it fell, the nose into the ground (dented, and slowed); on foot
+   * from high enough, knocked flat; on a bike, off it.
+   */
+  private land(speed: number, drop: number): void {
+    const car = this.car;
+    this.surface = this.surfaces.at(car.x, car.y);
+    this.effects.reset();
+    if (this.surface === Surface.Deep) {
+      this.effects.splashAt(car.x, car.y, 30);
+      this.audio?.splash(Math.hypot(car.vx, car.vy) + 150 + speed);
+      if (this.onFoot) return this.resetCar();
+      this.sinking = 0;
+      this.audio?.sink();
+      return;
+    }
+    this.audio?.crash(Math.min(260, speed * 2.5));
+    this.shake(0.22, Math.min(7, speed / 12));
+    this.people.scareAround(car.x, car.y, 12 * 8, 0);
+    if (this.onFoot) {
+      if (drop > 1.5 * 8) {
+        this.downFor = Math.min(3, 0.6 + (drop / 8) * 0.4);
+        this.audio?.knock();
+      }
+      return;
+    }
+    if (this.ride.kind === 'bike') {
+      if (speed > 40) this.thrown = true;
+      return;
+    }
+    const half = this.carLength() / 2;
+    this.dent(null, car.x + Math.cos(car.heading) * half, car.y + Math.sin(car.heading) * half, speed * 2.2);
+    // (A heavy one's slowed less.)
+    const k = Math.min(0.6, speed / 200) * Math.sqrt(car.invMass ?? 1);
+    car.vx *= 1 - k;
+    car.vy *= 1 - k;
+    this.hopPeak = Math.min(0.6, speed / 150);
+    this.hopLeft = HOP_TIME;
   }
 
   /** How loud something at (x, y) is, by how far it is from the car: 1 close, 0 out of earshot. */
@@ -1247,6 +1348,7 @@ export class GameScene extends Phaser.Scene {
   /** Back on the road, where it last was safely, and repaired (on foot, back there). */
   private resetCar(): void {
     Object.assign(this.car, { x: this.safe.x, y: this.safe.y, heading: this.safe.heading, vx: 0, vy: 0, spin: 0 });
+    this.air = null;
     if (this.onFoot) {
       this.level = 0;
       this.downFor = 0;
@@ -1287,7 +1389,9 @@ export class GameScene extends Phaser.Scene {
       // You: standing, stepping as you walk (and run), or down, knocked over.
       const moving = Math.hypot(this.car.vx, this.car.vy) > 4;
       const pose: Pose = this.downFor > 0 ? 'down' : !moving ? 'stand' : Math.floor(this.stride / (0.75 * 8)) % 2 ? 'step0' : 'step1';
-      this.carSprite.setTexture(personTexture(this, this.look, pose)).setScale(PERSON_SIZE / ART_SCALE).setAlpha(1).clearTint().setPosition(x, y).setRotation(heading);
+      // (Falling, nearer the camera at first.)
+      const up = 1 + ((this.air?.z ?? 0) / 8) * 0.05;
+      this.carSprite.setTexture(personTexture(this, this.look, pose)).setScale((PERSON_SIZE / ART_SCALE) * up).setAlpha(1).clearTint().setPosition(x, y).setRotation(heading);
       this.carShadow.setVisible(false);
       return;
     }
@@ -1303,7 +1407,9 @@ export class GameScene extends Phaser.Scene {
     const phase = this.hopLeft > 0 ? 1 - this.hopLeft / HOP_TIME : 1;
     const hop = this.hopPeak * 4 * phase * (1 - phase);
     // (A bike drawn as big as the people are: see TrafficLayer.)
-    const s = ((this.ride.kind === 'bike' ? 1.4 : 1) / ART_SCALE) * (1 + hop * 0.07);
+    // Falling: high up, nearer the camera (a little bigger), its shadow down on the ground below, further off.
+    const up = this.air?.z ?? 0;
+    const s = ((this.ride.kind === 'bike' ? 1.4 : 1) / ART_SCALE) * (1 + hop * 0.07) * (1 + (up / 8) * 0.04);
     if (this.sinking >= 0) {
       // Sinking: smaller, darker and fading under the water.
       const k = Math.min(this.sinking / 1.6, 1);
@@ -1314,7 +1420,7 @@ export class GameScene extends Phaser.Scene {
       this.carShadow.setVisible(true);
     }
     this.carSprite.setPosition(x, y).setRotation(heading);
-    this.carShadow.setPosition(x + 2.5 + hop * 3, y + 3.5 + hop * 4).setRotation(heading);
+    this.carShadow.setPosition(x + 2.5 + hop * 3 + up * 0.5, y + 3.5 + hop * 4 + up * 0.6).setRotation(heading);
   }
 
   /** Follows the car, looking ahead the way it's going, and pulls back the faster it goes. */

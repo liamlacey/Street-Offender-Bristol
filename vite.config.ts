@@ -9,6 +9,7 @@ export default defineConfig({
     target: ['es2020', 'safari14'],
     chunkSizeWarningLimit: 2200,
   },
-  // Only this game's tests (not the example code's).
-  test: { include: ['src/**/*.test.ts'] },
+  // Only this game's tests (not the example code's). Some walk the people or the traffic round the whole map for
+  // a while, which takes a few seconds: 30 s each, so a slow machine doesn't fail them.
+  test: { include: ['src/**/*.test.ts'], testTimeout: 30_000 },
 });

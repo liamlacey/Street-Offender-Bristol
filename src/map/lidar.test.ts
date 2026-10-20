@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countSteps, deckProfile, findBanks, findShelters, mergeRasters, roofShape, shiftRaster, underBridges, wallHeights } from './enrich';
+import { countSteps, deckProfile, findBanks, findLedges, findShelters, mergeRasters, roofShape, shiftRaster, underBridges, wallHeights } from './enrich';
 import { type HeightGrid, type Raster, bestShift, findTrees, parseWcsText, quantile, sample } from './lidar';
 import { toNationalGrid } from './osgb';
 import { type GameMap, type Line, type Road, paving } from './osm';
@@ -232,5 +232,27 @@ describe('walls, shelters, steps and banks from the LIDAR', () => {
     const level = mapOf({});
     expect(findBanks(level, flat, toGrid, new Uint8Array(size * size), g)).toBe(0);
     expect(level.banks).toBeUndefined();
+  });
+
+  it('finds a sharp drop (softened over a couple of metres, as the survey has a wall), along its top, falling away on its right', () => {
+    const map = mapOf({ areas: [], buildings: [] });
+    // Flat at 12 m to the north, 9 m to the south: a 3 m wall along row 20, softened over 2 m.
+    const wall = raster((_, s) => (s <= 20 ? 12 : s === 21 ? 11 : s === 22 ? 10 : 9));
+    expect(findLedges(map, wall, toGrid)).toBe(1);
+    const [l] = map.ledges!;
+    expect(l.drop.every((d) => Math.abs(d - 3 * 8) <= 4)).toBe(true);
+    // Its top edge, about 20.5 m down (within the survey's metre).
+    for (let k = 1; k < l.pts.length; k += 2) expect(Math.abs(l.pts[k] / 8 - 20.5)).toBeLessThanOrEqual(1);
+    // All along it, down on its right: running east (y being down, the south's on the right).
+    const [x0, x1] = [l.pts[0], l.pts[l.pts.length - 2]];
+    expect(x1 - x0).toBeGreaterThan(30 * 8);
+  });
+
+  it('passes over a steep bank (falling all the way), gentle slopes, and level ground', () => {
+    const bank = mapOf({ areas: [], buildings: [] });
+    expect(findLedges(bank, raster((e) => 30 - Math.max(0, Math.min(15, e - 10)) * 0.5), toGrid)).toBe(0);
+    expect(findLedges(bank, raster((e) => 30 - e * 0.4), toGrid)).toBe(0);
+    expect(findLedges(bank, flat, toGrid)).toBe(0);
+    expect(bank.ledges).toBeUndefined();
   });
 });

@@ -10,7 +10,10 @@ Hotwells, Spike Island, Redcliffe and Temple Meads, and down to Ashton Gate,
 Southville and Bedminster in the south, built from real map data, hills and all. Drive on the
 roads, pavements and grass (up Park Street's hill slower, down it faster), crash into buildings, walls, lamp posts and trees, knock
 benches and bins flying, and drive into the harbour if you like (it sinks, and
-you're put back on the road). The truck's heavy and armour-plated: it goes through
+you're put back on the road). The drops are real, measured from the survey: drive
+off a quay, a retaining wall, the side of the Bear Pit or a bridge (once you've
+knocked its parapet down) and you fall, and land with a thump (or a splash); come
+at one from below and it's a wall. The truck's heavy and armour-plated: it goes through
 walls, fences, lamp posts and trees, shoves cars out of its way, and takes a lot to
 dent.
 

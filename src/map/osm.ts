@@ -487,6 +487,8 @@ export interface GameMap {
   solar?: number[];
   /** Steep banks (embankments, cuttings), measured by the LIDAR: x, y, which way's downhill (radians, as a hundredth), ... */
   banks?: number[];
+  /** Sharp drops in the bare ground, measured by the LIDAR (see Ledge). */
+  ledges?: Ledge[];
   /** The bus routes through the map (see BusRoute). */
   busRoutes?: BusRoute[];
   /** Where boats moor, and the ferry routes (see berths.ts). */
@@ -494,6 +496,16 @@ export interface GameMap {
   /** Where people go: x, y, what (0 a shop, café, bar or the like; 1 a sight: a museum, gallery, monument, statue, viewpoint), ... */
   venues?: number[];
   ferries?: FerryRoute[];
+}
+
+/**
+ * A sharp drop in the ground (a quay's edge, a retaining wall, the side of a
+ * sunken square): its top edge, with the ground falling away on the right of
+ * it, as it runs (y being down); and how far it drops at each point, px.
+ */
+export interface Ledge {
+  pts: Pts;
+  drop: number[];
 }
 
 /**
