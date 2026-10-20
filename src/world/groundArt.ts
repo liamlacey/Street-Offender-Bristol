@@ -228,6 +228,8 @@ export function artPalette(ctx: Ctx): Palette {
     pier: pattern(planks(64)),
     pontoon: pattern(composite(64)),
     forecourt: pattern(asphalt(64, '#4f5053', 25)),
+    // A bus station's yard: big concrete panels, worn darker where the buses drive.
+    yard: pattern(slabs([128, 127, 123], 48, 48, 'rgba(45,45,42,0.3)', 41)),
     slipway: pattern(slabs([164, 160, 152], 64, 64, 'rgba(70,68,62,0.18)', 23)),
     island: pavement,
   };

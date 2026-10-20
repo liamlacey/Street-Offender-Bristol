@@ -38,6 +38,8 @@ export type AreaKind =
   | 'pontoon'
   | 'slipway'
   | 'forecourt'
+  /** Paved for vehicles, not people (OSM's `area:highway=service`: a bus station's yard). */
+  | 'yard'
   | 'island';
 
 export interface Area {
@@ -113,6 +115,8 @@ export interface Road {
   lanes?: Lane[];
   /** Where they're painted (distances along it, start, end, ...): clear of junctions, crossings and sharp bends. */
   laneSpans?: number[];
+  /** Only for buses (`access=no` with `bus` or `psv=yes`: a bus station's yard, its bays): the rest of the traffic keeps out. */
+  bus?: boolean;
   /** How busy it is: the shops, cafés, bars, offices and the like within ACTIVITY_REACH of it, per 100 m of it (more traffic, and more parked). */
   activity?: number;
   /** Steps: how many there are up the flight (OSM's `step_count`, or from how far it rises, measured by the LIDAR). */
@@ -491,11 +495,40 @@ export interface GameMap {
   ledges?: Ledge[];
   /** The bus routes through the map (see BusRoute). */
   busRoutes?: BusRoute[];
+  /** The bus stations, and their bays (see BusStation). */
+  busStations?: BusStation[];
   /** Where boats moor, and the ferry routes (see berths.ts). */
   berths?: Berth[];
   /** Where people go: x, y, what (0 a shop, café, bar or the like; 1 a sight: a museum, gallery, monument, statue, viewpoint), ... */
   venues?: number[];
   ferries?: FerryRoute[];
+}
+
+/**
+ * A bus station (OSM's `public_transport=stop_area`, with its bays on ways
+ * only buses use): where each bay is, for the buses to pull into (nose in,
+ * then back out), and where their passengers wait.
+ */
+export interface BusStation {
+  name?: string;
+  bays: Bay[];
+}
+
+export interface Bay {
+  /** Where the bus stops (the end of the way into the bay, `stop_position`), and which way it's facing there (into the bay), radians. */
+  x: number;
+  y: number;
+  angle: number;
+  /** The way into the bay (the road's index). */
+  road: number;
+  /** Where its passengers wait (its `platform`), x, y. */
+  platform: [number, number];
+}
+
+/** A way only buses use (`access=no` with `bus` or `psv=yes`). */
+export function busOnly(t: Tags): boolean {
+  const closed = t.access === 'no' || t.access === 'private' || t.motor_vehicle === 'no' || t.motorcar === 'no';
+  return closed && (t.bus === 'yes' || t.bus === 'designated' || t.psv === 'yes' || t.psv === 'designated');
 }
 
 /**
@@ -950,6 +983,7 @@ export function areaKind(tags: Tags): AreaKind | null {
   if (tags.landuse === 'construction' || tags.landuse === 'brownfield') return 'dirt';
   if (tags.amenity === 'fuel' && !tags.building) return 'forecourt';
   if (tags.amenity === 'parking' && !tags.building && tags.parking !== 'underground' && tags.parking !== 'multi-storey') return 'parking';
+  if (tags['area:highway'] === 'service') return 'yard';
   if (tags.highway === 'pedestrian' || tags.place === 'square' || tags.amenity === 'marketplace' || tags['area:highway'] || (tags.highway === 'footway' && tags.area === 'yes')) return 'plaza';
   return null;
 }
@@ -972,6 +1006,7 @@ export const AREA_ORDER: Record<AreaKind, number> = {
   pontoon: 11,
   slipway: 11,
   forecourt: 6,
+  yard: 6,
   island: 12,
 };
 
@@ -1511,6 +1546,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       ...(across ? { lanesAcross: across } : {}),
       ...(lanes && laneSpans?.length ? { lanes, laneSpans } : {}),
       ...(kind === 'steps' && stepCount(t) ? { steps: stepCount(t) } : {}),
+      ...(vehicle && busOnly(t) ? { bus: true } : {}),
     });
   }
   // A lane that carries on from the same lane on the road before it: its name's painted only where it starts.
@@ -1918,7 +1954,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       if (at && t.highway === 'give_way') paint.push(...giveWayTriangles(node.id, t.direction));
     }
     if (t.highway === 'mini_roundabout') paint.push({ kind: 'mini', x: round(x), y: round(y), angle: 0, width: 4 * PX_PER_METRE });
-    if (t.public_transport === 'stop_position' && (t.bus === 'yes' || !t.tram)) {
+    if (t.public_transport === 'stop_position' && (t.bus === 'yes' || !t.tram) && !waysOfNode.get(node.id)?.some((w) => busOnly(w.way.tags))) {
       const box = busStopBox(node.id, x, y);
       if (box) paint.push({ kind: 'busstop', ...box });
     }
@@ -2186,6 +2222,39 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     busRoutes.push({ ref: t.ref ?? '', ...(t.colour ? { colour: t.colour } : {}), legs, stops });
   }
 
+  // The bus stations: each stop_area's bays (a stop at the dead end of a way only buses use), and their platforms.
+  const busStations: BusStation[] = [];
+  for (const rel of data.relations.values()) {
+    if (rel.tags.public_transport !== 'stop_area') continue;
+    const number = (n: OsmNode) => (n.tags.local_ref ?? n.tags.ref ?? '').match(/\d+/)?.[0];
+    const platforms = rel.members
+      .filter((m) => m.type === 'node' && m.role.startsWith('platform'))
+      .map((m) => data.nodes.get(m.ref))
+      .filter((n): n is OsmNode => !!n)
+      .map((n) => ({ x: proj.x(n.lon), y: proj.y(n.lat), number: number(n) }));
+    const bays: Bay[] = [];
+    for (const m of rel.members) {
+      if (m.type !== 'node' || !(m.role === 'stop' || m.role.startsWith('stop_'))) continue;
+      const n = data.nodes.get(m.ref);
+      if (!n) continue;
+      // At the dead end of the way into it (no other way goes on from there).
+      const ways = waysOfNode.get(n.id) ?? [];
+      const on = ways.length === 1 ? ways.find((w) => busOnly(w.way.tags) && (w.index === 0 || w.index === w.way.nodes.length - 1) && roadIndexOfWay.has(w.way.id)) : undefined;
+      if (!on) continue;
+      const before = data.nodes.get(on.way.nodes[on.index === 0 ? 1 : on.index - 1]);
+      if (!before) continue;
+      const [x, y] = [proj.x(n.lon), proj.y(n.lat)];
+      if (x < 0 || y < 0 || x > width || y > height) continue;
+      const [bx, by] = [proj.x(before.lon), proj.y(before.lat)];
+      // Its platform: the one with its number, or else the nearest.
+      const own = platforms.find((p) => p.number !== undefined && p.number === number(n));
+      const near = own ?? [...platforms].sort((p, q) => Math.hypot(p.x - x, p.y - y) - Math.hypot(q.x - x, q.y - y))[0];
+      if (!near || Math.hypot(near.x - x, near.y - y) > 25 * PX_PER_METRE) continue;
+      bays.push({ x: round(x), y: round(y), angle: +Math.atan2(y - by, x - bx).toFixed(3), road: roadIndexOfWay.get(on.way.id)!, platform: [round(near.x), round(near.y)] });
+    }
+    if (bays.length >= 2) busStations.push({ ...(rel.tags.name ? { name: rel.tags.name } : {}), bays });
+  }
+
   // How busy each road is: what's along it to go to.
   const businesses: [number, number][] = [];
   for (const n of data.nodes.values()) if (isBusiness(n.tags)) businesses.push([proj.x(n.lon), proj.y(n.lat)]);
@@ -2312,6 +2381,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     ...(treeKinds.length ? { treeSpecies: treeKinds } : {}),
     ...(solar.length ? { solar } : {}),
     ...(busRoutes.length ? { busRoutes } : {}),
+    ...(busStations.length ? { busStations } : {}),
     ...(berths.length ? { berths } : {}),
     ...(ferries.length ? { ferries } : {}),
     ...(venues.length ? { venues } : {}),

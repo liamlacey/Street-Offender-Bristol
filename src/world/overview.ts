@@ -93,6 +93,7 @@ const AREAS: Partial<Record<AreaKind, string>> = {
   plaza: '#e9e3d6',
   parking: '#cfc9bd',
   forecourt: '#cfc9bd',
+  yard: '#c4beb2',
   dirt: '#cdbb98',
   pier: '#b9ab92',
   pontoon: '#b9ab92',

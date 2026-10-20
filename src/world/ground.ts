@@ -65,6 +65,7 @@ export function surfacePalette(): Palette {
     pier: s(Surface.Pavement),
     pontoon: s(Surface.Pavement),
     forecourt: s(Surface.Road),
+    yard: s(Surface.Road),
     slipway: s(Surface.Pavement),
     island: s(Surface.Pavement),
   };

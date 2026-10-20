@@ -126,6 +126,9 @@ export interface Mover {
   vy: number;
   /** A bus waiting at a stop, with its door open. */
   dwelling?: boolean;
+  /** At a bus station, in a bay: where its platform is (people get off to it, and on from it); and whether it's only just pulled in. */
+  bay?: [number, number];
+  fresh?: boolean;
   id: number;
   /** Which level it's on (0, the ground, if not given). */
   level?: number;
@@ -194,6 +197,9 @@ export class People {
   readonly spots: Spot[] = [];
   readonly crossings: CrossingPoint[] = [];
   private readonly crossingGrid = new Map<string, number[]>();
+  /** The bus stations' yards (and their bounds); and their bays' platforms, x, y. */
+  private readonly yards: { ring: Pts; x0: number; y0: number; x1: number; y1: number }[] = [];
+  private readonly platforms: [number, number][];
   /** The bus stops: where people wait (on the pavement by the stop), x, y. */
   readonly stops: [number, number][] = [];
   /** The parks and squares people wander about. */
@@ -234,6 +240,14 @@ export class People {
       list.push(i);
       this.seatGrid.set(key(b.x, b.y), list);
     });
+    for (const a of map.areas) {
+      if (a.kind !== 'yard') continue;
+      const ring = a.rings[0];
+      let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+      for (let i = 0; i + 1 < ring.length; i += 2) [x0, y0, x1, y1] = [Math.min(x0, ring[i]), Math.min(y0, ring[i + 1]), Math.max(x1, ring[i]), Math.max(y1, ring[i + 1])];
+      this.yards.push({ ring, x0, y0, x1, y1 });
+    }
+    this.platforms = (map.busStations ?? []).flatMap((st) => st.bays.map((b) => b.platform));
     this.buildWalks();
     this.buildSpots();
     this.buildCrossings();
@@ -266,7 +280,8 @@ export class People {
     const add = (line: Pts, busy: number, road: number, level: number) => {
       const pieces: Pts[] = [];
       // (Over the road at a crossing, too: they cross as the crossing says, waiting for the lights or a gap, not walking straight on.)
-      const keep = (x: number, y: number) => !this.inRoad(x, y, 0.1 * M, level);
+      // (Nor through a bus station's yard.)
+      const keep = (x: number, y: number) => !this.inRoad(x, y, 0.1 * M, level) && (level !== 0 || !this.inYard(x, y));
       // Every metre along it: whether it's kept, and whether it's one of its corners.
       const pts: [number, number, boolean, boolean][] = [];
       for (let i = 0; i + 3 < line.length; i += 2) {
@@ -376,6 +391,8 @@ export class People {
         const k = `${Math.round(r.stops[i] / 40)},${Math.round(r.stops[i + 1] / 40)}`;
         if (seen.has(k)) continue;
         seen.add(k);
+        // (Not at a bus station's: people get on and off there at its bays, from its platforms: see `buses`.)
+        if (this.platforms.some(([px, py]) => Math.hypot(px - r.stops[i], py - r.stops[i + 1]) < 30 * M)) continue;
         const near = this.nearestWalk(r.stops[i], r.stops[i + 1], 12 * M);
         if (near) this.stops.push([near[0], near[1]]);
       }
@@ -383,6 +400,7 @@ export class People {
   }
 
   private addSpot(s: Spot): void {
+    if (this.inYard(s.x, s.y)) return;
     const k = this.spots.length;
     this.spots.push(s);
     const list = this.spotGrid.get(key(s.x, s.y)) ?? [];
@@ -472,6 +490,12 @@ export class People {
   }
 
   /** Whether a point's on a road's carriageway (on a level: where people only go to cross, or running). */
+  /** Whether (x, y) is in a bus station's yard (no one walks about in it: it's all buses). */
+  inYard(x: number, y: number): boolean {
+    for (const a of this.yards) if (x > a.x0 && x < a.x1 && y > a.y0 && y < a.y1 && pointInRing(x, y, a.ring)) return true;
+    return false;
+  }
+
   inRoad(x: number, y: number, margin = -0.5 * M, level = 0): boolean {
     for (const k of this.roadGrid.get(key(x, y)) ?? []) {
       const { pts, half, level: on } = this.roads[k];
@@ -797,7 +821,7 @@ export class People {
       p.level = levelAt(p.level, p.x, p.y);
     }
     this.hitBy(all);
-    this.buses(movers);
+    this.buses(movers, dt);
   }
 
   /** Along their walk, keeping to their side of it; at its end, on to another starting there (or back the way they came). */
@@ -994,10 +1018,14 @@ export class People {
 
   /** Buses at their stops: those waiting get on (see `queue`); and a few get off, and walk away. */
   private readonly served = new Set<number>();
-  private buses(movers: Mover[]): void {
+  private buses(movers: Mover[], dt: number): void {
     for (const b of movers) {
       if (!b.dwelling) {
         this.served.delete(b.id);
+        continue;
+      }
+      if (b.bay) {
+        this.bay(b, b.bay, dt);
         continue;
       }
       if (this.served.has(b.id)) continue;
@@ -1010,13 +1038,39 @@ export class People {
     }
   }
 
+  /**
+   * A bus in its bay at a bus station: as it pulls in, those on it get off,
+   * up onto the platform and into the station; all the while it's there,
+   * others come out to it now and then, and get on.
+   */
+  private bay(b: Mover, [px, py]: [number, number], dt: number): void {
+    const [dx, dy] = door(b);
+    const d = Math.hypot(px - dx, py - dy) || 1;
+    const [ux, uy] = [(px - dx) / d, (py - dy) / d];
+    if (!this.served.has(b.id)) {
+      this.served.add(b.id);
+      for (let k = b.fresh ? 1 + Math.floor(this.rand() * 5) : 0; k > 0; k--) {
+        const p = this.make(dx + (this.rand() - 0.5) * M, dy + (this.rand() - 0.5) * M, 'board');
+        [p.tx, p.ty] = [px + ux * 2.5 * M + (this.rand() - 0.5) * 2 * M, py + uy * 2.5 * M + (this.rand() - 0.5) * 2 * M];
+        p.pace *= 0.6 + this.rand() * 0.4;
+      }
+    }
+    if (this.rand() < dt * 0.3) {
+      // (From in the station, a little way back from the platform's edge.)
+      const back = 2.5 * M + this.rand() * 2 * M;
+      const p = this.make(px + ux * back + (this.rand() - 0.5) * 2 * M, py + uy * back + (this.rand() - 0.5) * 2 * M, 'board');
+      [p.tx, p.ty] = [dx, dy];
+    }
+  }
+
   /** Running from danger: away from it, roads or not (but not into the water or a wall); once it's passed, back to what they were doing. */
   private flee(p: Person, dt: number, walkable: (x: number, y: number, level: number) => boolean): void {
     p.timer -= dt;
     if (p.timer <= 0) return this.rejoin(p);
     const [ux, uy] = [Math.cos(p.angle), Math.sin(p.angle)];
     const [nx, ny] = [p.x + ux * RUN * dt, p.y + uy * RUN * dt];
-    if (walkable(nx, ny, p.level)) {
+    // (Not into a bus station's yard: only out of it, if they're in it.)
+    if (walkable(nx, ny, p.level) && (p.level !== 0 || !this.inYard(nx, ny) || this.inYard(p.x, p.y))) {
       [p.x, p.y] = [nx, ny];
       p.speed = RUN;
     } else {

@@ -166,7 +166,8 @@ the left side's traffic goes the way's way, the right side's against it).
   (`highway=mini_roundabout`): a white circle 4 m across.
 - **Cycle boxes** (`cycleway=asl`): terracotta red (as Bristol's are), 4.5 m deep,
   behind a line across the lanes coming in, a big white bike filling them (side on, as the driver sees it: wheels across the lane).
-- **Bus stops** (`public_transport=stop_position`): a rectangular bay 3 m deep along
+- **Bus stops** (`public_transport=stop_position`; not on a way only buses may use,
+  as in a bus station's yard: see Bus stations): a rectangular bay 3 m deep along
   the kerb, on the side of the stop's sign or platform within 30 m (or the left,
   one-way), surfaced red with a dashed yellow edge, BUS STOP in big yellow letters.
   Only where the road allows: 22 m long, or 18, 15 or 12, whichever's the longest
@@ -190,7 +191,8 @@ the same every time), before it's laid on the road (`src/world/ground.ts`).
 
 **The ground** (`natural`, `landuse`, `leisure`, `amenity`, `area:highway`, …,
 closed ways and multipolygons): grass, parks, gardens, woods, pitches, play areas,
-flowerbeds, squares and plazas, car parks, building sites, water (the harbour:
+flowerbeds, squares and plazas, bus stations' yards (`area:highway=service`:
+surfaced like the roads, slabbed), car parks, building sites, water (the harbour:
 too deep to drive in), pools and fountains (shallow), piers (decking) and traffic
 islands. Everything else is paving: it's a city centre.
 
@@ -554,6 +556,29 @@ colour (`colour`) are kept.
   hasn't one), its number on its roof. A bus is 9 to 11 times your car's weight, and
   three times as sturdy.
 
+**Bus stations** (Bristol Bus Station): from a `public_transport=stop_area`
+relation, its bays the stop positions that are each the dead end of a way only buses
+may use (`access` or `motor_vehicle`/`motorcar` no or private, and `bus` or `psv` yes
+or designated; such a way is kept as a road, marked `bus`), at that way's end; each
+bay's platform is the stop area's platform with the same number (`local_ref`), else
+the nearest within 25 m. (Bristol's: 19 bays.)
+- The bus-only ways are driven by buses only (no other traffic, and none parked or
+  started on them), at 5 m/s. The yard is those joined to the bays; its ways in are
+  where something else drives into it (Bristol's: from Marlborough Street, at the
+  north-east), and its one-way ways take buses round it and out (to the south-west).
+- Coming near (within 700 m), about 65% of its bays have buses in already, part way
+  through their wait. Then a bus about every 3 s (at most 16 on their way in or in their
+  bays) sets off from 60 to 250 m away, out of sight, and drives the shortest way to a
+  way in. A bus on a route that calls there goes in too. In the yard it takes the first
+  free bay it comes to (at random, of those at a junction), drives nose in to 0.6 m from
+  its end and waits 45 to 120 s; it's in no one's way there. Then it backs out, rear
+  first, swinging round to face on round the yard (a curve from where it stands to a
+  point half its length and 2 m back up the yard from the bay's mouth), at up to 3 m/s,
+  once nothing's coming past there or stopped there and no one else is backing out
+  within 13 m of it (what comes round, after, waits for it); then on round the yard,
+  out, and on along its route (or on as anyone would). Its number and colour are one of
+  the routes that stop there. With no bay free, it goes round and out.
+
 **Parked cars:** in the car parks' bays (65% of them taken) and in the parking lanes'
 bays (55%, plus 1.2% per point of the street's activity, at most 92%; loading bays
 25%), not at bus stops (the bays aren't painted there either). Parallel bays face the
@@ -652,7 +677,11 @@ but the water and the buildings.
   stops for anyone in the road (crossing, running, diving or down there).
 - **Buses**: 1 to 3 wait at each bus stop near the view (on the walk nearest it); when a
   bus is waiting at the stop (within 20 m), they walk to its door (front, kerb side) and
-  get on; 0 to 3 get off each bus at each stop.
+  get on; 0 to 3 get off each bus at each stop. No one waits at the stops at a bus
+  station (within 30 m of its platforms), and no one walks about or stands about in its
+  yard (walks are cut where they cross it; no one runs into it). As a bus pulls into its
+  bay, 1 to 5 get off and walk up onto the platform and into the station (gone 2.5 m in);
+  while it's there, someone comes out to it about every 3 s and gets on.
 - **Danger**: only close by, and only in something (not you on foot): you going over 8 m/s within 3.5 m of them, or driving along a
   pavement (over 5 m/s, within 5 m): they run (4.2 m/s) away from you, roads or not (but
   not into the water or a wall), for 4 to 7 s, then go back to walking. A crash (or
