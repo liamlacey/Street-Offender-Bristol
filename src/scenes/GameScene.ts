@@ -45,6 +45,7 @@ import { WallLayer } from '../world/WallLayer';
 import { type Debris, type DebrisKind, debris, impactSpeed, racked } from '../world/damage';
 import { ACTION_EVENT, HudScene, PAUSE_EVENT, RESET_EVENT, STREET_EVENT } from './HudScene';
 import type { MenuData } from './MenuScene';
+import type { LoadingScene } from './LoadingScene';
 import type { Spot } from '../world/overview';
 import { WALKER, stepWalker, tuningFor } from '../car/rides';
 import { SkidMarks } from './SkidMarks';
@@ -223,6 +224,8 @@ export class GameScene extends Phaser.Scene {
   private skids!: SkidMarks;
   private audio: CarAudio | null = null;
   private hud!: HudScene;
+  /** Set up, and going (see `build`). */
+  private ready = false;
   private keys!: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'space' | 'r' | 'f' | 'e' | 'p' | 'esc', Phaser.Input.Keyboard.Key>;
   private input_: CarInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   private accumulator = 0;
@@ -257,17 +260,40 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.ready = false;
+    this.scene.launch('loading');
+    void this.build().catch((e) => {
+      console.error(e);
+      (this.scene.get('loading') as LoadingScene).failed();
+    });
+  }
+
+  /**
+   * Everything set up, a stage at a time, the loading screen's bar moving on
+   * between them (a frame drawn each time: see `stage`); then off you go.
+   */
+  private async build(): Promise<void> {
+    const loading = this.scene.get('loading') as LoadingScene;
+    const stage = async (label: string, done: number) => {
+      loading.show(done, label);
+      // (Two frames: one for the loading screen to be drawn in.)
+      for (let k = 0; k < 2; k++) await new Promise((r) => requestAnimationFrame(r));
+    };
+    await stage('Reading the map', 0);
     // Its own copy of the trees: knocking one down changes it.
     const map = { ...(mapData as unknown as GameMap), trees: [...(mapData as unknown as GameMap).trees] };
     this.world = buildWorld(map);
+    await stage('Laying the ground', LOADED.ground);
     this.surfaces = paintSurfaces(this.world);
     createArt(this);
     this.walls = [new SegmentGrid(this.world.walls[0]), new SegmentGrid(this.world.walls[1])];
     this.posts = [new CircleGrid(this.world.posts[0]), new CircleGrid(this.world.posts[1])];
     this.terrain = new Terrain(map.terrain, map.pxPerMetre, map.ledges);
+    await stage('Painting the roads', LOADED.paint);
     this.ground = new GroundLayer(this, this.world, this.terrain, DEPTH.ground);
     this.skids = new SkidMarks(this, this.terrain, DEPTH.skids);
     this.effects = new CarEffects(this, this.skids, DEPTH.effects);
+    await stage('Putting up the buildings', LOADED.buildings);
     this.buildings = new Buildings(this, this.world, this.terrain, DEPTH.buildings);
     this.kerbs = new Kerbs(map);
     this.humps = new Humps(map);
@@ -306,14 +332,18 @@ export class GameScene extends Phaser.Scene {
         if (kind === 'parapet') this.deckLayer.breakParapet(from, to);
       },
     }, DEPTH.props - 0.1, DEPTH.trees);
+    await stage('Planting the trees', LOADED.trees);
     this.addProps();
     this.addTrees();
     this.addLights();
     this.treeGrid = new Grid(this.trees.length, (i) => [this.trees[i].foot.x, this.trees[i].foot.y]);
     this.propGrid = new Grid(this.props.length, (i) => [this.props[i].x, this.props[i].y]);
     this.raisedGrid = new Grid(this.raised.length, (i) => [this.raised[i].x, this.raised[i].y]);
+    await stage('Starting the traffic', LOADED.traffic);
     this.traffic = new Traffic(map);
+    await stage('Mooring the boats', LOADED.boats);
     this.boats = new Boats(map);
+    await stage('Filling the streets', LOADED.people);
     this.people = new People(map, { seats: this.world.loose });
     this.peopleLayer = new PeopleLayer(this, this.people, (x, y, level) => this.surfaceHeight(x, y, level), { ground: DEPTH.props + 0.05, deck: DEPTH.onDeck });
     this.ripples = new WaterRipples(this, this.surfaces, (x, y) => this.groundAt(x, y), DEPTH.ripples);
@@ -339,6 +369,7 @@ export class GameScene extends Phaser.Scene {
     cam.setZoom(this.zoom);
     cam.centerOn(this.car.x, this.car.y);
     this.updatePerspective();
+    await stage('Looking round', LOADED.view);
     this.ground.update(cam.worldView, this.perspective, true);
     const v0 = cam.worldView;
     this.people.populate({ x0: v0.left, y0: v0.top, x1: v0.right, y1: v0.bottom }, true);
@@ -370,8 +401,11 @@ export class GameScene extends Phaser.Scene {
     this.keys.esc.on('down', () => this.openMenu());
     this.events.on(PAUSE_EVENT, this.openMenu, this);
 
+    loading.show(1, 'Ready');
+    this.scene.stop('loading');
     this.scene.launch('hud');
     this.hud = this.scene.get('hud') as HudScene;
+    this.ready = true;
 
     // Web Audio only (the old HTML5 audio fallback can't synthesise).
     const sound = this.sound as Phaser.Sound.WebAudioSoundManager;
@@ -518,6 +552,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, deltaMs: number): void {
+    // (Still setting up: see `build`.)
+    if (!this.ready) return;
     const dt = Math.min(deltaMs / 1000, 0.1);
     this.readInput();
     this.accumulator = Math.min(this.accumulator + dt, PHYSICS_DT * MAX_STEPS_PER_FRAME);
@@ -1705,6 +1741,8 @@ const shapes = new Map<string, Shape>();
 
 /** Out of what you're driving only going slower than this, px/s (a fast walk). */
 const GET_OUT_SPEED = 3 * 8;
+/** How far through setting up each stage starts (of 1): about as long as each takes. */
+const LOADED = { ground: 0.06, paint: 0.29, buildings: 0.3, trees: 0.33, traffic: 0.34, boats: 0.6, people: 0.68, view: 0.82 };
 /** How far off a siren can be heard, px. */
 const SIREN_HEARD = 260 * 8;
 /** Into something only from within this of it, px. */
