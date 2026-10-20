@@ -571,8 +571,17 @@ export class GameScene extends Phaser.Scene {
       slide: this.onFoot ? 0 : Math.max(Math.abs(lateralSpeed(this.car)), this.input_.handbrake ? speed * 0.6 : 0),
       surface: SURFACE_KIND[this.surface],
       // (No engine on foot or on a bike; a deeper one in your truck, a lorry or a bus.)
-      engine: this.onFoot || kind === 'bike' ? 0 : kind === 'lorry' || kind === 'bus' || kind === 'double' || kind === 'own' ? 0.7 : kind === 'van' ? 0.85 : 1,
+      engine: this.onFoot || kind === 'bike' ? 0 : kind === 'lorry' || kind === 'bus' || kind === 'double' || kind === 'own' || kind === 'fire' ? 0.7 : kind === 'van' || kind === 'ambulance' ? 0.85 : 1,
     });
+    // The nearest siren going, louder the nearer.
+    let siren: Vehicle | undefined;
+    let near = SIREN_HEARD;
+    for (const v of this.traffic.vehicles) {
+      if (!v.siren) continue;
+      const d = Math.hypot(v.x - this.car.x, v.y - this.car.y);
+      if (d < near) [near, siren] = [d, v];
+    }
+    this.audio?.sirens(siren ? 1 - near / SIREN_HEARD : 0, siren?.kind === 'police' ? 'wail' : 'two');
     // The button to get out (slow enough), or in (something within reach).
     this.reachTimer -= dt;
     if (this.reachTimer <= 0) {
@@ -1684,6 +1693,8 @@ const shapes = new Map<string, Shape>();
 
 /** Out of what you're driving only going slower than this, px/s (a fast walk). */
 const GET_OUT_SPEED = 3 * 8;
+/** How far off a siren can be heard, px. */
+const SIREN_HEARD = 260 * 8;
 /** Into something only from within this of it, px. */
 const REACH = 1.3 * 8;
 

@@ -17,6 +17,10 @@ const TUNED: Record<VehicleKind, Partial<CarTuning>> = {
   // Your armoured truck: a big engine for its weight, but it's heavy to stop and to turn.
   own: { engineAccel: 340, maxForwardSpeed: 360, brakeDecel: 620, maxTurnRate: 2.8, fullSteerSpeed: 120, grip: 9.5, climbSpeedLoss: 2 },
   small: { engineAccel: 320, maxForwardSpeed: 330, maxTurnRate: 3.5 },
+  // The emergency services': a quick police car; an ambulance, quicker than a van; a fire engine, a lorry but punchier.
+  police: { engineAccel: 380, maxForwardSpeed: 400, maxTurnRate: 3.3 },
+  ambulance: { engineAccel: 250, maxForwardSpeed: 300, maxTurnRate: 2.6, grip: 7.5, brakeDecel: 580 },
+  fire: { engineAccel: 170, maxForwardSpeed: 240, maxTurnRate: 2, grip: 7, brakeDecel: 470, fullSteerSpeed: 140, climbSpeedLoss: 3.5 },
   hatch: { engineAccel: 330, maxForwardSpeed: 340 },
   saloon: { engineAccel: 340, maxForwardSpeed: 360, maxTurnRate: 3.2 },
   estate: { engineAccel: 320, maxForwardSpeed: 350, maxTurnRate: 3.1 },

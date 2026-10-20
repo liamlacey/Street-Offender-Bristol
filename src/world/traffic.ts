@@ -11,10 +11,11 @@
  */
 
 import type { Wreck } from '../car/dents';
-import { type BusRoute, type BusStation, type GameMap, type Pts, type Road, type RoadKind, pointInRing } from '../map/osm';
+import { type BusRoute, type BusStation, type GameMap, type Pts, type Road, type RoadKind, type Service, pointInRing } from '../map/osm';
 import { type Body, bodyHull } from '../physics/collisions';
 import type { Light } from './lights';
 import { type Space, parkingSpaces } from './parking';
+import { type Kerbside, kerbsides } from './posts';
 import { Terrain } from './terrain';
 import { lineLength, offsetLine, subPolyline } from './world';
 
@@ -22,7 +23,7 @@ const M = 8;
 
 // --- The vehicles ---
 
-export type VehicleKind = 'small' | 'hatch' | 'saloon' | 'estate' | 'suv' | 'van' | 'lorry' | 'bus' | 'double' | 'bike' | 'own';
+export type VehicleKind = 'small' | 'hatch' | 'saloon' | 'estate' | 'suv' | 'van' | 'lorry' | 'bus' | 'double' | 'bike' | 'own' | 'police' | 'ambulance' | 'fire';
 
 /**
  * Each kind: how long and wide (px; real sizes, a tenth up, to match your car),
@@ -44,6 +45,10 @@ export const VEHICLES: Record<VehicleKind, { length: number; width: number; mass
   bike: { length: 1.8 * 1.1 * M, width: 0.65 * 1.1 * M, mass: 0.08, traffic: 0.18, parked: 0, paint: 'bike' },
   // Yours: an armoured truck, armour plate on a lorry's chassis (about 8 tonnes), left where you got out of it.
   own: { length: 6.4 * 1.1 * M, width: 2.5 * 1.1 * M, mass: 6, traffic: 0, parked: 0, paint: 'car' },
+  // The emergency services' (see Post), each in its livery: a police estate car, an ambulance (a van with a box on the back), a fire engine.
+  police: { length: 4.9 * 1.1 * M, width: 1.85 * 1.1 * M, mass: 1.1, traffic: 0, parked: 0, paint: 'car' },
+  ambulance: { length: 6.6 * 1.1 * M, width: 2.3 * 1.1 * M, mass: 2.4, traffic: 0, parked: 0, paint: 'van' },
+  fire: { length: 8.4 * 1.1 * M, width: 2.5 * 1.1 * M, mass: 7, traffic: 0, parked: 0, paint: 'lorry' },
 };
 
 /** The colours, about as common as on Britain's roads (grey, black and white the most); vans mostly white; lorries' cabs. */
@@ -135,6 +140,32 @@ export interface Vehicle extends Body {
   ends?: boolean;
   /** A cyclist's rider's clothes (one of the people's looks). */
   rider?: number;
+  /**
+   * An emergency vehicle: seconds left its blue lights are flashing; on a call (its siren going: it hurries, and goes
+   * through red lights); its place at its post (see Post), parked in it, or on its way to park in it (and pulling in to it).
+   */
+  blues?: number;
+  siren?: boolean;
+  post?: number;
+  spot?: Kerbside<Lane>;
+  parking?: boolean;
+}
+
+/**
+ * An emergency service's place (a police station, a fire station, a
+ * hospital: see Service), as the traffic has it: its kind of vehicle and
+ * where they park (most taken at first); the way to each of those places'
+ * lanes from round about (and where, out of sight, one coming to park sets
+ * off from); and when, with you near, one next comes or goes.
+ */
+export interface Post {
+  service: Service;
+  kind: VehicleKind;
+  x: number;
+  y: number;
+  spots: Kerbside<Lane>[];
+  ways: Map<number, { toward: Map<number, Lane>; from: Lane[] }>;
+  timer: number;
 }
 
 /** A bus on its route. */
@@ -288,7 +319,7 @@ const BUSIEST = 3;
 /** How many bikes ride along a cycle path each way, per 100 m. */
 const PATH_BIKES = 0.9;
 /** How fast each kind's driven, against the road's usual speed (before the driver's own pace). */
-const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85, bus: 0.85, double: 0.82, bike: 1, own: 1 };
+const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85, bus: 0.85, double: 0.82, bike: 1, own: 1, police: 1.05, ambulance: 1, fire: 0.9 };
 /** How fast a cyclist rides on the flat, px/s (each faster or slower: see pace); how much less briskly they pull away than a car. */
 const BIKE_SPEED = 5.3 * M;
 const BIKE_ACCEL = 0.4;
@@ -298,7 +329,7 @@ const BIKE_ROOM = 1.5 * M;
 /** A cyclist hit harder than this (an impulse, your car's mass × px/s) comes off. */
 const UNSEAT = 1;
 /** Up a hill, how much each kind slows for each 1 in 1 of it (a lorry labours; a car barely notices); and how strongly gravity holds it back pulling away. */
-const CLIMB: Record<VehicleKind, number> = { small: 0.8, hatch: 0.6, saloon: 0.5, estate: 0.5, suv: 0.5, van: 1.3, lorry: 3, bus: 2.2, double: 2.4, bike: 7, own: 0.5 };
+const CLIMB: Record<VehicleKind, number> = { small: 0.8, hatch: 0.6, saloon: 0.5, estate: 0.5, suv: 0.5, van: 1.3, lorry: 3, bus: 2.2, double: 2.4, bike: 7, own: 0.5, police: 0.4, ambulance: 1, fire: 2 };
 const GRAVITY = 9.81 * M;
 /** Dawdling: how often a driver slows a moment, a second (more often the busier the street), and for how long. */
 const DAWDLE = 0.003;
@@ -765,6 +796,20 @@ const STATION_NEAR = 700 * M;
 /** How near the ground a bus backing out goes over (its points) things keep, px; a point there, as something to look at it with. */
 const ZONE = 1.6 * M;
 const ZONE_PROBE: Obstacle = { id: -3, x: 0, y: 0, angle: 0, r: 0, length: 0, vx: 0, vy: 0, level: 0 };
+/**
+ * The emergency services' posts: with you this near one, now and then (every POST_EVERY s) one of its vehicles
+ * pulls out (mostly on a call, its siren going: SIREN of them) or another comes, from POST_FROM away out of sight, and
+ * parks; how many places each has (a hospital's with an A&E more), and how many of them have one in at first. On a call
+ * it goes SIREN_PACE as fast as it would, up to SIREN_TOP.
+ */
+const POST_NEAR = 350 * M;
+const POST_EVERY: [number, number] = [10, 28];
+const POST_FROM: [number, number] = [80 * M, 260 * M];
+const POST_PLACES: Record<'police' | 'fire' | 'ambulance' | 'emergency', number> = { police: 5, fire: 3, ambulance: 3, emergency: 6 };
+const POST_FILLED = 0.7;
+const SIREN = 0.8;
+const SIREN_PACE = 1.5;
+const SIREN_TOP = 19 * M;
 /** How far the way round a bus station's yard is moved over from its bays, at most, px. */
 const AISLE = 5 * M;
 const STATION_BUSES = 16;
@@ -838,6 +883,7 @@ export class Traffic {
   private readonly routeLanes: { lane: Lane; leg: number }[][];
   /** The bus stations; and which a yard lane's in. */
   readonly stations: Station[] = [];
+  readonly posts: Post[] = [];
   private readonly yardOf = new Map<number, number>();
   /** How many there should be round you now. */
   target = 0;
@@ -910,6 +956,36 @@ export class Traffic {
       this.parked.push(v);
       this.parkedById.set(v.id, v);
     }
+    // The emergency services' posts, their vehicles parked along the kerb outside (most of their places taken).
+    const spaces = parkingSpaces(map);
+    const kerbLanes = this.lanes.filter((l) => !l.path && !l.bus && l.level === 0 && DRIVEN.has(map.roads[l.road].kind));
+    const all: Kerbside<Lane>[] = [];
+    for (const service of map.services ?? []) {
+      const kind: VehicleKind = service.kind === 'police' ? 'police' : service.kind === 'fire' ? 'fire' : 'ambulance';
+      const { length, width } = VEHICLES[kind];
+      const spots = kerbsides(map, kerbLanes, service, length, width, spaces, all, POST_PLACES[service.kind === 'ambulance' && service.emergency ? 'emergency' : service.kind]);
+      if (!spots.length) continue;
+      all.push(...spots);
+      const ways = new Map<number, { toward: Map<number, Lane>; from: Lane[] }>();
+      for (const spot of spots) {
+        if (ways.has(spot.lane.id)) continue;
+        const { toward, dist } = this.wayTo([spot.lane], POST_FROM[1] * 1.5);
+        ways.set(spot.lane.id, { toward, from: [...dist.entries()].filter(([, d]) => d >= POST_FROM[0] && d <= POST_FROM[1]).map(([id]) => this.lanes[id]) });
+      }
+      const post: Post = { service, kind, x: service.x, y: service.y, spots, ways, timer: this.rand() * POST_EVERY[1] };
+      this.posts.push(post);
+      for (const spot of spots) if (this.rand() < POST_FILLED) this.parkAt(this.posts.length - 1, spot, this.make(kind, spot.x, spot.y, spot.angle, 0), this.rand() < 0.15);
+    }
+  }
+
+  /** One of a post's vehicles, parked in its place (its blue lights left on a while, or not). */
+  private parkAt(post: number, spot: Kerbside<Lane>, v: Vehicle, blues: boolean): void {
+    Object.assign(v, { mode: 'parked', x: spot.x, y: spot.y, angle: spot.angle, speed: 0, vx: 0, vy: 0, spin: 0, side: 0, sideRate: 0, accel: 0, damping: SLIDE, post, spot, parking: false, siren: false });
+    v.space = { x: spot.x, y: spot.y, angle: spot.angle, length: v.length, taken: 1, endOn: false };
+    v.blues = blues ? 20 + this.rand() * 70 : 0;
+    spot.taken = v.id;
+    this.parked.push(v);
+    this.parkedById.set(v.id, v);
   }
 
   private make(kind: VehicleKind, x: number, y: number, angle: number, level: number): Vehicle {
@@ -1002,7 +1078,7 @@ export class Traffic {
     while (ahead < LOOK_MAX + 20 * M) {
       const last = v.route[v.route.length - 1];
       if (!last.lane) break;
-      let next = v.bus?.station !== undefined ? this.stationNext(v, last.lane) : v.bus && !v.bus.lost ? this.busNext(v, last.lane) : this.next(last.lane, v.kind === 'bike', !!v.bus);
+      let next = v.spot ? this.toSpot(v, last.lane) : v.bus?.station !== undefined ? this.stationNext(v, last.lane) : v.bus && !v.bus.lost ? this.busNext(v, last.lane) : this.next(last.lane, v.kind === 'bike', !!v.bus);
       // A bus on its route, coming into a bus station's yard: it calls there (at a bay) on its way through.
       const station = next ? this.yardOf.get(next.id) : undefined;
       if (station !== undefined && v.bus && v.bus.station === undefined && !v.bus.done) {
@@ -1019,6 +1095,13 @@ export class Traffic {
       if (v.bus) this.findStops(v, next);
       ahead += turn.length + next.length;
     }
+  }
+
+  /** On its way to park at its post: the shortest way to its place's lane (and on past it, only to look along). */
+  private toSpot(v: Vehicle, a: Lane): Lane | null {
+    const spot = v.spot!;
+    if (a.id === spot.lane.id) return this.next(a);
+    return this.posts[v.post!].ways.get(spot.lane.id)?.toward.get(a.id) ?? this.next(a);
   }
 
   private turn(a: Lane, b: Lane): Path {
@@ -1096,9 +1179,7 @@ export class Traffic {
         if (near < width + 0.4 * M) (a.near.push(b), b.near.push(a));
       }
     }
-    // The lanes arriving at each junction.
-    const into = new Map<number, Lane[]>();
-    for (const l of this.lanes) into.set(l.to, [...(into.get(l.to) ?? []), l]);
+    const into = this.into;
     // The yard: the bus-only lanes joined to the bays.
     const yard = new Set<number>();
     const todo = bays.map((b) => b.lane.from);
@@ -1114,23 +1195,7 @@ export class Traffic {
     this.aisle(yard, bays, yards);
     // The way in from round about: back from its ways in (yard lanes something else drives into), the shortest way to each.
     const entrances = [...yard].map((i) => this.lanes[i]).filter((l) => (into.get(l.from) ?? []).some((o) => !yard.has(o.id) && !o.path && !o.bus));
-    const toward = new Map<number, Lane>();
-    const dist = new Map<number, number>(entrances.map((l) => [l.id, 0]));
-    const queue: [number, Lane][] = entrances.map((l) => [0, l]);
-    while (queue.length) {
-      // (A queue kept in order: it's only the streets round about.)
-      queue.sort((a, b) => b[0] - a[0]);
-      const [d, x] = queue.pop()!;
-      if (d > (dist.get(x.id) ?? Infinity)) continue;
-      for (const p of into.get(x.from) ?? []) {
-        if (yard.has(p.id) || p.path || p.bus || (p.edge === x.edge && p.dir !== x.dir)) continue;
-        const nd = d + p.length;
-        if (nd > STATION_FROM[1] * 1.5 || nd >= (dist.get(p.id) ?? Infinity)) continue;
-        dist.set(p.id, nd);
-        toward.set(p.id, x);
-        queue.push([nd, p]);
-      }
-    }
+    const { toward, dist } = this.wayTo(entrances, STATION_FROM[1] * 1.5, (p) => yard.has(p.id));
     const from = [...dist.entries()].filter(([id, d]) => d >= STATION_FROM[0] && d <= STATION_FROM[1] && !yard.has(id)).map(([id]) => this.lanes[id]);
     // The routes that call at it.
     const services: { ref: string; colour: string }[] = [];
@@ -1141,6 +1206,43 @@ export class Traffic {
     }
     const [x, y] = [bays.reduce((t, b) => t + b.platform[0], 0) / bays.length, bays.reduce((t, b) => t + b.platform[1], 0) / bays.length];
     return { index, bays, yard, bayRoads: new Set(bays.map((b) => b.lane.road)), x, y, toward, from, services, filled: false, timer: 0 };
+  }
+
+  /** The lanes arriving at each junction. */
+  private get into(): Map<number, Lane[]> {
+    if (!this.intoCache) {
+      this.intoCache = new Map();
+      for (const l of this.lanes) this.intoCache.set(l.to, [...(this.intoCache.get(l.to) ?? []), l]);
+    }
+    return this.intoCache;
+  }
+
+  private intoCache?: Map<number, Lane[]>;
+
+  /**
+   * The shortest way to some lanes from the streets round about (within `max`
+   * px, by road; not by cycle paths or ways only buses use, nor those `skip`
+   * says): from each lane, the next towards them, and how far it is.
+   */
+  private wayTo(ends: Lane[], max: number, skip: (l: Lane) => boolean = () => false): { toward: Map<number, Lane>; dist: Map<number, number> } {
+    const toward = new Map<number, Lane>();
+    const dist = new Map<number, number>(ends.map((l) => [l.id, 0]));
+    const queue: [number, Lane][] = ends.map((l) => [0, l]);
+    while (queue.length) {
+      // (A queue kept in order: it's only the streets round about.)
+      queue.sort((a, b) => b[0] - a[0]);
+      const [d, x] = queue.pop()!;
+      if (d > (dist.get(x.id) ?? Infinity)) continue;
+      for (const p of this.into.get(x.from) ?? []) {
+        if (skip(p) || p.path || p.bus || (p.edge === x.edge && p.dir !== x.dir)) continue;
+        const nd = d + p.length;
+        if (nd > max || nd >= (dist.get(p.id) ?? Infinity)) continue;
+        dist.set(p.id, nd);
+        toward.set(p.id, x);
+        queue.push([nd, p]);
+      }
+    }
+    return { toward, dist };
   }
 
   /**
@@ -1362,6 +1464,12 @@ export class Traffic {
 
   /** It's done with its bay (or won't get there): the bay's free. */
   private release(v: Vehicle): void {
+    // (An emergency vehicle's place at its post, too.)
+    if (v.spot) {
+      if (v.spot.taken === v.id) v.spot.taken = null;
+      v.spot = undefined;
+      v.parking = false;
+    }
     const bus = v.bus;
     if (!bus?.bay) return;
     if (bus.bay.taken === v.id) bus.bay.taken = null;
@@ -1372,8 +1480,70 @@ export class Traffic {
 
   /** A bus on its way into a bus station near you (kept, however far off it is, till it's there and gone). */
   private bound(v: Vehicle): boolean {
+    // (One on its way to park at its post, too.)
+    if (v.spot && v.post !== undefined && Math.hypot(this.posts[v.post].x - v.x, this.posts[v.post].y - v.y) < POST_NEAR * 2) return true;
     const st = v.bus?.station === undefined || v.bus.done ? undefined : this.stations[v.bus.station];
     return !!st && Math.hypot(st.x - v.x, st.y - v.y) < STATION_NEAR;
+  }
+
+  /**
+   * The emergency services' posts near you: now and then one of the vehicles
+   * parked outside pulls out and goes (mostly on a call, its siren going), or
+   * another comes, out of sight, and parks in a free place; and the blue lights
+   * left on, going off in time.
+   */
+  private populatePosts(dt: number, player: Player, view: TrafficView): void {
+    for (const [i, post] of this.posts.entries()) {
+      if (Math.hypot(post.x - player.x, post.y - player.y) > POST_NEAR) continue;
+      const parked: Vehicle[] = [];
+      for (const spot of post.spots) {
+        const v = spot.taken === null ? undefined : this.parkedById.get(spot.taken);
+        if (!v) continue;
+        if (v.blues) v.blues = Math.max(0, v.blues - dt);
+        if (v.mode === 'parked' && v.space && Math.hypot(v.x - spot.x, v.y - spot.y) < 0.5 * M) parked.push(v);
+      }
+      post.timer -= dt;
+      if (post.timer > 0) continue;
+      post.timer = POST_EVERY[0] + this.rand() * (POST_EVERY[1] - POST_EVERY[0]);
+      const free = post.spots.filter((p) => p.taken === null);
+      if (parked.length && (this.rand() < 0.5 || !free.length)) this.callOut(parked[Math.floor(this.rand() * parked.length)]);
+      else if (free.length) this.callIn(i, free[Math.floor(this.rand() * free.length)], view);
+    }
+  }
+
+  /** Off from its post: out from the kerb, and away (mostly on a call: blue lights, siren). */
+  private callOut(v: Vehicle): void {
+    const spot = v.spot!;
+    const i = this.parked.indexOf(v);
+    if (i >= 0) this.parked.splice(i, 1);
+    this.parkedById.delete(v.id);
+    spot.taken = null;
+    const siren = this.rand() < SIREN;
+    Object.assign(v, { mode: 'drive', route: [spot.lane], s: spot.s, side: spot.off, sideRate: 0, speed: 0, accel: 0, react: 0.3, back: null, space: undefined, spot: undefined, post: undefined, parking: false, siren, blues: siren ? Infinity : 0 });
+    this.plan(v);
+    this.pose(v);
+    this.vehicles.push(v);
+  }
+
+  /** Another of a post's vehicles on its way back to park in a free place (setting off out of sight). */
+  private callIn(post: number, spot: Kerbside<Lane>, view: TrafficView): void {
+    const from = this.posts[post].ways.get(spot.lane.id)?.from ?? [];
+    for (let k = 0; k < 6 && from.length; k++) {
+      const lane = from[Math.floor(this.rand() * from.length)];
+      const s = this.rand() * lane.length;
+      const [x, y] = pathAt(lane, s);
+      if (this.inView(x, y, view, 60) || this.vehicles.some((o) => Math.hypot(o.x - x, o.y - y) < 12 * M)) continue;
+      const v = this.make(this.posts[post].kind, 0, 0, 0, lane.level);
+      Object.assign(v, { route: [lane], s, post, spot });
+      spot.taken = v.id;
+      v.siren = this.rand() < SIREN * 0.75;
+      v.blues = v.siren ? Infinity : 0;
+      this.plan(v);
+      v.speed = Math.min(lane.speed * v.pace, MAX_SPEED, this.limitAhead(v));
+      this.pose(v);
+      this.vehicles.push(v);
+      return;
+    }
   }
 
   /** Buses coming to the bus stations near you (and, as you come near one, some in its bays already). */
@@ -1581,8 +1751,9 @@ export class Traffic {
   private obstacles(player: Player): Obstacle[] {
     const out: Obstacle[] = [{ id: -1, x: player.x, y: player.y, angle: player.heading, r: player.width / 2, length: player.length, vx: player.vx, vy: player.vy, level: player.level }, ...this.pedestrians];
     for (const v of this.vehicles) out.push(v);
-    // Parked cars are by the kerb, out of the way: only those that have been knocked out of their bays count.
-    for (const v of this.parked) if (v.mode !== 'parked' || !v.space || Math.hypot(v.x - v.space.x, v.y - v.space.y) > 0.5 * M) out.push(v);
+    // Parked cars are by the kerb, out of the way: only those that have been knocked out of their bays count (and the emergency
+    // services', parked a little out into the road: they're gone round).
+    for (const v of this.parked) if (v.mode !== 'parked' || !v.space || v.post !== undefined || Math.hypot(v.x - v.space.x, v.y - v.space.y) > 0.5 * M) out.push(v);
     return out;
   }
 
@@ -1664,7 +1835,8 @@ export class Traffic {
           if (at < -2) continue;
           const l = light(st.signal);
           const stop = l === 'red' || l === 'redamber' || (l === 'amber' && at > (v.speed * v.speed) / (2 * BRAKE * 1.5));
-          if (stop && at < gap) {
+          // (Not on a call: it goes through.)
+          if (stop && at < gap && !v.siren) {
             gap = Math.max(0, at - 1);
             lead = 0;
             hold = AT_LINE;
@@ -1703,6 +1875,27 @@ export class Traffic {
         }
         d += p.length;
       }
+    }
+    // On its way to park at its post: up to its place (its siren off as it gets near), then over to the kerb, and parked (see sidle).
+    if (v.spot) {
+      let d = -v.s - front;
+      for (const p of v.route) {
+        if (d > look + 5 * M) break;
+        if (p === v.spot.lane) {
+          const at = d + v.spot.s + front;
+          if (v.siren && at < 40 * M) [v.siren, v.blues] = [false, this.rand() < 0.5 ? 20 + this.rand() * 40 : 0];
+          if (at < 0.6 * M && v.speed < 1) v.parking = true;
+          else if (at < gap) {
+            gap = Math.max(0, at);
+            lead = 0;
+            hold = AT_LINE * 0.3;
+            blocker = undefined;
+          }
+          break;
+        }
+        d += p.length;
+      }
+      if (v.parking) [gap, lead, hold] = [0, 0, AT_LINE * 0.3];
     }
     // A bus at a bus station: into its bay, nose in, to near its end; there a while for people to get off and on; then it backs out.
     if (v.bus?.bay) {
@@ -1823,12 +2016,13 @@ export class Traffic {
     const [gx, gy] = this.terrain.slope(v.x, v.y);
     const grade = gx * Math.cos(v.angle) + gy * Math.sin(v.angle);
     cruise *= grade > 0 ? Math.max(0.45, 1 - CLIMB[v.kind] * grade) : 1 + Math.min(0.05, -grade * 0.3);
-    cruise = Math.min(cruise, MAX_SPEED);
+    // On a call: in a hurry.
+    cruise = v.siren ? Math.min(cruise * SIREN_PACE, SIREN_TOP) : Math.min(cruise, MAX_SPEED);
     if (v.bus?.yield) cruise *= 0.6;
     // Badly damaged: it limps along.
     if (v.limping) cruise *= 0.55;
     // ...and now and then it dawdles a moment (more often along a busy street).
-    if (v.dawdle > 0) {
+    if (v.dawdle > 0 && !v.siren) {
       v.dawdle -= dt;
       cruise *= v.dawdleTo;
     } else if (lane && v.route[0].lane && v.speed > 3 * M && this.rand() < (DAWDLE + DAWDLE_BUSY * Math.min(30, lane.activity)) * dt) {
@@ -1886,6 +2080,8 @@ export class Traffic {
       v.stuck = 0;
     }
     this.sidle(v, dt, atStop, obstacles);
+    // (Pulled in to its place at its post, and parked there: it's done driving.)
+    if (v.mode !== 'drive') return;
     v.s += v.speed * dt;
     while (v.route.length > 1 && v.s > v.route[0].length) {
       v.s -= v.route[0].length;
@@ -2123,6 +2319,8 @@ export class Traffic {
       rate = SIDLE;
     }
     if (v.passing) want = -v.passing.out;
+    // Pulling in to its place at its post.
+    if (v.parking && v.spot) [want, rate] = [v.spot.off, SIDLE];
     // A cyclist: over in the cycle lane, or near the kerb (through a turn, as they were).
     if (v.kind === 'bike') {
       want = lane ? lane.cycleAt : v.side;
@@ -2136,6 +2334,13 @@ export class Traffic {
     const step = Math.max(-rate * dt, Math.min(rate * dt, want - v.side));
     v.side += step;
     v.sideRate = dt > 0 ? step / dt : 0;
+    // In at the kerb: parked.
+    if (v.parking && v.spot && Math.abs(v.side - v.spot.off) < 0.05 * M) {
+      const [post, spot] = [v.post!, v.spot];
+      const i = this.vehicles.indexOf(v);
+      if (i >= 0) this.vehicles.splice(i, 1);
+      this.parkAt(post, spot, v, (v.blues ?? 0) > 0);
+    }
   }
 
   /** Whether anything's beside it on one side (+1 its left, -1 its right) within `reach` px of moving over. */
@@ -2327,6 +2532,7 @@ export class Traffic {
   /** Taken out of the traffic (or off its parking place): you've got in it. */
   take(v: Vehicle): void {
     this.remove(v);
+    this.release(v);
     const i = this.parked.indexOf(v);
     if (i >= 0) this.parked.splice(i, 1);
     this.parkedById.delete(v.id);
@@ -2380,6 +2586,7 @@ export class Traffic {
       }
     }
     this.populateStations(dt, player, view);
+    this.populatePosts(dt, player, view);
     this.spawnTimer -= dt;
     if (this.spawnTimer > 0 && this.started) return;
     this.spawnTimer = 0.2;

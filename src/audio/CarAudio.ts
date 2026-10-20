@@ -32,6 +32,7 @@ export class CarAudio {
   private readonly squeal: Loop;
   private readonly rumble: Loop;
   private readonly slosh: Loop;
+  private readonly siren: Siren;
   private readonly noise: AudioBuffer;
 
   constructor(
@@ -46,6 +47,12 @@ export class CarAudio {
     this.squeal = new Loop(ctx, this.out, this.noise, 'bandpass', 2200, 6);
     this.rumble = new Loop(ctx, this.out, this.noise, 'lowpass', 260, 1);
     this.slosh = new Loop(ctx, this.out, this.noise, 'bandpass', 700, 1.5);
+    this.siren = new Siren(ctx, this.out);
+  }
+
+  /** The nearest siren going (0, none, to 1, right by you): a police car's wail, or an ambulance's or fire engine's two tones. */
+  sirens(level: number, tone: 'wail' | 'two'): void {
+    this.siren.update(level, tone);
   }
 
   /** Call every frame. */
@@ -221,6 +228,7 @@ export class CarAudio {
     this.squeal.stop();
     this.rumble.stop();
     this.slosh.stop();
+    this.siren.stop();
     this.out.disconnect();
   }
 
@@ -285,6 +293,40 @@ class Engine {
   stop(): void {
     this.saw.stop();
     this.sub.stop();
+    this.gain.disconnect();
+  }
+}
+
+/** A siren: a square wave, softened, rising and falling (a wail) or between two notes (two-tone, as Britain's ambulances and fire engines), as loud as it's near. */
+class Siren {
+  private readonly osc: OscillatorNode;
+  private readonly filter: BiquadFilterNode;
+  private readonly gain: GainNode;
+
+  constructor(
+    private readonly ctx: AudioContext,
+    out: AudioNode,
+  ) {
+    this.osc = ctx.createOscillator();
+    this.osc.type = 'square';
+    this.filter = ctx.createBiquadFilter();
+    this.filter.type = 'lowpass';
+    this.filter.frequency.value = 2000;
+    this.gain = ctx.createGain();
+    this.gain.gain.value = 0;
+    this.osc.connect(this.filter).connect(this.gain).connect(out);
+    this.osc.start();
+  }
+
+  update(level: number, tone: 'wail' | 'two'): void {
+    const t = this.ctx.currentTime;
+    const freq = tone === 'wail' ? 650 + 700 * (0.5 - 0.5 * Math.cos((t * Math.PI * 2) / 4.2)) : t % 1.1 < 0.55 ? 925 : 740;
+    this.osc.frequency.setTargetAtTime(freq, t, tone === 'wail' ? 0.05 : 0.01);
+    this.gain.gain.setTargetAtTime(0.11 * level * level, t, 0.08);
+  }
+
+  stop(): void {
+    this.osc.stop();
     this.gain.disconnect();
   }
 }

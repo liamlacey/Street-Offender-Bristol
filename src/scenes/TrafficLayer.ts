@@ -78,7 +78,7 @@ export class TrafficLayer {
         const big = v.kind === 'bike' ? BIKE_SIZE : 1;
         s.body.setPosition(x, y).setRotation(v.angle).setDepth(d).setScale(big / ART_SCALE);
         // Taller, the further its shadow falls.
-        const fall = v.kind === 'lorry' ? 1.8 : v.kind === 'van' || v.kind === 'suv' ? 1.3 : v.kind === 'bike' ? 0.7 : 1;
+        const fall = v.kind === 'lorry' || v.kind === 'fire' ? 1.8 : v.kind === 'van' || v.kind === 'suv' || v.kind === 'ambulance' ? 1.3 : v.kind === 'bike' ? 0.7 : 1;
         s.shadow.setPosition(x + 2.5 * fall, y + 3.5 * fall).setRotation(v.angle).setDepth(d - 0.02).setScale(big / ART_SCALE);
         if (v.kind !== 'bike') this.drawLamps(this.lamps[onDeck ? 1 : 0], v, x, y, time);
       }
@@ -95,6 +95,8 @@ export class TrafficLayer {
 
   /** Brake lights (red, at the back corners) and an indicator (amber, front and back on the side it's turning). */
   private drawLamps(g: Phaser.GameObjects.Graphics, v: Vehicle, x: number, y: number, time: number): void {
+    // An emergency vehicle's blue lights (on a call, or left on at its post).
+    if (v.siren || (v.blues ?? 0) > 0) blues(g, v, x, y, time);
     // Hazard lights: limping, broken down, or a parked car's alarm going off (flashing quicker).
     const hazards = v.limping || v.broken || v.alarm > 0;
     if (v.mode === 'parked' && !hazards) return;
@@ -116,5 +118,34 @@ export class TrafficLayer {
         for (const along of [back, -back]) g.fillCircle(x + cx * along + lx * (side + 0.6) * k, y + cy * along + ly * (side + 0.6) * k, 1.3);
       }
     }
+  }
+}
+
+/**
+ * Blue lights flashing: the light bar's two ends in turn, each a double flash
+ * (and an ambulance's at its back corners too), each with a glow round it.
+ */
+function blues(g: Phaser.GameObjects.Graphics, v: Vehicle, x: number, y: number, time: number): void {
+  const [cx, cy] = [Math.cos(v.angle), Math.sin(v.angle)];
+  const [lx, ly] = [cy, -cx];
+  const L = v.length;
+  // Where the light bar is along it, from its middle; how far out its ends are.
+  const bar = v.kind === 'police' ? L * 0.1 - 2.9 : v.kind === 'ambulance' ? L * 0.28 - 2 : v.kind === 'fire' ? L * 0.24 + 2.3 : L * 0.2;
+  const out = v.r - 4.6;
+  const lamps: [number, number, number][] = [[bar, out, 0], [bar, -out, 1]];
+  if (v.kind === 'ambulance') lamps.push([-L / 2 + 2.4, v.r - 3.4, 1], [-L / 2 + 2.4, -(v.r - 3.4), 0]);
+  const period = 0.62;
+  const t = (time + ((v.id * 0.618) % 1) * period) % period;
+  for (const [along, across, side] of lamps) {
+    // Each end its half of the time, two quick flashes in it.
+    const u = (t - side * period * 0.5 + period) % period;
+    if (!(u < 0.08 || (u > 0.13 && u < 0.21))) continue;
+    const [px, py] = [x + cx * along + lx * across, y + cy * along + ly * across];
+    g.fillStyle(0x3d7dff, 0.3);
+    g.fillCircle(px, py, 6.5);
+    g.fillStyle(0x6fa0ff, 0.55);
+    g.fillCircle(px, py, 3.2);
+    g.fillStyle(0xd8e8ff, 1);
+    g.fillCircle(px, py, 1.6);
   }
 }

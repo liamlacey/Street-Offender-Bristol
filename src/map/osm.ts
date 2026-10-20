@@ -497,6 +497,8 @@ export interface GameMap {
   busRoutes?: BusRoute[];
   /** The bus stations, and their bays (see BusStation). */
   busStations?: BusStation[];
+  /** The police stations, fire stations, hospitals and ambulance stations (see Service). */
+  services?: Service[];
   /** Where boats moor, and the ferry routes (see berths.ts). */
   berths?: Berth[];
   /** Where people go: x, y, what (0 a shop, café, bar or the like; 1 a sight: a museum, gallery, monument, statue, viewpoint), ... */
@@ -523,6 +525,35 @@ export interface Bay {
   road: number;
   /** Where its passengers wait (its `platform`), x, y. */
   platform: [number, number];
+}
+
+/**
+ * An emergency service's place: a police station (`amenity=police`), a fire
+ * station (`amenity=fire_station`), or a hospital or ambulance station
+ * (`amenity=hospital`, a `building=hospital` named as one, or
+ * `emergency=ambulance_station`): what it is, its outlines (those within
+ * 120 m of each other, of a kind, as one, as a hospital's buildings), and its
+ * middle. Mapped as a point, it's a 10 m square.
+ */
+export interface Service {
+  kind: ServiceKind;
+  name?: string;
+  /** A hospital with an accident and emergency department (`emergency=yes`): busier. */
+  emergency?: boolean;
+  x: number;
+  y: number;
+  rings: Pts[];
+}
+
+export type ServiceKind = 'police' | 'fire' | 'ambulance';
+
+/** What emergency service a place is, if any (see Service). */
+export function serviceKind(t: Tags): ServiceKind | null {
+  if (t.amenity === 'police') return 'police';
+  if (t.amenity === 'fire_station') return 'fire';
+  if (t.emergency === 'ambulance_station' || t.amenity === 'ambulance_station' || t.amenity === 'hospital') return 'ambulance';
+  if (t.building === 'hospital' && /hospital|infirmary/i.test(t.name ?? '')) return 'ambulance';
+  return null;
 }
 
 /** A way only buses use (`access=no` with `bus` or `psv=yes`). */
@@ -2255,6 +2286,43 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     if (bays.length >= 2) busStations.push({ ...(rel.tags.name ? { name: rel.tags.name } : {}), bays });
   }
 
+  // The emergency services' places: outlines (closed ways, multipolygons' outer rings) and points, those of a kind near each other as one.
+  const services: Service[] = [];
+  const addService = (t: Tags, rings: Pts[]) => {
+    const kind = serviceKind(t);
+    if (!kind || !rings.length) return;
+    let [sx, sy, n] = [0, 0, 0];
+    for (const r of rings) for (let k = 0; k + 1 < r.length; k += 2) [sx, sy, n] = [sx + r[k], sy + r[k + 1], n + 1];
+    const [x, y] = [sx / n, sy / n];
+    if (x < 0 || y < 0 || x > width || y > height) return;
+    const same = services.find((o) => o.kind === kind && Math.hypot(o.x - x, o.y - y) < 120 * PX_PER_METRE);
+    const emergency = t.emergency === 'yes';
+    if (same) {
+      same.rings.push(...rings.map(roundPts));
+      if (emergency) same.emergency = true;
+      // (Named for the hospital itself, over its other buildings.)
+      if (t.name && (!same.name || t.amenity)) same.name = t.name;
+      return;
+    }
+    services.push({ kind, ...(t.name ? { name: t.name } : {}), ...(emergency ? { emergency } : {}), x: round(x), y: round(y), rings: rings.map(roundPts) });
+  };
+  for (const way of data.ways.values()) {
+    if (!serviceKind(way.tags)) continue;
+    const ring = ringOf(way.nodes);
+    if (ring) addService(way.tags, [ring]);
+  }
+  for (const rel of data.relations.values()) {
+    if (rel.tags.type !== 'multipolygon' || !serviceKind(rel.tags)) continue;
+    const outer = rel.members.filter((m) => m.type === 'way' && m.role !== 'inner').map((m) => data.ways.get(m.ref)?.nodes).filter((w): w is number[] => !!w);
+    addService(rel.tags, joinRings(outer).map((r) => pointsOf(r.slice(0, -1))).filter((p): p is Pts => !!p && p.length >= 6));
+  }
+  for (const n of data.nodes.values()) {
+    if (!serviceKind(n.tags)) continue;
+    const [x, y] = [proj.x(n.lon), proj.y(n.lat)];
+    const h = 5 * PX_PER_METRE;
+    addService(n.tags, [[x - h, y - h, x + h, y - h, x + h, y + h, x - h, y + h]]);
+  }
+
   // How busy each road is: what's along it to go to.
   const businesses: [number, number][] = [];
   for (const n of data.nodes.values()) if (isBusiness(n.tags)) businesses.push([proj.x(n.lon), proj.y(n.lat)]);
@@ -2382,6 +2450,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     ...(solar.length ? { solar } : {}),
     ...(busRoutes.length ? { busRoutes } : {}),
     ...(busStations.length ? { busStations } : {}),
+    ...(services.length ? { services } : {}),
     ...(berths.length ? { berths } : {}),
     ...(ferries.length ? { ferries } : {}),
     ...(venues.length ? { venues } : {}),

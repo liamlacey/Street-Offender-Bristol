@@ -585,6 +585,33 @@ the nearest within 25 m. (Bristol's: 19 bays.)
   routes that stop there. With no bay free, it goes round and out. A bus in its bay, or
   backing out, isn't taken off the road as stuck; any taken off frees its bay.
 
+**The emergency services** (police stations, `amenity=police`; fire stations,
+`amenity=fire_station`; hospitals, `amenity=hospital` or a `building=hospital` named
+as one, and ambulance stations, `emergency=ambulance_station`): their outlines (or,
+mapped as a point, a 10 m square), those of a kind within 120 m of each other as one
+(a hospital's buildings), named for the one tagged `amenity`; with an A&E if any's
+`emergency=yes`. Each has its vehicles: police cars (estates, white, blue and yellow
+chequers, a light bar), ambulances (yellow, green and yellow chequers, light bars
+front and back) or fire engines (red, a ladder on top).
+- They park along the kerb of the streets beside it (not cycle paths, service roads or
+  bus-only ways): on the kerb lane's left, and on a one-way street its right too, where
+  the kerb's within 25 m of the building on that side (or, if there's nowhere that
+  near, 45 m); 3 m from the lanes' ends and 9 m from crossings, bus stops and the lights;
+  clear of the parking bays and each other; where the lane runs straight past (on a
+  bend its ends would stick out). Up on the pavement, 0.7 m of it in the road, but
+  always leaving 1.15 m clear of the lane's middle (a car gets by; a bus or a lorry
+  goes round, as for anything stopped in the road). Nearest the building first: 5 for
+  a police station, 3 for a fire station, 3 for a hospital, 6 for one with an A&E.
+  70% have one in at first, 15% of them with their blue lights left on (for 20 to 90 s).
+- With you within 350 m, every 10 to 28 s one of them pulls out and goes (80% on a
+  call: blue lights flashing, siren going, half as fast again as it would, up to
+  19 m/s, through red lights), or another comes back (from 80 to 260 m away, out of
+  sight, the shortest way there; 60% on a call, the siren off 40 m from its place),
+  stops by its place, pulls in to the kerb and parks (half of them leaving the blue
+  lights on a while).
+- Its siren's heard up to 260 m away (the nearest one): a police car's wail, an
+  ambulance's or a fire engine's two tones. You can take any of them and drive it.
+
 **Parked cars:** in the car parks' bays (65% of them taken) and in the parking lanes'
 bays (55%, plus 1.2% per point of the street's activity, at most 92%; loading bays
 25%), not at bus stops (the bays aren't painted there either). Parallel bays face the
