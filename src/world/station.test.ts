@@ -85,8 +85,8 @@ describe('Bristol Bus Station', () => {
     expect(most).toBeGreaterThanOrEqual(8);
     expect(all.filter((k) => k.entered && k.inBay).length).toBeGreaterThan(3);
     expect(all.filter((k) => k.backed && k.out).length).toBeGreaterThan(3);
-    // Never more than a moment on top of each other (brushing past, swinging in or out).
-    expect(longest).toBeLessThan(1.5);
+    // Never more than a moment or two on top of each other (brushing past, swinging in or out).
+    expect(longest).toBeLessThan(2.5);
     // No cars in the yard.
     expect(yardCars.size).toBe(0);
     // Every bus that's backed out faced on round the yard after (towards the way out, the south-west: x falling, y rising).

@@ -129,6 +129,8 @@ export interface Mover {
   /** At a bus station, in a bay: where its platform is (people get off to it, and on from it); and whether it's only just pulled in. */
   bay?: [number, number];
   fresh?: boolean;
+  /** On a call, its siren going (people get out of its way as from you). */
+  siren?: boolean;
   id: number;
   /** Which level it's on (0, the ground, if not given). */
   level?: number;
@@ -762,15 +764,20 @@ export class People {
   ): void {
     this.populate(view);
     const all = [player, ...movers];
-    // Danger: you, going fast right by them (or along the pavement at them).
-    const pspeed = Math.hypot(player.vx, player.vy);
-    const plevel = player.level ?? 0;
-    for (const p of this.people) {
-      if (p.mode === 'down' || p.mode === 'board' || p.level !== plevel || player.onFoot) continue;
-      const d = Math.hypot(p.x - player.x, p.y - player.y);
-      const onPavement = pspeed > 5 * M && d < 5 * M && !this.inRoad(player.x, player.y, undefined, plevel);
-      if ((pspeed > 8 * M && d < 3.5 * M) || onPavement) this.scare(p, player.x, player.y);
-      if ((p.mode as Mode) !== 'dive' && !player.bike) this.dodge(p, player, pspeed);
+    // Danger: you, going fast right by them (or along the pavement at them); and anything on a call, its siren going.
+    for (const m of [...(player.onFoot ? [] : [player]), ...movers.filter((o) => o.siren)]) {
+      const pspeed = Math.hypot(m.vx, m.vy);
+      const plevel = m.level ?? 0;
+      for (const p of this.people) {
+        if (p.mode === 'down' || p.mode === 'board' || p.level !== plevel) continue;
+        // (Within a second of it, at most: as far as it's seen coming.)
+        const reach = Math.max(6 * M, pspeed) + 2 * M;
+        if (Math.abs(p.x - m.x) > reach || Math.abs(p.y - m.y) > reach) continue;
+        const d = Math.hypot(p.x - m.x, p.y - m.y);
+        const onPavement = pspeed > 5 * M && d < 5 * M && !this.inRoad(m.x, m.y, undefined, plevel);
+        if ((pspeed > 8 * M && d < 3.5 * M) || onPavement) this.scare(p, m.x, m.y);
+        if ((p.mode as Mode) !== 'dive' && !m.bike) this.dodge(p, m, pspeed);
+      }
     }
     // Who's where, for stepping round each other.
     this.close.clear();

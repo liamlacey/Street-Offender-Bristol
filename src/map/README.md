@@ -604,11 +604,19 @@ front and back) or fire engines (red, a ladder on top).
   a police station, 3 for a fire station, 3 for a hospital, 6 for one with an A&E.
   70% have one in at first, 15% of them with their blue lights left on (for 20 to 90 s).
 - With you within 350 m, every 10 to 28 s one of them pulls out and goes (80% on a
-  call: blue lights flashing, siren going, half as fast again as it would, up to
-  19 m/s, through red lights), or another comes back (from 80 to 260 m away, out of
-  sight, the shortest way there; 60% on a call, the siren off 40 m from its place),
-  stops by its place, pulls in to the kerb and parks (half of them leaving the blue
-  lights on a while).
+  call), or another comes back (from 80 to 260 m away, out of sight, the shortest way
+  there; 60% on a call, the siren off 40 m from its place), stops by its place, pulls
+  in to the kerb and parks (half of them leaving the blue lights on a while).
+- On a call (blue lights, siren) it keeps none of the rules of the road, only from
+  hitting anything: no speed limit (20 m/s, bends taken 30% faster than anyone else
+  takes them); through red lights and give ways, waiting only for what'd be there
+  within a second; and stuck behind something within 35 m, round it, whichever way's
+  clear all the way past (it, and anything coming, where it'll be by then): out on
+  the wrong side of the road first, else up on the pavement (to the road's edge and
+  2 m beyond), a little way over, then further; not up the inside of something moving
+  over to the kerb; back in once past and there's room. Traffic ahead with one coming
+  up behind it (within 45 m) pulls over to the kerb and slows right down; people get
+  out of its way as from you.
 - Its siren's heard up to 260 m away (the nearest one): a police car's wail, an
   ambulance's or a fire engine's two tones. You can take any of them and drive it.
 

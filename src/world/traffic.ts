@@ -395,6 +395,18 @@ function free(b: StationBay): boolean {
   return b.taken === null && b.near.every((n) => n.taken === null);
 }
 
+/** How far a point is from a line, px. */
+function distToLine(pts: Pts, x: number, y: number): number {
+  let best = Infinity;
+  for (let k = 0; k + 3 < pts.length; k += 2) {
+    const [ax, ay, bx, by] = [pts[k], pts[k + 1], pts[k + 2], pts[k + 3]];
+    const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
+    const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2)) : 0;
+    best = Math.min(best, Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y));
+  }
+  return best;
+}
+
 /** How far (x, y) is from the line down something's middle (its length, less its rounded ends), px. */
 function distToBody(o: Obstacle, x: number, y: number): number {
   const h = Math.max(0, o.length / 2 - o.r);
@@ -808,8 +820,20 @@ const POST_FROM: [number, number] = [80 * M, 260 * M];
 const POST_PLACES: Record<'police' | 'fire' | 'ambulance' | 'emergency', number> = { police: 5, fire: 3, ambulance: 3, emergency: 6 };
 const POST_FILLED = 0.7;
 const SIREN = 0.8;
-const SIREN_PACE = 1.5;
-const SIREN_TOP = 19 * M;
+const SIREN_TOP = 20 * M;
+/**
+ * On a call it keeps no speed limit (only the bends', and those it takes BEND_DARE as fast), and gives way to no one
+ * (but won't hit what's there): stuck behind something within WEAVE_AT, it goes round, whichever way's clear (out on
+ * the wrong side of the road, or up on the pavement, to the road's edge and PAVED beyond), WEAVE_RATE px/s over. Those
+ * ahead of one coming up behind (within YIELD_AT) pull over to the kerb and slow down.
+ */
+const BEND_DARE = 1.3;
+/** On a call, at a junction it'd give way at: it only waits for what'd be there within this, s. */
+const HURRY_TIME = 1;
+const WEAVE_AT = 35 * M;
+const PAVED = 2 * M;
+const WEAVE_RATE = 4.5 * M;
+const YIELD_AT = 45 * M;
 /** How far the way round a bus station's yard is moved over from its bays, at most, px. */
 const AISLE = 5 * M;
 const STATION_BUSES = 16;
@@ -880,6 +904,9 @@ export class Traffic {
   private readonly terrain: Terrain;
   private readonly routes: BusRoute[];
   private readonly roadWidths: number[];
+  private readonly roadPts: Pts[];
+  /** Those on a call (their sirens going), this frame. */
+  private sirens: Vehicle[] = [];
   private readonly routeLanes: { lane: Lane; leg: number }[][];
   /** The bus stations; and which a yard lane's in. */
   readonly stations: Station[] = [];
@@ -929,6 +956,7 @@ export class Traffic {
     // The bus routes, and the lanes along each (and which of its legs each is on).
     this.routes = map.busRoutes ?? [];
     this.roadWidths = map.roads.map((r) => r.width);
+    this.roadPts = map.roads.map((r) => r.pts);
     const lanesOfRoad = new Map<number, Lane[]>();
     for (const l of this.lanes) lanesOfRoad.set(l.road, [...(lanesOfRoad.get(l.road) ?? []), l]);
     this.routeLanes = this.routes.map((r) =>
@@ -1724,6 +1752,7 @@ export class Traffic {
       if (lane?.giveWay && v.waiting > 4) this.waitingAt.set(lane.to, v);
     }
     const obstacles = this.obstacles(player);
+    this.sirens = this.vehicles.filter((v) => v.siren && v.mode === 'drive');
     for (const v of [...this.vehicles]) {
       try {
         if (v.mode === 'drive') this.drive(v, dt, obstacles, light);
@@ -1835,8 +1864,8 @@ export class Traffic {
           if (at < -2) continue;
           const l = light(st.signal);
           const stop = l === 'red' || l === 'redamber' || (l === 'amber' && at > (v.speed * v.speed) / (2 * BRAKE * 1.5));
-          // (Not on a call: it goes through.)
-          if (stop && at < gap && !v.siren) {
+          // (On a call it goes through, unless something's about to be there.)
+          if (stop && at < gap && (!v.siren || !this.clearAt(v, lane, obstacles, true))) {
             gap = Math.max(0, at - 1);
             lead = 0;
             hold = AT_LINE;
@@ -1845,7 +1874,8 @@ export class Traffic {
           }
         }
         const end = d + lane.length;
-        if (lane.giveWay && end < WATCH && end > -1 && !this.clearAt(v, lane, obstacles)) {
+        // (On a call, it gives way to no one: it just won't pull out into what's about to be there.)
+        if (lane.giveWay && end < WATCH && end > -1 && !this.clearAt(v, lane, obstacles, v.siren)) {
           if (v.speed < 1) waiting = true;
           if (end < gap) {
             gap = Math.max(0, end - 0.5);
@@ -1863,7 +1893,7 @@ export class Traffic {
       for (let k = 0; k + 1 < v.route.length && d < look; k++) {
         const p = v.route[k];
         const exit = v.route[k + 1];
-        if (p.lane && !exit.lane && v.route[k + 2]?.lane && this.nodes[p.lane.to].degree >= 3) {
+        if (p.lane && !exit.lane && v.route[k + 2]?.lane && this.nodes[p.lane.to].degree >= 3 && !v.siren) {
           const end = d + p.length;
           if (end > -1 && end < gap && !this.roomIn(v, exit, v.route[k + 2].lane!)) {
             gap = Math.max(0, end - 0.5);
@@ -2017,7 +2047,9 @@ export class Traffic {
     const grade = gx * Math.cos(v.angle) + gy * Math.sin(v.angle);
     cruise *= grade > 0 ? Math.max(0.45, 1 - CLIMB[v.kind] * grade) : 1 + Math.min(0.05, -grade * 0.3);
     // On a call: in a hurry.
-    cruise = v.siren ? Math.min(cruise * SIREN_PACE, SIREN_TOP) : Math.min(cruise, MAX_SPEED);
+    cruise = v.siren ? SIREN_TOP * v.pace : Math.min(cruise, MAX_SPEED);
+    // Pulled over for one on a call coming up behind: slowly.
+    if (!v.siren && this.yieldingTo(v)) cruise *= 0.35;
     if (v.bus?.yield) cruise *= 0.6;
     // Badly damaged: it limps along.
     if (v.limping) cruise *= 0.55;
@@ -2029,7 +2061,7 @@ export class Traffic {
       v.dawdle = 2 + this.rand() * 3;
       v.dawdleTo = 0.55 + this.rand() * 0.25;
     }
-    let want = Math.min(cruise, this.limitAhead(v));
+    let want = Math.min(cruise, this.limitAhead(v) * (v.siren ? BEND_DARE : 1));
     // ...and for what's ahead: dropping back to a couple of seconds behind a moving car, and rolling gently up to a stop.
     let urgent = false;
     if (gap < Infinity) {
@@ -2194,6 +2226,7 @@ export class Traffic {
       v.passing = undefined;
       return;
     }
+    if (v.siren) return this.weave(v, blocker, gap, lead, obstacles);
     const toEnd = lane.length - v.s;
     const [cx, cy] = [Math.cos(v.angle), Math.sin(v.angle)];
     if (v.passing) {
@@ -2238,6 +2271,79 @@ export class Traffic {
         this.stats.overtakes++;
       }
     }
+  }
+
+  /**
+   * On a call, stuck behind something: round it, whichever way's clear all the
+   * way past it (out on the wrong side of the road, the road's far side, up on
+   * the pavement), and back in once past and there's room. Never into anything
+   * (if the way round closes, it brakes as for anything else, and looks again).
+   */
+  private weave(v: Vehicle, blocker: number | undefined, gap: number, lead: number, obstacles: Obstacle[]): void {
+    if (v.passing) {
+      const b = this.vehicleById(v.passing.id);
+      const [cx, cy] = [Math.cos(v.angle), Math.sin(v.angle)];
+      const past = !b || (b.x - v.x) * cx + (b.y - v.y) * cy + (v.length + b.length) / 2 + GAP < 0;
+      // Past it: back in, once there's room; the way round closed: another way, or wait.
+      if (past && this.wayClear(v, 0, 15 * M, obstacles, -1)) v.passing = undefined;
+      else if (!past && !this.wayClear(v, -v.passing.out, Math.max(gap, 0) + (b?.length ?? 0) + v.length, obstacles, v.passing.id)) v.passing = undefined;
+      return;
+    }
+    const b = blocker !== undefined && blocker >= 0 ? this.vehicleById(blocker) : undefined;
+    if (!b || gap > WEAVE_AT || lead > SIREN_TOP * 0.7) return;
+    const need = Math.max(gap, 0) + b.length + v.length + 8 * M;
+    // Out to the right first (the other side of the road), else left (the pavement); a little, then further.
+    // (Not up the inside of something moving over to the kerb: pulling over for it, or in to park.)
+    const kerbward = b.parking || b.sideRate > 0.2 * M || (!b.siren && this.yieldingTo(b));
+    for (const out of [3.4 * M, -2.8 * M, 6.4 * M, -4 * M]) {
+      if ((out < 0 && kerbward) || !this.wayClear(v, -out, need, obstacles, b.id)) continue;
+      v.passing = { id: b.id, out };
+      this.stats.overtakes++;
+      return;
+    }
+  }
+
+  /**
+   * Whether the way ahead `over` px to its left of its lane (for `length` px)
+   * is on the road or its pavements and clear: nothing there, nor coming to be
+   * there by the time it is (but `ignore`, what it's going round, by its side).
+   */
+  private wayClear(v: Vehicle, over: number, length: number, obstacles: Obstacle[], ignore: number): boolean {
+    const speed = Math.max(v.speed, 5 * M);
+    for (let d = -v.length / 2; d <= Math.min(length, 2 * WEAVE_AT); d += 1.5 * M) {
+      const [x, y, ux, uy] = this.direction(v, d);
+      const [px, py] = [x + uy * over, y - ux * over];
+      // On its road (or the one it's turning onto), or its pavement.
+      const road = v.route.find((p) => p.lane)?.lane?.road;
+      if (road !== undefined && over && distToLine(this.roadPts[road], px, py) > this.roadWidths[road] / 2 + PAVED - v.r * 0.5) {
+        const next = v.route.filter((p) => p.lane).map((p) => p.lane!.road);
+        if (!next.some((r) => distToLine(this.roadPts[r], px, py) <= this.roadWidths[r] / 2 + PAVED - v.r * 0.5)) return false;
+      }
+      const t = Math.max(0, d) / speed;
+      for (const o of obstacles) {
+        if (o.id === v.id || o.level !== v.level || o.id === ignore) continue;
+        if (Math.abs(o.x - px) > 30 * M || Math.abs(o.y - py) > 30 * M) continue;
+        // Where it'll be by then (moving along the way it's facing, and moving over).
+        const going = o.id >= 0 ? (o as Vehicle).speed ?? 0 : Math.hypot(o.vx, o.vy);
+        const over = o.id >= 0 ? ((o as Vehicle).sideRate ?? 0) * Math.min(t, 2) : 0;
+        const [fx, fy] = o.id >= 0 ? [o.x + Math.cos(o.angle) * going * t + Math.sin(o.angle) * over, o.y + Math.sin(o.angle) * going * t - Math.cos(o.angle) * over] : [o.x + o.vx * t, o.y + o.vy * t];
+        for (const [ox, oy] of [[o.x, o.y], [fx, fy]]) if (distToBody({ ...o, x: ox, y: oy }, px, py) < v.r + o.r + 0.4 * M) return false;
+      }
+    }
+    return true;
+  }
+
+  /** Whether one on a call is coming up behind it, close, its way (it pulls over and lets it by). */
+  private yieldingTo(v: Vehicle): boolean {
+    if (!this.sirens.length) return false;
+    const [cx, cy] = [Math.cos(v.angle), Math.sin(v.angle)];
+    for (const o of this.sirens) {
+      if (o === v || o.level !== v.level) continue;
+      const back = (v.x - o.x) * cx + (v.y - o.y) * cy;
+      const across = Math.abs(-(v.x - o.x) * cy + (v.y - o.y) * cx);
+      if (back > 0 && back < YIELD_AT && across < 4 * M && Math.cos(o.angle - v.angle) > 0.6) return true;
+    }
+    return false;
   }
 
   /** Into the lane beside: it carries on along that one, from level with where it is (it moves over to it smoothly, its offset taken up). */
@@ -2319,6 +2425,9 @@ export class Traffic {
       rate = SIDLE;
     }
     if (v.passing) want = -v.passing.out;
+    // On a call, round things quickly; and out of its way, over to the kerb, if it's coming up behind.
+    if (v.siren && v.passing) rate = WEAVE_RATE;
+    else if (!v.bus && v.kind !== 'bike' && !v.siren && lane && this.yieldingTo(v)) [want, rate] = [0.9 * M, SIDLE];
     // Pulling in to its place at its post.
     if (v.parking && v.spot) [want, rate] = [v.spot.off, SIDLE];
     // A cyclist: over in the cycle lane, or near the kerb (through a turn, as they were).
@@ -2369,7 +2478,7 @@ export class Traffic {
   }
 
   /** Whether it's clear to go at the end of a lane that gives way: nothing coming to the junction, or in it. */
-  private clearAt(v: Vehicle, lane: Lane, obstacles: Obstacle[]): boolean {
+  private clearAt(v: Vehicle, lane: Lane, obstacles: Obstacle[], hurry = false): boolean {
     const node = this.nodes[lane.to];
     for (const o of obstacles) {
       if (o.id === v.id || o.level !== v.level) continue;
@@ -2386,10 +2495,11 @@ export class Traffic {
       }
       const speed = Math.hypot(o.vx, o.vy);
       // Coming: on its way to the junction, there within the time it takes to pull out (less the longer it's waited: it takes a smaller gap; and traffic crawling in a queue lets it out).
-      const time = CLEAR_TIME * Math.max(0.45, 1 - v.waiting / 30);
+      // (On a call: only what'd be there almost at once.)
+      const time = hurry ? HURRY_TIME : CLEAR_TIME * Math.max(0.45, 1 - v.waiting / 30);
       const coming = speed > 2 * M && (o.vx * dx + o.vy * dy) / (speed * Math.max(dist, 1)) > 0.3 && dist / speed < time;
       // Something stopped by the junction isn't coming: if it's in the way, it's seen as that (and waited behind).
-      if (coming || (dist < 6 * M && speed > 1.5 * M)) return false;
+      if (coming || (dist < (hurry ? 4 : 6) * M && speed > (hurry ? 0.5 : 1.5) * M)) return false;
     }
     return true;
   }

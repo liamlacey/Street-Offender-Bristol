@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { GameMap, Service } from '../map/osm';
 import bristol from '../map/bristol.json';
 import { type KerbLane, ROOM, kerbsides } from './posts';
-import { Traffic, VEHICLES } from './traffic';
+import { Traffic, VEHICLES, type Vehicle } from './traffic';
 
 const M = 8;
 const map = bristol as unknown as GameMap;
@@ -95,4 +95,46 @@ describe('emergency services', () => {
     expect(came).toBeGreaterThan(0);
     expect(heldUp).toBeLessThan(20);
   }, 120_000);
+
+  it('on a call, keep no speed limit nor the rules of the road, going round what holds them up (wrong side, pavement), but hit nothing', () => {
+    let seed = 3;
+    const traffic = new Traffic(map, { rand: () => (seed = (seed * 16807) % 2147483647) / 2147483647 });
+    const post = traffic.posts.find((p) => p.service.name === 'Bristol Royal Infirmary')!;
+    const player = { x: post.x + 40 * M, y: post.y + 40 * M, heading: 0, vx: 0, vy: 0, level: 0, length: 38, width: 18 };
+    const view = { x0: post.x - 300, y0: post.y - 140, x1: post.x + 300, y1: post.y + 140 };
+    let [top, round, pulledOver, nearest] = [0, 0, 0, Infinity];
+    for (let t = 0; t < 150; t += 1 / 30) {
+      traffic.update(1 / 30, player, view, (i) => (Math.floor(t / 15 + i) % 2 ? 'green' : 'red'));
+      for (const v of traffic.vehicles) {
+        if (!v.siren) {
+          if (v.side > 0.5 * M && v.kind !== 'bike' && !v.bus && !v.parking) pulledOver++;
+          continue;
+        }
+        top = Math.max(top, v.speed);
+        if (v.passing) round++;
+        for (const o of [...traffic.vehicles, ...traffic.parked]) {
+          if (o === v || o.level !== v.level || Math.abs(o.x - v.x) > 15 * M || Math.abs(o.y - v.y) > 15 * M) continue;
+          nearest = Math.min(nearest, apart(v, o));
+        }
+      }
+    }
+    // Well over the streets' 30 mph (13.4 m/s); round things; others pulling over; and never into anything.
+    expect(top).toBeGreaterThan(17 * M);
+    expect(round).toBeGreaterThan(0);
+    expect(pulledOver).toBeGreaterThan(0);
+    expect(nearest).toBeGreaterThan(-0.3 * M);
+  }, 120_000);
 });
+
+/** How far apart two vehicles' sides are, px (less than 0, overlapping). */
+function apart(a: Vehicle, b: Vehicle): number {
+  const ends = (v: Vehicle) => {
+    const h = Math.max(0, v.length / 2 - v.r);
+    const [c, s] = [Math.cos(v.angle), Math.sin(v.angle)];
+    return [v.x - c * h, v.y - s * h, v.x + c * h, v.y + s * h];
+  };
+  const [p, q] = [ends(a), ends(b)];
+  let near = Infinity;
+  for (let i = 0; i <= 8; i++) for (let j = 0; j <= 8; j++) near = Math.min(near, Math.hypot(p[0] + ((p[2] - p[0]) * i) / 8 - q[0] - ((q[2] - q[0]) * j) / 8, p[1] + ((p[3] - p[1]) * i) / 8 - q[1] - ((q[3] - q[1]) * j) / 8));
+  return near - a.r - b.r;
+}
