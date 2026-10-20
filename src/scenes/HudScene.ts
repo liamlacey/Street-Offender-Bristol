@@ -28,6 +28,8 @@ export const STREET_EVENT = 'street';
 export const RESET_EVENT = 'reset-car';
 /** Sent by the HUD's action button: get out of what you're driving, or into what you're by. */
 export const ACTION_EVENT = 'get-in-out';
+/** Sent by the HUD's pause button: the pause menu. */
+export const PAUSE_EVENT = 'pause';
 
 /**
  * Drawn over the game: the street you're on (the old games put up the name
@@ -47,6 +49,7 @@ export class HudScene extends Phaser.Scene {
   private street!: Phaser.GameObjects.Text;
   private streetTimer = 0;
   private resetButton!: Phaser.GameObjects.Text;
+  private pauseButton!: Phaser.GameObjects.Text;
   private credit!: Phaser.GameObjects.Text;
   private hint: Phaser.GameObjects.Text | null = null;
   /** Getting out (or in): the button, and whether it's lit (something to get into within reach). */
@@ -81,6 +84,11 @@ export class HudScene extends Phaser.Scene {
       .setOrigin(1, 0)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.scene.get('game').events.emit(RESET_EVENT));
+    this.pauseButton = this.add
+      .text(0, 0, 'II', { fontFamily: 'monospace', fontSize: '15px', color: '#ffffff', fontStyle: 'bold', backgroundColor: '#00000066', padding: { x: 12, y: 6 } })
+      .setOrigin(0, 0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.scene.get('game').events.emit(PAUSE_EVENT));
     this.action = this.add
       .text(0, 0, 'GET OUT', { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', fontStyle: 'bold', backgroundColor: '#00000066', padding: { x: 8, y: 6 } })
       .setOrigin(0.5);
@@ -92,7 +100,7 @@ export class HudScene extends Phaser.Scene {
       .setOrigin(0.5, 1);
     if (!this.touch) {
       this.hint = this.add
-        .text(0, 0, 'Arrows / WASD to drive (or walk)    SPACE handbrake    F get out / in    R reset', { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', backgroundColor: '#00000066', padding: { x: 8, y: 5 } })
+        .text(0, 0, 'Arrows / WASD to drive (or walk)    SPACE handbrake    F get out / in    R reset    P pause', { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', backgroundColor: '#00000066', padding: { x: 8, y: 5 } })
         .setOrigin(0.5, 1);
       this.time.delayedCall(9000, () => this.tweens.add({ targets: this.hint, alpha: 0, duration: 800 }));
     }
@@ -103,8 +111,8 @@ export class HudScene extends Phaser.Scene {
         this.scene.get('game').events.emit(ACTION_EVENT);
         return;
       }
-      // A thumb landing on the left of the screen takes the steering, from wherever it lands.
-      if (this.touch && !this.steerPointer && p.x < this.scale.width * 0.45) {
+      // A thumb landing on the left of the screen takes the steering, from wherever it lands (not on the pause button).
+      if (this.touch && !this.steerPointer && p.x < this.scale.width * 0.45 && !this.pauseButton.getBounds().contains(p.x, p.y)) {
         this.steerPointer = p;
         this.steerBase.set(p.x, p.y);
         this.steerKnob.set(p.x, p.y);
@@ -120,6 +128,7 @@ export class HudScene extends Phaser.Scene {
     const { width, height } = this.scale;
     this.street.setPosition(width / 2, 10);
     this.resetButton.setPosition(width - 10, 10);
+    this.pauseButton.setPosition(10, 10);
     if (!this.touch) this.action.setPosition(width - 10, 46);
     this.credit.setPosition(width / 2, height - 3);
     this.hint?.setPosition(width / 2, height - 18);
@@ -192,6 +201,12 @@ export class HudScene extends Phaser.Scene {
     const a = this.actionZone;
     bg.fillStyle(0x4aa3df, this.actionHeld ? 0.55 : this.actionLit ? 0.3 : 0.1).fillCircle(a.x, a.y, a.radius);
     bg.lineStyle(2, 0xffffff, this.actionLit ? 0.5 : 0.2).strokeCircle(a.x, a.y, a.radius);
+  }
+
+  /** Lets go of the steering and the pedals (back from the pause menu: the fingers on them then aren't now). */
+  release(): void {
+    this.steerPointer = null;
+    Object.assign(this.drive, { steer: 0, gas: false, brake: false, handbrake: false });
   }
 
   /** What the action button says (GET OUT, or GET IN), and whether there's anything to do with it now. */

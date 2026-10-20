@@ -1855,6 +1855,11 @@ export class Traffic {
     return x > view.x0 - pad && x < view.x1 + pad && y > view.y0 - pad && y < view.y1 + pad;
   }
 
+  /** Fills the streets round you at once next time (you've jumped somewhere else). */
+  refill(): void {
+    this.started = false;
+  }
+
   /** Keeps the streets round you as busy as they should be: new vehicles out of sight, gone once they're far off. */
   private populate(dt: number, player: Player, view: TrafficView): void {
     const half = Math.hypot(view.x1 - view.x0, view.y1 - view.y0) / 2;

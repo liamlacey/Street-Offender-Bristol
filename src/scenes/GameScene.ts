@@ -43,7 +43,9 @@ import { Kerbs } from '../world/kerbs';
 import { Humps } from '../world/humps';
 import { WallLayer } from '../world/WallLayer';
 import { type Debris, type DebrisKind, debris, impactSpeed, racked } from '../world/damage';
-import { ACTION_EVENT, HudScene, RESET_EVENT, STREET_EVENT } from './HudScene';
+import { ACTION_EVENT, HudScene, PAUSE_EVENT, RESET_EVENT, STREET_EVENT } from './HudScene';
+import type { MenuData } from './MenuScene';
+import type { Spot } from '../world/overview';
 import { WALKER, stepWalker, tuningFor } from '../car/rides';
 import { SkidMarks } from './SkidMarks';
 import { TrafficLayer } from './TrafficLayer';
@@ -213,7 +215,7 @@ export class GameScene extends Phaser.Scene {
   private skids!: SkidMarks;
   private audio: CarAudio | null = null;
   private hud!: HudScene;
-  private keys!: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'space' | 'r' | 'f' | 'e', Phaser.Input.Keyboard.Key>;
+  private keys!: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'space' | 'r' | 'f' | 'e' | 'p' | 'esc', Phaser.Input.Keyboard.Key>;
   private input_: CarInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   private accumulator = 0;
   /** Where the car was before the last physics step: it's drawn (and followed) between that and where it is now, by how far into the next step the frame is, so it moves smoothly whatever the screen's refresh rate. */
@@ -237,6 +239,8 @@ export class GameScene extends Phaser.Scene {
   private safeTimer = 0;
   private streetTimer = 0;
   private street = '';
+  /** When the pause menu was last closed (performance.now(), ms). */
+  private menuClosed = -Infinity;
   private bigHit = 0;
   private readonly contact: ContactPoint = { x: 0, y: 0 };
 
@@ -344,12 +348,17 @@ export class GameScene extends Phaser.Scene {
       r: kb.addKey(K.R),
       f: kb.addKey(K.F),
       e: kb.addKey(K.E),
+      p: kb.addKey(K.P),
+      esc: kb.addKey(K.ESC),
     };
     this.keys.r.on('down', () => this.resetCar());
     this.keys.f.on('down', () => this.getInOrOut());
     this.keys.e.on('down', () => this.getInOrOut());
     this.events.on(RESET_EVENT, this.resetCar, this);
     this.events.on(ACTION_EVENT, this.getInOrOut, this);
+    this.keys.p.on('down', () => this.openMenu());
+    this.keys.esc.on('down', () => this.openMenu());
+    this.events.on(PAUSE_EVENT, this.openMenu, this);
 
     this.scene.launch('hud');
     this.hud = this.scene.get('hud') as HudScene;
@@ -362,6 +371,7 @@ export class GameScene extends Phaser.Scene {
       this.audio = null;
       this.events.off(RESET_EVENT, this.resetCar, this);
       this.events.off(ACTION_EVENT, this.getInOrOut, this);
+      this.events.off(PAUSE_EVENT, this.openMenu, this);
     });
   }
 
@@ -579,6 +589,64 @@ export class GameScene extends Phaser.Scene {
     const handbrake = k.space.isDown || !!touch?.handbrake;
     if (this.sinking >= 0) Object.assign(this.input_, { throttle: 0, brake: 0, steer: 0, handbrake: false });
     else Object.assign(this.input_, { throttle, brake, steer, handbrake });
+  }
+
+  /** Paused: everything stops (and goes quiet) under the pause menu, till you carry on, or jump somewhere off its map. */
+  private openMenu(): void {
+    // (Not again with the same key press that's just closed it.)
+    if (this.scene.isPaused() || performance.now() - this.menuClosed < 250) return;
+    const car = this.car;
+    const data: MenuData = {
+      map: this.world.map,
+      you: { x: car.x, y: car.y, heading: car.heading },
+      going: this.onFoot ? 'foot' : this.ride.kind === 'bike' ? 'ride' : 'drive',
+      done: (to) => {
+        if (to) this.jumpTo(to);
+        this.menuClosed = performance.now();
+        this.scene.resume();
+        this.scene.resume('hud');
+        this.hud?.release();
+        void this.audioContext()?.resume();
+      },
+    };
+    this.scene.pause();
+    this.scene.pause('hud');
+    this.scene.launch('menu', data);
+    this.scene.bringToTop('menu');
+    void this.audioContext()?.suspend();
+  }
+
+  private audioContext(): AudioContext | null {
+    const sound = this.sound as Phaser.Sound.WebAudioSoundManager;
+    return 'context' in sound ? sound.context : null;
+  }
+
+  /** Put down somewhere else on the map, in what you're driving (or on foot), stopped; the streets there filled. */
+  private jumpTo(to: Spot): void {
+    const car = this.car;
+    Object.assign(car, { x: to.x, y: to.y, heading: to.heading, vx: 0, vy: 0, spin: 0 });
+    this.prev = { x: to.x, y: to.y, heading: to.heading };
+    this.shown = { ...this.prev };
+    this.safe = { ...this.prev };
+    this.level = 0;
+    this.downFor = 0;
+    this.surface = this.surfaces.at(to.x, to.y);
+    this.effects.reset();
+    if (this.sinking >= 0) {
+      this.sinking = -1;
+      if (!this.onFoot) this.carSprite.setAlpha(1).setTint(0xffffff);
+    }
+    [this.lookX, this.lookY, this.lookVX, this.lookVY, this.pace] = [0, 0, 0, 0, 0];
+    const cam = this.cameras.main;
+    cam.centerOn(to.x, to.y);
+    this.updatePerspective();
+    const v = cam.worldView;
+    this.traffic.refill();
+    this.people.populate({ x0: v.left, y0: v.top, x1: v.right, y1: v.bottom }, true);
+    if (to.name && to.name !== this.street) {
+      this.street = to.name;
+      this.events.emit(STREET_EVENT, to.name);
+    }
   }
 
   /** One fixed physics step: drive (or walk), then hit things. */

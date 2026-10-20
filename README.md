@@ -27,6 +27,11 @@ something to get into within reach). On foot, steering turns you, GAS runs and B
 steps back. On a computer, arrows or WASD, SPACE for the handbrake, F (or E) to get
 out or in, R to reset.
 
+Pause (the II button at the top left, or P or ESC) to stop everything: RESUME, or
+MAP, a map of the whole of Bristol showing where you are. Drag it about, pinch (or
+scroll, or + and −) to zoom, tap where you want to be, and GO: you're put down on
+the road there, in whatever you're driving (or on foot).
+
 ```sh
 npm install
 npm run dev      # play it locally

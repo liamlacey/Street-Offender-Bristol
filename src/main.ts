@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 import { GameScene } from './scenes/GameScene';
 import { HudScene } from './scenes/HudScene';
+import { MenuScene } from './scenes/MenuScene';
 import { TitleScene } from './scenes/TitleScene';
 
 const game = new Phaser.Game({
@@ -17,7 +18,7 @@ const game = new Phaser.Game({
   // Enough simultaneous touches for steering + gas + buttons.
   input: { activePointers: 4 },
   // The first scene listed starts automatically.
-  scene: [TitleScene, GameScene, HudScene],
+  scene: [TitleScene, GameScene, HudScene, MenuScene],
 });
 
 // For poking at the game from the browser's console (and the screenshot scripts) while developing.
