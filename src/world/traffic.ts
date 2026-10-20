@@ -11,7 +11,7 @@
  */
 
 import type { Wreck } from '../car/dents';
-import type { BusRoute, BusStation, GameMap, Pts, Road, RoadKind } from '../map/osm';
+import { type BusRoute, type BusStation, type GameMap, type Pts, type Road, type RoadKind, pointInRing } from '../map/osm';
 import { type Body, bodyHull } from '../physics/collisions';
 import type { Light } from './lights';
 import { type Space, parkingSpaces } from './parking';
@@ -67,8 +67,12 @@ export interface Vehicle extends Body {
   colour: number;
   /** Driving along a lane; knocked about (sliding to a stop); finding its way back into its lane; or parked. */
   mode: 'drive' | 'knocked' | 'rejoin' | 'parked' | 'reverse';
-  /** Backing out of a bay at a bus station: the way its middle goes, and how far along it it's got; the lane (and how far along it) it drives on from, after; and how long it waits first, s. */
-  rev?: { path: Path; s: number; lane: Lane; at: number; wait: number };
+  /**
+   * Backing out of a bay at a bus station: the way its middle goes, and how far along it it's got; the lane (and how far
+   * along it) it drives on from, after; how long it waits first, s; and the ground it'll go over (points, x, y, and their
+   * bounds), and whether it's keeping it (the others wait outside it till it's done).
+   */
+  rev?: { path: Path; s: number; lane: Lane; at: number; wait: number; zone: Pts; box: [number, number, number, number]; held: boolean };
   /** Where it's going: the lane it's in, then the turns and lanes ahead. `s` is how far along the first it is. */
   route: Path[];
   s: number;
@@ -161,6 +165,8 @@ export interface StationBay {
   lane: Lane;
   platform: [number, number];
   taken: number | null;
+  /** Those too close to it to be used at the same time (a bus in each would touch). */
+  near: StationBay[];
 }
 
 /** A bus station, as the traffic has it (see BusStation). */
@@ -351,6 +357,19 @@ function reversed(pts: Pts): Pts {
   const out: Pts = [];
   for (let k = pts.length - 2; k >= 0; k -= 2) out.push(pts[k], pts[k + 1]);
   return out;
+}
+
+/** Whether a bus station's bay is free to pull into: no one in it, nor in any too close to it. */
+function free(b: StationBay): boolean {
+  return b.taken === null && b.near.every((n) => n.taken === null);
+}
+
+/** How far (x, y) is from the line down something's middle (its length, less its rounded ends), px. */
+function distToBody(o: Obstacle, x: number, y: number): number {
+  const h = Math.max(0, o.length / 2 - o.r);
+  const [c, s] = [Math.cos(o.angle), Math.sin(o.angle)];
+  const t = Math.max(-h, Math.min(h, (x - o.x) * c + (y - o.y) * s));
+  return Math.hypot(x - o.x - c * t, y - o.y - s * t);
 }
 
 /** How far along a path the nearest point to (x, y) is, and how far off it. */
@@ -743,13 +762,18 @@ const STOP_PAST = 4 * M;
  * REVERSE_SPEED, once there's room.
  */
 const STATION_NEAR = 700 * M;
+/** How near the ground a bus backing out goes over (its points) things keep, px; a point there, as something to look at it with. */
+const ZONE = 1.6 * M;
+const ZONE_PROBE: Obstacle = { id: -3, x: 0, y: 0, angle: 0, r: 0, length: 0, vx: 0, vy: 0, level: 0 };
+/** How far the way round a bus station's yard is moved over from its bays, at most, px. */
+const AISLE = 5 * M;
 const STATION_BUSES = 16;
 const STATION_EVERY = 3;
 const STATION_FROM: [number, number] = [60 * M, 250 * M];
 const BAY_SHORT = 0.6 * M;
 const BAY_DWELL = 45;
 const BAY_DWELL_MORE = 75;
-const REVERSE_SPEED = 3 * M;
+const REVERSE_SPEED = 4 * M;
 /** How quickly a bus moves over to the kerb, or back out, px/s. */
 const SIDLE = 1.2 * M;
 
@@ -867,8 +891,9 @@ export class Traffic {
     this.rand = options.rand ?? Math.random;
     this.max = options.max ?? 55;
     this.maxBuses = options.buses ?? MAX_BUSES;
+    const yards = map.areas.filter((a) => a.kind === 'yard').map((a) => a.rings[0]);
     for (const st of map.busStations ?? []) {
-      const station = this.station(st, this.stations.length);
+      const station = this.station(st, this.stations.length, yards);
       if (!station) continue;
       this.stations.push(station);
       for (const id of station.yard) this.yardOf.set(id, station.index);
@@ -1048,13 +1073,29 @@ export class Traffic {
   }
 
   /** A bus station from the map's: its bays' lanes, its yard, and the way to it from round about. */
-  private station(st: BusStation, index: number): Station | null {
+  private station(st: BusStation, index: number, yards: Pts[]): Station | null {
     const bays: StationBay[] = [];
     for (const b of st.bays) {
       const lane = this.lanes.find((l) => l.road === b.road && !l.path && Math.hypot(l.pts[l.pts.length - 2] - b.x, l.pts[l.pts.length - 1] - b.y) < 3 * M);
-      if (lane) bays.push({ lane, platform: b.platform, taken: null });
+      if (lane) bays.push({ lane, platform: b.platform, taken: null, near: [] });
     }
     if (bays.length < 2) return null;
+    // Those too close to use at once (where their ways bend in together): a bus in each would touch.
+    const { length, width } = VEHICLES.bus;
+    const body = (b: StationBay) => {
+      const [x, y, ux, uy] = pathAt(b.lane, Math.max(0, b.lane.length - BAY_SHORT - length / 2));
+      const h = length / 2 - width / 2;
+      return [x - ux * h, y - uy * h, x + ux * h, y + uy * h];
+    };
+    for (const [i, a] of bays.entries()) {
+      const p = body(a);
+      for (const b of bays.slice(i + 1)) {
+        const q = body(b);
+        let near = Infinity;
+        for (let j = 0; j <= 10; j++) for (let k = 0; k <= 10; k++) near = Math.min(near, Math.hypot(p[0] + ((p[2] - p[0]) * j) / 10 - q[0] - ((q[2] - q[0]) * k) / 10, p[1] + ((p[3] - p[1]) * j) / 10 - q[1] - ((q[3] - q[1]) * k) / 10));
+        if (near < width + 0.4 * M) (a.near.push(b), b.near.push(a));
+      }
+    }
     // The lanes arriving at each junction.
     const into = new Map<number, Lane[]>();
     for (const l of this.lanes) into.set(l.to, [...(into.get(l.to) ?? []), l]);
@@ -1070,6 +1111,7 @@ export class Traffic {
         for (const m of [l.from, l.to]) if (!seen.has(m)) (seen.add(m), todo.push(m));
       }
     }
+    this.aisle(yard, bays, yards);
     // The way in from round about: back from its ways in (yard lanes something else drives into), the shortest way to each.
     const entrances = [...yard].map((i) => this.lanes[i]).filter((l) => (into.get(l.from) ?? []).some((o) => !yard.has(o.id) && !o.path && !o.bus));
     const toward = new Map<number, Lane>();
@@ -1102,6 +1144,39 @@ export class Traffic {
   }
 
   /**
+   * The way round a bus station's yard, past its bays: the bays' ways meet it
+   * where their buses' tails are, so it's moved over, out into the open yard
+   * (as far as there's room in it, up to AISLE), clear of them. (Before any
+   * turns are made: they're made between the lanes' ends as they are now.)
+   */
+  private aisle(yard: Set<number>, bays: StationBay[], yards: Pts[]): void {
+    const tails = new Set(bays.map((b) => b.lane.from));
+    const ends = bays.map((b) => [b.lane.pts[b.lane.pts.length - 2], b.lane.pts[b.lane.pts.length - 1]]);
+    const inside = (pts: Pts) => {
+      for (let k = 0; k + 1 < pts.length; k += 2) if (!yards.some((ring) => pointInRing(pts[k], pts[k + 1], ring))) return false;
+      return true;
+    };
+    const fromBays = (x: number, y: number) => Math.min(...ends.map(([bx, by]) => Math.hypot(bx - x, by - y)));
+    for (const id of yard) {
+      const l = this.lanes[id];
+      if (bays.some((b) => b.lane.road === l.road) || (!tails.has(l.from) && !tails.has(l.to))) continue;
+      // Away from the bays: the side whose middle's further from them.
+      const [mx, my, ux, uy] = pathAt(l, l.length / 2);
+      const side = fromBays(mx + uy * M, my - ux * M) > fromBays(mx - uy * M, my + ux * M) ? 1 : -1;
+      for (let d = AISLE; d >= 1.5 * M; d -= 0.5 * M) {
+        const pts = offsetLine(l.pts, side * d);
+        // (With room for a bus's half and a bit beyond, in the yard.)
+        if (!inside(pts) || !inside(offsetLine(l.pts, side * (d + 2.5 * M)))) continue;
+        Object.assign(l, makePath(pts, l.level));
+        let b: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+        for (let i = 0; i < pts.length; i += 2) b = [Math.min(b[0], pts[i]), Math.min(b[1], pts[i + 1]), Math.max(b[2], pts[i]), Math.max(b[3], pts[i + 1])];
+        l.box = b;
+        break;
+      }
+    }
+  }
+
+  /**
    * A bus's way on at a bus station: to its way in (by the way there), round
    * its yard to the first free bay (and into it); once it's been, round and
    * out, and on (along its route, if it has one, or as anyone would).
@@ -1124,9 +1199,12 @@ export class Traffic {
     if (bus.bay && a === bus.bay.lane) return this.lanes.find((l) => l.edge === a.edge && l.dir !== a.dir) ?? null;
     const out = this.nodes[a.to].out.map((i) => this.lanes[i]).filter((l) => l.edge !== a.edge);
     if (!bus.done && !bus.bay) {
-      const free = out.filter((l) => onBay(l)?.taken === null);
-      if (free.length) {
-        const lane = free[Math.floor(this.rand() * free.length)];
+      const open = out.filter((l) => {
+        const b = onBay(l);
+        return !!b && free(b);
+      });
+      if (open.length) {
+        const lane = open[Math.floor(this.rand() * open.length)];
         const bay = onBay(lane)!;
         bay.taken = v.id;
         bus.bay = bay;
@@ -1146,30 +1224,24 @@ export class Traffic {
     const bus = v.bus!;
     const bay = bus.bay!;
     const st = this.stations[bus.station!];
-    // Where its middle ends up: back up the yard's way round from the bay's mouth, half its length and a bit (along the junctions:
-    // the lanes between them are short, drawn back from each); on the lane of it nearest there.
-    const arriving = (node: number) => this.lanes.find((l) => l.to === node && st.yard.has(l.id) && !st.bayRoads.has(l.road));
-    let node = bay.lane.from;
-    let [cx, cy] = [this.nodes[node].x, this.nodes[node].y];
-    let need = v.length / 2 + 2 * M;
-    for (let k = 0; k < 40 && need > 0; k++) {
-      const before = arriving(node);
-      if (!before) break;
-      const [px, py] = [this.nodes[before.from].x, this.nodes[before.from].y];
-      const seg = Math.hypot(px - cx, py - cy);
-      if (seg >= need) {
-        [cx, cy] = [cx + ((px - cx) * need) / seg, cy + ((py - cy) * need) / seg];
-        need = 0;
-      } else [cx, cy, node, need] = [px, py, before.from, need - seg];
-    }
-    let lane: Lane | undefined;
-    let at = 0;
-    let best = Infinity;
-    for (const id of st.yard) {
-      const l = this.lanes[id];
-      if (st.bayRoads.has(l.road)) continue;
-      const { s, d } = nearestOn(l, cx, cy);
-      if (d < best) [best, lane, at] = [d, l, s];
+    // Where its middle ends up: straight back out of the bay, onto the way round (the nearest of it to the bay's line,
+    // out past its mouth); then a quarter of its length back up it, to swing round into.
+    const nearest = (x: number, y: number) => {
+      let best: { lane?: Lane; at: number; d: number } = { at: 0, d: Infinity };
+      for (const id of st.yard) {
+        const l = this.lanes[id];
+        if (st.bayRoads.has(l.road)) continue;
+        const { s, d } = nearestOn(l, x, y);
+        if (d < best.d) best = { lane: l, at: s, d };
+      }
+      return best;
+    };
+    const [mx, my, bx, by] = pathAt(bay.lane, 0);
+    const across = nearest(mx - bx * (6 * M + AISLE), my - by * (6 * M + AISLE));
+    let { lane, at } = across;
+    if (lane) {
+      const [cx, cy, ux, uy] = pathAt(lane, at);
+      ({ lane, at } = nearest(cx - (ux * v.length) / 4, cy - (uy * v.length) / 4));
     }
     if (!lane) {
       // Nowhere to back out to (it shouldn't happen): it's taken off the road.
@@ -1178,26 +1250,38 @@ export class Traffic {
       return;
     }
     const [ex, ey, tx, ty] = pathAt(lane, at);
-    const [sx, sy] = [v.x, v.y];
-    // Starting backwards (the way it's facing, reversed); ending going back up the yard, facing on along it.
+    // Starting straight back (the way it's facing, reversed), most of its length, out past the tails of those either side;
+    // then round, ending going back up the yard, facing on along it.
     const [m0x, m0y] = [-Math.cos(v.angle), -Math.sin(v.angle)];
     const [m1x, m1y] = [-tx, -ty];
+    const straight = Math.max(0, Math.min(v.length * 0.8, (ex - v.x) * m0x + (ey - v.y) * m0y - 4 * M));
+    const pts: Pts = [];
+    for (let s = 0; s < straight; s += M) pts.push(v.x + m0x * s, v.y + m0y * s);
+    const [sx, sy] = [v.x + m0x * straight, v.y + m0y * straight];
     const k = Math.hypot(ex - sx, ey - sy) * 0.5;
     const [p1x, p1y, p2x, p2y] = [sx + m0x * k, sy + m0y * k, ex - m1x * k, ey - m1y * k];
-    const pts: Pts = [];
     for (let i = 0; i <= 24; i++) {
       const t = i / 24;
       const [a, b, c, d] = [(1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t * t, t ** 3];
       pts.push(a * sx + b * p1x + c * p2x + d * ex, a * sy + b * p1y + c * p2y + d * ey);
     }
-    v.rev = { path: makePath(pts, 0), s: 0, lane, at, wait: 0.5 + this.rand() };
+    const path = makePath(pts, 0);
+    // The ground it goes over: all along it, all its length (back from its middle, the way it's going, to the front).
+    const zone: Pts = [];
+    for (let s = 0; s <= path.length + 0.01; s += 1.5 * M) {
+      const [x, y, ux, uy] = pathAt(path, Math.min(s, path.length));
+      for (let o = -v.length / 2; o <= v.length / 2 + 0.01; o += 2 * M) zone.push(x + ux * o, y + uy * o);
+    }
+    let box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < zone.length; i += 2) box = [Math.min(box[0], zone[i]), Math.min(box[1], zone[i + 1]), Math.max(box[2], zone[i]), Math.max(box[3], zone[i + 1])];
+    v.rev = { path, s: 0, lane, at, wait: 0.5 + this.rand(), zone, box, held: false };
     v.mode = 'reverse';
     v.speed = 0;
     v.accel = 0;
   }
 
   /** Backing out of its bay: waiting till there's room behind it, then slowly back and round; then on round the yard. */
-  private reverse(v: Vehicle, dt: number): void {
+  private reverse(v: Vehicle, dt: number, obstacles: Obstacle[]): void {
     const r = v.rev!;
     v.vx = 0;
     v.vy = 0;
@@ -1208,23 +1292,28 @@ export class Traffic {
       r.wait -= dt;
       return;
     }
-    const [ex, ey] = [r.path.pts[r.path.pts.length - 2], r.path.pts[r.path.pts.length - 1]];
+    if (!r.held) {
+      // Keeping the ground it'll go over, so long as no one else backing out is keeping any of it.
+      if (this.vehicles.some((o) => o !== v && o.mode === 'reverse' && o.rev!.held && this.zoneMeets(o.rev!, r))) return;
+      r.held = true;
+    }
     if (r.s === 0) {
-      // Room behind: nothing coming past where it's backing out to, or stopped there, and no one else backing out there.
-      // (Once it's going, what comes round stops for it.)
-      const blocked = this.vehicles.some((o) => {
-        if (o === v) return false;
-        const d = Math.hypot(o.x - ex, o.y - ey);
-        if (o.mode === 'reverse') {
-          const r = o.rev!;
-          return r.s > 0 && (d < 13 * M || Math.hypot(r.path.pts[r.path.pts.length - 2] - ex, r.path.pts[r.path.pts.length - 1] - ey) < 13 * M);
-        }
-        return o.mode === 'drive' && !(o.bus?.dwell !== undefined && o.bus.dwell > 0) && o.behind !== v.id && (d < 6 * M || (d < 14 * M && o.speed > 0.5 * M));
-      });
-      if (blocked) return;
+      // Then going once there's nothing in it (but those in their bays, out of the way).
+      for (const o of obstacles) {
+        if (o.id === v.id || (o.id >= 0 && this.inBay(o as Vehicle))) continue;
+        if (this.inZone(r, o)) return;
+      }
+    } else {
+      // (And stopping, if anything's got behind it: not what's waiting for it, stopped.)
+      const [x, y, ux, uy] = pathAt(r.path, Math.min(r.path.length, r.s + 1.5 * M));
+      const [bx, by] = [x + (ux * v.length) / 2, y + (uy * v.length) / 2];
+      for (const o of obstacles) {
+        if (o.id === v.id || (o.id >= 0 && (this.inBay(o as Vehicle) || (o as Vehicle).behind === v.id))) continue;
+        if (Math.abs(o.x - bx) < o.length && Math.abs(o.y - by) < o.length && distToBody(o, bx, by) < v.r + 0.3 * M) return;
+      }
     }
     const left = r.path.length - r.s;
-    const speed = Math.min(REVERSE_SPEED, 0.4 * M + left * 1.2, 0.4 * M + r.s * 1.2);
+    const speed = Math.min(REVERSE_SPEED, 0.6 * M + left * 2, 0.6 * M + r.s * 2);
     r.s = Math.min(r.path.length, r.s + speed * dt);
     const [x, y, ux, uy] = pathAt(r.path, r.s);
     v.x = x;
@@ -1248,6 +1337,27 @@ export class Traffic {
     Object.assign(v, { mode: 'drive', route: [r.lane], s: r.at, back: null, speed: 0, accel: 0, react: 0.6, rev: undefined, side: 0, sideRate: 0 });
     this.plan(v);
     this.pose(v);
+  }
+
+  /** In its bay at a bus station, out of the way: waiting there, or about to back out. */
+  private inBay(v: Vehicle): boolean {
+    return !!v.bus?.bay && (v.mode === 'reverse' ? v.rev!.s === 0 : v.mode === 'drive' && v.bus.dwell > 0);
+  }
+
+  /** Whether something's on the ground one backing out is keeping (any of it within its half width and a bit of it). */
+  private inZone(r: NonNullable<Vehicle['rev']>, o: Obstacle, more = 0): boolean {
+    const reach = ZONE + o.r + more;
+    const [b0, b1, b2, b3] = r.box;
+    if (o.x < b0 - o.length - reach || o.x > b2 + o.length + reach || o.y < b1 - o.length - reach || o.y > b3 + o.length + reach) return false;
+    for (let i = 0; i < r.zone.length; i += 2) if (distToBody(o, r.zone[i], r.zone[i + 1]) < reach) return true;
+    return false;
+  }
+
+  /** Whether two backing out would go over any of the same ground. */
+  private zoneMeets(a: NonNullable<Vehicle['rev']>, b: NonNullable<Vehicle['rev']>): boolean {
+    if (a.box[0] > b.box[2] + 2 * ZONE || b.box[0] > a.box[2] + 2 * ZONE || a.box[1] > b.box[3] + 2 * ZONE || b.box[1] > a.box[3] + 2 * ZONE) return false;
+    for (let i = 0; i < a.zone.length; i += 2) for (let j = 0; j < b.zone.length; j += 2) if (Math.hypot(a.zone[i] - b.zone[j], a.zone[i + 1] - b.zone[j + 1]) < 2 * ZONE) return true;
+    return false;
   }
 
   /** It's done with its bay (or won't get there): the bay's free. */
@@ -1275,7 +1385,7 @@ export class Traffic {
       }
       if (!st.filled) {
         st.filled = true;
-        for (const b of st.bays) if (b.taken === null && this.rand() < 0.65) this.stationBus(st, b.lane, b.lane.length - BAY_SHORT - VEHICLES.bus.length / 2, b);
+        for (const b of st.bays) if (free(b) && this.rand() < 0.65) this.stationBus(st, b.lane, b.lane.length - BAY_SHORT - VEHICLES.bus.length / 2, b);
       }
       st.timer -= dt;
       if (st.timer > 0) continue;
@@ -1449,7 +1559,7 @@ export class Traffic {
         if (v.mode === 'drive') this.drive(v, dt, obstacles, light);
         else if (v.mode === 'knocked') this.slide(v, dt);
         else if (v.mode === 'rejoin') this.rejoin(v, dt, obstacles, view);
-        else if (v.mode === 'reverse') this.reverse(v, dt);
+        else if (v.mode === 'reverse') this.reverse(v, dt, obstacles);
         if (![v.x, v.y, v.angle, v.speed].every(Number.isFinite)) throw new Error('lost its way');
       } catch (e) {
         // Something's gone wrong with this one: it's taken off the road, and the rest drive on (the game mustn't stop).
@@ -1521,6 +1631,21 @@ export class Traffic {
         const [, , ux, uy] = this.direction(v, d + front);
         gap = Math.max(0, d - o.r * 0.5);
         lead = Math.max(0, o.vx * ux + o.vy * uy);
+        blocker = o.id;
+        break;
+      }
+    }
+    // A bus backing out of its bay at a bus station, keeping the ground it'll go over: it's waited for, outside it (not if it's
+    // in it already: it goes on out of it).
+    for (const o of this.vehicles) {
+      if (o.mode !== 'reverse' || !o.rev!.held || o === v) continue;
+      const [b0, b1, b2, b3] = o.rev!.box;
+      if (v.x < b0 - look - v.length || v.x > b2 + look + v.length || v.y < b1 - look - v.length || v.y > b3 + look + v.length || this.inZone(o.rev!, v)) continue;
+      for (const [x, y, , dd] of samples) {
+        if (dd >= gap) break;
+        if (!this.inZone(o.rev!, { ...ZONE_PROBE, x, y, r: v.r }, 0.3 * M)) continue;
+        gap = Math.max(0, dd - 0.5 * M);
+        lead = 0;
         blocker = o.id;
         break;
       }
@@ -2247,7 +2372,12 @@ export class Traffic {
       const v = this.vehicles[i];
       // At the end of its way (off the edge of the map: it drives off it), or a bus off its route once out of sight.
       const gone = v.mode === 'drive' && ((v.route.length === 1 && v.s >= v.route[0].length - 0.5) || (v.bus?.lost && !this.inView(v.x, v.y, view, 60)));
-      if (gone || (Math.hypot(v.x - player.x, v.y - player.y) > far && !this.bound(v)) || (v.still > GRIDLOCK && this.gridlocked(v) && !this.inView(v.x, v.y, view, 80))) this.vehicles.splice(i, 1);
+      // (A bus in its bay at a bus station, or backing out of it, is only waiting its turn: it's not stuck.)
+      const stuck = v.still > GRIDLOCK && !this.inBay(v) && v.mode !== 'reverse' && this.gridlocked(v) && !this.inView(v.x, v.y, view, 80);
+      if (gone || (Math.hypot(v.x - player.x, v.y - player.y) > far && !this.bound(v)) || stuck) {
+        this.release(v);
+        this.vehicles.splice(i, 1);
+      }
     }
     this.populateStations(dt, player, view);
     this.spawnTimer -= dt;

@@ -6,6 +6,19 @@ import { Traffic, type Vehicle } from './traffic';
 
 const map = bristol as unknown as GameMap;
 
+/** How far apart two vehicles' sides are, px (less than 0, overlapping). */
+function apart(a: Vehicle, b: Vehicle): number {
+  const ends = (v: Vehicle) => {
+    const h = Math.max(0, v.length / 2 - v.r);
+    const [c, s] = [Math.cos(v.angle), Math.sin(v.angle)];
+    return [v.x - c * h, v.y - s * h, v.x + c * h, v.y + s * h];
+  };
+  const [p, q] = [ends(a), ends(b)];
+  let near = Infinity;
+  for (let i = 0; i <= 10; i++) for (let j = 0; j <= 10; j++) near = Math.min(near, Math.hypot(p[0] + ((p[2] - p[0]) * i) / 10 - q[0] - ((q[2] - q[0]) * j) / 10, p[1] + ((p[3] - p[1]) * i) / 10 - q[1] - ((q[3] - q[1]) * j) / 10));
+  return near - a.r - b.r;
+}
+
 describe('Bristol Bus Station', () => {
   it('has its 19 bays, each a stop at the end of its own way in, by its platform', () => {
     const st = map.busStations!.find((s) => s.name === 'Bristol Bus Station')!;
@@ -27,6 +40,9 @@ describe('Bristol Bus Station', () => {
     const view = { x0: st.x - 300, y0: st.y - 140, x1: st.x + 300, y1: st.y + 140 };
     const seen = new Map<number, { inBay: boolean; backed: boolean; out: boolean; entered: boolean }>();
     const yardCars = new Set<number>();
+    // How long each two buses have been on top of each other (more than half a metre), s; the longest.
+    const over = new Map<string, number>();
+    let longest = 0;
     let most = 0;
     const step = 1 / 30;
     for (let t = 0; t < 180; t += step) {
@@ -49,15 +65,28 @@ describe('Bristol Bus Station', () => {
         if (v.bus.bay && v.bus.dwell > 0) inBays++;
       }
       most = Math.max(most, inBays);
-      // A bay's never taken by two.
+      // A bay's never taken by two, nor by one that's gone.
       const taken = st.bays.map((b) => b.taken).filter((id) => id !== null);
       expect(new Set(taken).size).toBe(taken.length);
+      for (const id of taken) expect(traffic.vehicles.some((v) => v.id === id)).toBe(true);
+      const buses = traffic.vehicles.filter((v) => v.bus && Math.hypot(v.x - st.x, v.y - st.y) < 90 * 8);
+      for (let i = 0; i < buses.length; i++) {
+        for (let j = i + 1; j < buses.length; j++) {
+          const k = `${buses[i].id}/${buses[j].id}`;
+          if (apart(buses[i], buses[j]) < -0.5 * 8) {
+            over.set(k, (over.get(k) ?? 0) + step);
+            longest = Math.max(longest, over.get(k)!);
+          } else over.delete(k);
+        }
+      }
     }
     const all = [...seen.values()];
     // Busy: lots in their bays at once; some come in from outside, some back out and leave.
     expect(most).toBeGreaterThanOrEqual(8);
     expect(all.filter((k) => k.entered && k.inBay).length).toBeGreaterThan(3);
     expect(all.filter((k) => k.backed && k.out).length).toBeGreaterThan(3);
+    // Never more than a moment on top of each other (brushing past, swinging in or out).
+    expect(longest).toBeLessThan(1.5);
     // No cars in the yard.
     expect(yardCars.size).toBe(0);
     // Every bus that's backed out faced on round the yard after (towards the way out, the south-west: x falling, y rising).

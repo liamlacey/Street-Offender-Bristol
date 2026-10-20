@@ -566,18 +566,24 @@ the nearest within 25 m. (Bristol's: 19 bays.)
   started on them), at 5 m/s. The yard is those joined to the bays; its ways in are
   where something else drives into it (Bristol's: from Marlborough Street, at the
   north-east), and its one-way ways take buses round it and out (to the south-west).
+- The way round past the bays is moved over from them, out into the open yard (as far
+  as the yard has room, up to 5 m), clear of the tails of the buses in them. Bays too
+  close to use at once (where their ways bend in together, so a bus in each would touch)
+  are used one at a time.
 - Coming near (within 700 m), about 65% of its bays have buses in already, part way
   through their wait. Then a bus about every 3 s (at most 16 on their way in or in their
   bays) sets off from 60 to 250 m away, out of sight, and drives the shortest way to a
   way in. A bus on a route that calls there goes in too. In the yard it takes the first
   free bay it comes to (at random, of those at a junction), drives nose in to 0.6 m from
-  its end and waits 45 to 120 s; it's in no one's way there. Then it backs out, rear
-  first, swinging round to face on round the yard (a curve from where it stands to a
-  point half its length and 2 m back up the yard from the bay's mouth), at up to 3 m/s,
-  once nothing's coming past there or stopped there and no one else is backing out
-  within 13 m of it (what comes round, after, waits for it); then on round the yard,
-  out, and on along its route (or on as anyone would). Its number and colour are one of
-  the routes that stop there. With no bay free, it goes round and out.
+  its end and waits 45 to 120 s; it's in no one's way there. Then it backs out: straight
+  back most of its length (past the tails of those either side), then swinging round to
+  face on round the yard, its middle ending on the way round (straight out from the bay,
+  then a quarter of its length back up it), at up to 4 m/s. First it keeps the ground it'll
+  go over (if no one else backing out is keeping any of it): what's coming waits outside
+  it, what's in it goes on out, and it goes once it's empty. Then on round the yard, out,
+  and on along its route (or on as anyone would). Its number and colour are one of the
+  routes that stop there. With no bay free, it goes round and out. A bus in its bay, or
+  backing out, isn't taken off the road as stuck; any taken off frees its bay.
 
 **Parked cars:** in the car parks' bays (65% of them taken) and in the parking lanes'
 bays (55%, plus 1.2% per point of the street's activity, at most 92%; loading bays
