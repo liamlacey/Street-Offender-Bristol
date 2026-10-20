@@ -391,7 +391,7 @@ go over one into the water (you can't swim). Falling into the water you sink
 off a quay into the harbour, as far as the nearest ledge there (within 6 m)
 drops, or 1.5 m. Drawn: a pale edge along the top, the face below it, a third
 of its drop deep (up to 1.25 m), lifted through the perspective, and a shadow
-beyond. The hills (below) are still smoothed across them.
+beyond. The ground steps down at them too (below).
 
 **The hills.** The bare ground's height every 4 m (the average of the 16 one-metre
 readings round each point), gaps filled from their neighbours, and smoothed twice.
@@ -399,8 +399,21 @@ Stored as decimetres above the lowest point. (Bridges aren't in it: they're deck
 above it.) What's under a bridge (between 4 m in from each of its ends, and to a
 metre beyond its edges) is kept apart from the ground round it: readings, gap
 filling and smoothing never mix the two, or the road would dip as it came to the
-bridge (Park Street's did, by 2 m). Then the roads onto measured decks are brought
-to meet them (above).
+bridge (Park Street's did, by 2 m). Nor is anything mixed across a ledge (found
+first): a reading on the far side of one from a point isn't in its average, and
+gap filling and smoothing don't reach across one, so each side keeps its own
+height. Then the roads onto measured decks are brought to meet them (above).
+
+In the game (`terrain.ts`), the height between the grid's points is blended from
+the four round it, but where a ledge runs through that grid square, only from
+those on the same side of it as the point (so the ground steps down at its edge);
+and the slope's measured only on the same side (on the low side of a wall, not up
+it). The ground's picture (`TerrainSheet.ts`, a mesh with a corner every 4 m) cuts
+each square a ledge runs through into metre squares, each corner at its own
+height; the squares beside one get the same points along the side they share (a
+fan from their middle), or there'd be hairline gaps where they meet. The mesh is
+drawn as pairs of triangles sharing a side (Phaser's `buildOrderedIndices(1)`),
+half as much to send to the GPU as a quad for every triangle.
 
 ## Traffic
 

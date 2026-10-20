@@ -24,7 +24,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
   const m = e.data;
   if (m.type === 'map') {
     world = buildWorld(m.map);
-    terrain = new Terrain(m.map.terrain, m.map.pxPerMetre);
+    terrain = new Terrain(m.map.terrain, m.map.pxPerMetre, m.map.ledges);
     palette = artPalette(newCanvas(1, 1).getContext('2d')!);
   } else if (m.type === 'trees') {
     world.map.trees = m.trees;

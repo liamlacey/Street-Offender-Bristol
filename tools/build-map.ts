@@ -145,7 +145,7 @@ const lidar = addLidar(map, mergeRasters(dsms), mergeRasters(dtms));
 
 // Turn the car round if it's facing the wrong way up the hill.
 if (sources.start.facing && map.terrain) {
-  const terrain = new Terrain(map.terrain, map.pxPerMetre);
+  const terrain = new Terrain(map.terrain, map.pxPerMetre, map.ledges);
   const { x, y, heading } = map.spawn;
   const ahead = 15 * map.pxPerMetre;
   const rise = terrain.at(x + Math.cos(heading) * ahead, y + Math.sin(heading) * ahead) - terrain.at(x - Math.cos(heading) * ahead, y - Math.sin(heading) * ahead);

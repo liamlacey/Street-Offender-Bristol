@@ -116,7 +116,7 @@ export class GroundLayer {
     paint(texture.context);
     texture.refresh();
     const [x0, y0] = [i * CHUNK - BLEED, j * CHUNK - BLEED];
-    const sheet = new TerrainSheet(this.scene, key, x0, y0, PIECE, PIECE, this.depth, (x, y) => this.terrain.at(x, y) * this.terrain.px);
+    const sheet = new TerrainSheet(this.scene, key, x0, y0, PIECE, PIECE, this.depth, (x, y) => this.terrain.at(x, y) * this.terrain.px, (x, y, size) => this.terrain.cutAcross(x, y, size));
     // In place of the one it's painted again over, if it is.
     const old = this.pieces.get(chunkKey(i, j));
     if (old) this.forget(chunkKey(i, j));

@@ -9,6 +9,7 @@
 import { type HeightGrid, type Raster, bestShift, findTrees, heightAt, heightGrid, quantile, sample } from './lidar.ts';
 import { DECK_STEP, type GameMap, type Ledge, Projection, type Road, type Pts, type TerrainData, VEHICLE_ROADS, pointInRing, ridgeAxis, ringArea } from './osm.ts';
 import { toNationalGrid } from './osgb.ts';
+import { Cuts } from '../world/terrain.ts';
 
 export interface LidarReport {
   buildingsMeasured: number;
@@ -467,7 +468,9 @@ const TERRAIN_CELL = 4;
 /**
  * The bare ground's height every TERRAIN_CELL metres (the average of the
  * LIDAR's readings round each point). Bridges aren't in it: they're decks
- * above it, a level of their own (see src/world/decks.ts).
+ * above it, a level of their own (see src/world/decks.ts). Nothing's mixed
+ * across a ledge (map.ledges, found first): each side keeps its own height,
+ * so the drop's a step, not a slope.
  */
 export function terrainOf(map: GameMap, dtm: Raster, toGrid: (x: number, y: number) => [number, number], dsm?: Raster): TerrainData {
   const px = map.pxPerMetre;
@@ -479,6 +482,11 @@ export function terrainOf(map: GameMap, dtm: Raster, toGrid: (x: number, y: numb
   // heights aren't mixed across a bridge's edges, or the road would dip as it came to the bridge.
   const under = underBridges(map.roads);
   const region = new Int32Array(cols * rows);
+  // Which points have a ledge within a metre of their cell's corner, and whether the way between two points crosses one.
+  const cuts = new Cuts(map.ledges);
+  const nearCut = new Uint8Array(cols * rows);
+  if (!cuts.none) for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) nearCut[j * cols + i] = cuts.inSquare((i - 1) * cell, (j - 1) * cell, 2 * cell) ? 1 : 0;
+  const apart = (a: number, b: number) => (nearCut[a] || nearCut[b] ? cuts.crosses((a % cols) * cell, Math.floor(a / cols) * cell, (b % cols) * cell, Math.floor(b / cols) * cell) : false);
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
       const own = under(i * cell, j * cell);
@@ -489,6 +497,7 @@ export function terrainOf(map: GameMap, dtm: Raster, toGrid: (x: number, y: numb
         for (let dx = -1.5; dx <= 1.5; dx++) {
           const [x, y] = [i * cell + dx * px, j * cell + dy * px];
           if (under(x, y) !== own) continue;
+          if (nearCut[j * cols + i] && cuts.crosses(i * cell, j * cell, x, y)) continue;
           const [e, nn] = toGrid(x, y);
           const v = sample(dtm, e, nn);
           if (v === v) {
@@ -500,10 +509,11 @@ export function terrainOf(map: GameMap, dtm: Raster, toGrid: (x: number, y: numb
       z[j * cols + i] = n ? sum / n : NaN;
     }
   }
-  fillGaps(z, cols, rows, region);
+  fillGaps(z, cols, rows, region, apart);
+  fillGaps(z, cols, rows, undefined, apart);
   fillGaps(z, cols, rows);
   // Smooth out the bumps (kerbs, walls, what's left where buildings were taken out of the survey).
-  for (let pass = 0; pass < 2; pass++) smooth(z, cols, rows, region);
+  for (let pass = 0; pass < 2; pass++) smooth(z, cols, rows, region, apart);
   // The bridges' decks, measured; and the roads onto them brought up (or down) to meet them.
   const decks = dsm ? measureDecks(map, dsm, toGrid, z, cols, rows, cell) : new Map<Road, number[]>();
 
@@ -563,8 +573,8 @@ export function underBridges(roads: Road[]): (x: number, y: number) => number {
   };
 }
 
-/** Smooths the heights, each with its neighbours (only those in the same region, if given). */
-function smooth(z: Float32Array, cols: number, rows: number, region?: Int32Array): void {
+/** Smooths the heights, each with its neighbours (only those in the same region, if given, and not `apart`: across a ledge). */
+function smooth(z: Float32Array, cols: number, rows: number, region?: Int32Array, apart?: (a: number, b: number) => boolean): void {
   const out = z.slice();
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
@@ -576,6 +586,7 @@ function smooth(z: Float32Array, cols: number, rows: number, region?: Int32Array
           const jj = j + dj;
           if (ii < 0 || jj < 0 || ii >= cols || jj >= rows) continue;
           if (region && region[jj * cols + ii] !== region[j * cols + i]) continue;
+          if (apart && (di || dj) && apart(j * cols + i, jj * cols + ii)) continue;
           const w = di === 0 && dj === 0 ? 4 : di === 0 || dj === 0 ? 2 : 1;
           sum += z[jj * cols + ii] * w;
           weight += w;
@@ -587,8 +598,8 @@ function smooth(z: Float32Array, cols: number, rows: number, region?: Int32Array
   z.set(out);
 }
 
-/** Fills in the cells with no reading from their neighbours, a ring at a time (only those in the same region, if given). */
-function fillGaps(z: Float32Array, cols: number, rows: number, region?: Int32Array): void {
+/** Fills in the cells with no reading from their neighbours, a ring at a time (only those in the same region, if given, and not `apart`). */
+function fillGaps(z: Float32Array, cols: number, rows: number, region?: Int32Array, apart?: (a: number, b: number) => boolean): void {
   for (let pass = 0; pass < 50; pass++) {
     let missing = 0;
     const next = z.slice();
@@ -602,6 +613,7 @@ function fillGaps(z: Float32Array, cols: number, rows: number, region?: Int32Arr
           const jj = j + dj;
           if (ii < 0 || jj < 0 || ii >= cols || jj >= rows) continue;
           if (region && region[jj * cols + ii] !== region[j * cols + i]) continue;
+          if (apart?.(j * cols + i, jj * cols + ii)) continue;
           const v = z[jj * cols + ii];
           if (v === v) {
             sum += v;
@@ -615,8 +627,8 @@ function fillGaps(z: Float32Array, cols: number, rows: number, region?: Int32Arr
     z.set(next);
     if (!missing) return;
   }
-  // Anything still empty is left for a pass across regions; with none, it's 0.
-  if (!region) for (let k = 0; k < z.length; k++) if (z[k] !== z[k]) z[k] = 0;
+  // Anything still empty is left for a pass across regions (and ledges); with neither, it's 0.
+  if (!region && !apart) for (let k = 0; k < z.length; k++) if (z[k] !== z[k]) z[k] = 0;
 }
 
 /** Points every `step` px inside some rings (filled even-odd). */

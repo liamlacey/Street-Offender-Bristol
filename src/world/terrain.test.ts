@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { GameMap } from '../map/osm';
 import bristol from '../map/bristol.json';
 import { Perspective } from './perspective';
-import { Terrain } from './terrain';
+import { Cuts, Terrain } from './terrain';
 
-/** A terrain from heights in metres, a grid point every `cell` px. */
-function terrainOf(cols: number, rows: number, cell: number, z: (i: number, j: number) => number): Terrain {
+/** A terrain from heights in metres, a grid point every `cell` px (and any ledges). */
+function terrainOf(cols: number, rows: number, cell: number, z: (i: number, j: number) => number, ledges?: GameMap['ledges']): Terrain {
   let binary = '';
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
@@ -13,7 +13,7 @@ function terrainOf(cols: number, rows: number, cell: number, z: (i: number, j: n
       binary += String.fromCharCode(d & 255, d >> 8);
     }
   }
-  return new Terrain({ cell, cols, rows, base: 0, heights: btoa(binary) }, 8);
+  return new Terrain({ cell, cols, rows, base: 0, heights: btoa(binary) }, 8, ledges);
 }
 
 describe('Terrain', () => {
@@ -39,9 +39,45 @@ describe('Terrain', () => {
   });
 });
 
+describe('the ground at a ledge', () => {
+  // Flat, 10 m up north of y = 100 (between the grid's rows at 96 and 128), 7 m below it: a 3 m drop along it, falling south.
+  const ledge = [{ pts: [0, 100, 320, 100], drop: [24, 24] }];
+  const step = terrainOf(10, 10, 32, (_, j) => (j * 32 < 100 ? 10 : 7), ledge);
+  const smooth = terrainOf(10, 10, 32, (_, j) => (j * 32 < 100 ? 10 : 7));
+
+  it('steps down at its edge (not a slope across the grid square)', () => {
+    expect(step.at(150, 99)).toBeCloseTo(10, 5);
+    expect(step.at(150, 101)).toBeCloseTo(7, 5);
+    expect(step.at(150, 112)).toBeCloseTo(7, 5);
+    // Without it, a ramp from one grid row to the next.
+    expect(smooth.at(150, 112)).toBeCloseTo(8.5, 5);
+  });
+
+  it("is flat either side (the slope's not measured across it)", () => {
+    expect(step.slope(150, 92)).toEqual([0, 0]);
+    expect(step.slope(150, 108)).toEqual([0, 0]);
+    expect(Math.abs(smooth.slope(150, 104)[1])).toBeGreaterThan(0.3);
+  });
+
+  it('is the same as ever away from it', () => {
+    for (const [x, y] of [[150, 40], [150, 200], [60, 250]]) expect(step.at(x, y)).toBeCloseTo(smooth.at(x, y), 6);
+    expect(step.cutAcross(128, 96, 32)).toBe(true);
+    expect(step.cutAcross(128, 160, 32)).toBe(false);
+  });
+
+  it('knows what crosses it, and what touches the squares it runs through', () => {
+    const cuts = new Cuts(ledge);
+    expect(cuts.crosses(50, 90, 50, 110)).toBe(true);
+    expect(cuts.crosses(50, 90, 80, 95)).toBe(false);
+    expect(cuts.crosses(400, 90, 400, 110)).toBe(false);
+    expect(cuts.inSquare(300, 80, 32)).toBe(true);
+    expect(cuts.inSquare(330, 80, 32)).toBe(false);
+  });
+});
+
 describe('Bristol\'s hills', () => {
   const map = bristol as unknown as GameMap;
-  const terrain = new Terrain(map.terrain, map.pxPerMetre);
+  const terrain = new Terrain(map.terrain, map.pxPerMetre, map.ledges);
   const ground = (lat: number, lon: number) => terrain.at((lon - map.origin.lon) * 69440 * 8, (map.origin.lat - lat) * 111250 * 8);
 
   it('climbs from the harbour up Park Street to Brandon Hill', () => {

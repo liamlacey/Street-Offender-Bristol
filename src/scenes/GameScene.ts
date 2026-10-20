@@ -264,7 +264,7 @@ export class GameScene extends Phaser.Scene {
     createArt(this);
     this.walls = [new SegmentGrid(this.world.walls[0]), new SegmentGrid(this.world.walls[1])];
     this.posts = [new CircleGrid(this.world.posts[0]), new CircleGrid(this.world.posts[1])];
-    this.terrain = new Terrain(map.terrain, map.pxPerMetre);
+    this.terrain = new Terrain(map.terrain, map.pxPerMetre, map.ledges);
     this.ground = new GroundLayer(this, this.world, this.terrain, DEPTH.ground);
     this.skids = new SkidMarks(this, this.terrain, DEPTH.skids);
     this.effects = new CarEffects(this, this.skids, DEPTH.effects);

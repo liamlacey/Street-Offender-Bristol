@@ -795,7 +795,7 @@ export class Traffic {
       }
       for (const l of this.lanes) if (l.path && linked.has(l.to)) l.giveWay = true;
     }
-    this.terrain = new Terrain(map.terrain, map.pxPerMetre);
+    this.terrain = new Terrain(map.terrain, map.pxPerMetre, map.ledges);
     for (const l of this.lanes) {
       const k = `${l.edge}:${l.dir}`;
       this.lanesOf.set(k, [...(this.lanesOf.get(k) ?? []), l].sort((a, b) => a.index - b.index));
