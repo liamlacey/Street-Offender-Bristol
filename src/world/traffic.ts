@@ -973,7 +973,8 @@ export class Traffic {
       for (const id of station.yard) this.yardOf.set(id, station.index);
     }
     // The parked cars: most of the bays taken, more where it's busier.
-    for (const space of parkingSpaces(map)) {
+    const spaces = parkingSpaces(map);
+    for (const space of spaces) {
       if (this.rand() > space.taken) continue;
       const kind = pick(this.rand, (Object.keys(VEHICLES) as VehicleKind[]).map((k) => [k, VEHICLES[k].parked * (space.length >= VEHICLES[k].length + 2 ? 1 : 0)]));
       if (!kind) continue;
@@ -985,7 +986,6 @@ export class Traffic {
       this.parkedById.set(v.id, v);
     }
     // The emergency services' posts, their vehicles parked along the kerb outside (most of their places taken).
-    const spaces = parkingSpaces(map);
     const kerbLanes = this.lanes.filter((l) => !l.path && !l.bus && l.level === 0 && DRIVEN.has(map.roads[l.road].kind));
     const all: Kerbside<Lane>[] = [];
     for (const service of map.services ?? []) {
@@ -2285,8 +2285,8 @@ export class Traffic {
       const [cx, cy] = [Math.cos(v.angle), Math.sin(v.angle)];
       const past = !b || (b.x - v.x) * cx + (b.y - v.y) * cy + (v.length + b.length) / 2 + GAP < 0;
       // Past it: back in, once there's room; the way round closed: another way, or wait.
-      if (past && this.wayClear(v, 0, 15 * M, obstacles, -1)) v.passing = undefined;
-      else if (!past && !this.wayClear(v, -v.passing.out, Math.max(gap, 0) + (b?.length ?? 0) + v.length, obstacles, v.passing.id)) v.passing = undefined;
+      if (past && this.wayClear(v, 0, 15 * M, obstacles)) v.passing = undefined;
+      else if (!past && !this.wayClear(v, -v.passing.out, Math.max(gap, 0) + (b?.length ?? 0) + v.length, obstacles)) v.passing = undefined;
       return;
     }
     const b = blocker !== undefined && blocker >= 0 ? this.vehicleById(blocker) : undefined;
@@ -2296,7 +2296,7 @@ export class Traffic {
     // (Not up the inside of something moving over to the kerb: pulling over for it, or in to park.)
     const kerbward = b.parking || b.sideRate > 0.2 * M || (!b.siren && this.yieldingTo(b));
     for (const out of [3.4 * M, -2.8 * M, 6.4 * M, -4 * M]) {
-      if ((out < 0 && kerbward) || !this.wayClear(v, -out, need, obstacles, b.id)) continue;
+      if ((out < 0 && kerbward) || !this.wayClear(v, -out, need, obstacles)) continue;
       v.passing = { id: b.id, out };
       this.stats.overtakes++;
       return;
@@ -2305,10 +2305,11 @@ export class Traffic {
 
   /**
    * Whether the way ahead `over` px to its left of its lane (for `length` px)
-   * is on the road or its pavements and clear: nothing there, nor coming to be
-   * there by the time it is (but `ignore`, what it's going round, by its side).
+   * is on the road or its pavements and clear: nothing there (what it's going
+   * round too, as it stands: it may be at an angle, turning), nor coming to be
+   * there by the time it is.
    */
-  private wayClear(v: Vehicle, over: number, length: number, obstacles: Obstacle[], ignore: number): boolean {
+  private wayClear(v: Vehicle, over: number, length: number, obstacles: Obstacle[]): boolean {
     const speed = Math.max(v.speed, 5 * M);
     for (let d = -v.length / 2; d <= Math.min(length, 2 * WEAVE_AT); d += 1.5 * M) {
       const [x, y, ux, uy] = this.direction(v, d);
@@ -2321,7 +2322,7 @@ export class Traffic {
       }
       const t = Math.max(0, d) / speed;
       for (const o of obstacles) {
-        if (o.id === v.id || o.level !== v.level || o.id === ignore) continue;
+        if (o.id === v.id || o.level !== v.level) continue;
         if (Math.abs(o.x - px) > 30 * M || Math.abs(o.y - py) > 30 * M) continue;
         // Where it'll be by then (moving along the way it's facing, and moving over).
         const going = o.id >= 0 ? (o as Vehicle).speed ?? 0 : Math.hypot(o.vx, o.vy);

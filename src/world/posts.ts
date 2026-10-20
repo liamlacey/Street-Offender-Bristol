@@ -30,6 +30,8 @@ export interface KerbLane {
   index: number;
   count: number;
   stops: { s: number }[];
+  /** Its bounds (x0, y0, x1, y1), px, if known. */
+  box?: [number, number, number, number];
 }
 
 /**
@@ -75,13 +77,17 @@ function places<L extends KerbLane>(map: Pick<GameMap, 'roads' | 'crossings' | '
     // Along the kerb on its left (the kerb lane); on a one-way street, on its right too (the lane furthest out).
     const sides = [...(lane.index === 0 ? [1] : []), ...(road.oneway && lane.index === lane.count - 1 ? [-1] : [])];
     if (!sides.length || lane.length < length + 2 * ENDS) continue;
-    if (!lane.pts.some((v, k) => (k % 2 ? v > y0 - reach - 20 * M && v < y1 + reach + 20 * M : v > x0 - reach - 20 * M && v < x1 + reach + 20 * M))) continue;
+    // (Only where it comes near the buildings' bounds: the rest's measured no further.)
+    const pad = reach + road.width;
+    const [bx0, by0, bx1, by1] = lane.box ?? bounds([lane.pts]);
+    if (bx1 < x0 - pad || bx0 > x1 + pad || by1 < y0 - pad || by0 > y1 + pad) continue;
     for (const side of sides) {
       const placed: number[] = [];
       for (let s = ENDS + length / 2; s <= lane.length - ENDS - length / 2; s += M) {
         if (lane.stops.some((st) => Math.abs(st.s - s) < CLEAR + length / 2)) continue;
         if (placed.some((t) => Math.abs(t - s) < length + 1.5 * M)) continue;
         const [x, y, ux, uy] = pointAlong(lane.pts, s);
+        if (x < x0 - pad || x > x1 + pad || y < y0 - pad || y > y1 + pad) continue;
         // The kerb, that side (y down: the left of (ux, uy) is (uy, -ux)): from the road's middle, its half width.
         const [lx, ly] = [uy * side, -ux * side];
         const centre = distToLine(road.pts, x, y);

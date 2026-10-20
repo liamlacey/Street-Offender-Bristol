@@ -30,7 +30,8 @@ describe("the pause menu's map", () => {
   });
 
   it('names the street there', () => {
-    const park = map.roads.find((r) => r.name === 'Park Street')!;
+    // (The one up from College Green, by where you start: not Totterdown's.)
+    const park = map.roads.find((r) => r.name === 'Park Street' && Math.hypot(r.pts[0] - map.spawn.x, r.pts[1] - map.spawn.y) < 600 * 8)!;
     expect(placeName(map, park.pts[0], park.pts[1])).toBe('Park Street');
   });
 });

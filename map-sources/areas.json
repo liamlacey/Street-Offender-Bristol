@@ -149,6 +149,262 @@
         1,
         1
       ]
+    },
+    {
+      "name": "seawalls",
+      "about": "About 970 m by 945 m the north-west corner: the Portway along the Avon Gorge, Sea Walls and the edge of Durdham Down, Rockleaze and Northcote Road, across the river Leigh Woods.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.6355,
+        "maxlat": 51.473,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-18T17:29:49Z",
+      "lidarShift": [
+        1,
+        0.5
+      ]
+    },
+    {
+      "name": "whiteladies",
+      "about": "About 970 m by 945 m to the north-west of kingsdown: the top of Whiteladies Road, Clifton Down and Durdham Down's edge, Westbury Road, Upper Belgrave Road and Redland Hill.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.6215,
+        "maxlat": 51.473,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-18T11:28:24Z",
+      "lidarShift": [
+        1.5,
+        -0.5
+      ]
+    },
+    {
+      "name": "redland",
+      "about": "About 970 m by 945 m to the north of kingsdown: Redland, Redland Green and Redland Grove, Zetland Road, Cotham Brow, and the bottom of Gloucester Road and Cheltenham Road.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.6075,
+        "maxlat": 51.473,
+        "maxlon": -2.5935
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-19T15:12:04Z",
+      "lidarShift": [
+        0.5,
+        1
+      ]
+    },
+    {
+      "name": "montpelier",
+      "about": "About 970 m by 945 m to the north of stpauls: Montpelier, Cheltenham Road and Gloucester Road, Ashley Road, Arley Hill, St Andrew's Park and St Agnes Park.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.5935,
+        "maxlat": 51.473,
+        "maxlon": -2.5795
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-19T15:12:04Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "stwerburghs",
+      "about": "About 970 m by 945 m the north-east corner: St Werburgh's, Mina Road and Mina Road Park, Baptist Mills, Lower Ashley Road, Stapleton Road and the St Paul's roundabout on the M32.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.5795,
+        "maxlat": 51.473,
+        "maxlon": -2.5655
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-19T23:45:26Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "lawrencehill",
+      "about": "About 970 m by 945 m to the east of stpauls: Lawrence Hill and its roundabout, Easton Way, Easton Road, Newtown and Lawfords Gate, Stapleton Road's south end.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.5795,
+        "maxlat": 51.4645,
+        "maxlon": -2.5655
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-19T23:45:26Z",
+      "lidarShift": [
+        1.5,
+        0
+      ]
+    },
+    {
+      "name": "stphilips",
+      "about": "About 970 m by 945 m to the east of broadmead: St Philip's, St Philip's Causeway, Barton Hill and Barrow Road, Feeder Road along the river, Avon Street and the Temple Quarter campus.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.5795,
+        "maxlat": 51.456,
+        "maxlon": -2.5655
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-20T18:55:09Z",
+      "lidarShift": [
+        2,
+        0.5
+      ]
+    },
+    {
+      "name": "totterdown",
+      "about": "About 970 m by 945 m to the east of redcliffe: Bath Road and Wells Road, Totterdown and Three Lamps, Totterdown Bridge, Arnos Vale Cemetery and St Philip's Marsh.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.5795,
+        "maxlat": 51.4475,
+        "maxlon": -2.5655
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-20T18:55:09Z",
+      "lidarShift": [
+        2,
+        0
+      ]
+    },
+    {
+      "name": "knowle",
+      "about": "About 970 m by 945 m the south-east corner: Wells Road up through Knowle, Broad Walk, Redcatch Road and Redcatch Park, Knowle Park and the top of the Northern Slopes.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.5795,
+        "maxlat": 51.439,
+        "maxlon": -2.5655
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-20T12:21:30Z",
+      "lidarShift": [
+        4,
+        0
+      ]
+    },
+    {
+      "name": "windmillhill",
+      "about": "About 970 m by 945 m to the south of redcliffe: Victoria Park's south end, Windmill Hill, St John's Lane, Wedmore Vale and the Northern Slopes.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.5935,
+        "maxlat": 51.439,
+        "maxlon": -2.5795
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-15T14:51:21Z",
+      "lidarShift": [
+        2,
+        0.5
+      ]
+    },
+    {
+      "name": "bedminster",
+      "about": "About 970 m by 945 m to the south of southville: Bedminster's south side, Bedminster Road, Parson Street, South Street, Malago Drive and St John's Lane.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.6075,
+        "maxlat": 51.439,
+        "maxlon": -2.5935
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-20T17:54:12Z",
+      "lidarShift": [
+        2,
+        0.5
+      ]
+    },
+    {
+      "name": "winterstoke",
+      "about": "About 970 m by 945 m to the south of ashton: Winterstoke Road, Ashton Gate Stadium's south side, West Street, Parson Street station and up Bedminster Down Road.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.6215,
+        "maxlat": 51.439,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-20T17:54:12Z",
+      "lidarShift": [
+        2,
+        0
+      ]
+    },
+    {
+      "name": "ashtonvale",
+      "about": "About 970 m by 945 m the south-west corner: Ashton Vale, Ashton Drive, Ashton Road and Swiss Drive, out towards the Long Ashton bypass.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.6355,
+        "maxlat": 51.439,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-20T12:38:39Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "bowerashton",
+      "about": "About 970 m by 945 m to the west of ashton: Bower Ashton (UWE's campus), the Cumberland Basin's Brunel Way, Clanage Road, Greville Smyth Park's west side and Ashton Court's edge.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.6355,
+        "maxlat": 51.4475,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-20T12:38:39Z",
+      "lidarShift": [
+        1,
+        1
+      ]
+    },
+    {
+      "name": "gorge",
+      "about": "About 970 m by 945 m to the west of hotwells: the Clifton Suspension Bridge, the Avon Gorge, Hotwell Road, Sion Hill, Rownham Hill, the Plimsoll Bridge and Leigh Woods.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.6355,
+        "maxlat": 51.456,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-20T18:55:09Z",
+      "lidarShift": [
+        1,
+        0.5
+      ]
+    },
+    {
+      "name": "observatory",
+      "about": "About 970 m by 945 m to the west of clifton: Clifton Down and the Observatory, the Promenade, Bridge Valley Road, the Portway below in the gorge, and Leigh Woods across it.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.6355,
+        "maxlat": 51.4645,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-10-20",
+      "osmNewestEdit": "2026-10-19T19:14:12Z",
+      "lidarShift": [
+        1,
+        0.5
+      ]
     }
   ]
 }

@@ -11,7 +11,9 @@ const still = (x: number, y: number): Mover => ({ x, y, angle: 0, length: 38, wi
 const viewAt = (x: number, y: number) => ({ x0: x - 300, y0: y - 140, x1: x + 300, y1: y + 140 });
 /** Park Street, about halfway up: shops, pavements, a crossing. */
 const parkStreet = (() => {
-  const r = map.roads.filter((r) => r.name === 'Park Street')[2];
+  // (The one up from College Green, by where you start: not Totterdown's.)
+  const near = (r: GameMap['roads'][number]) => Math.hypot(r.pts[0] - map.spawn.x, r.pts[1] - map.spawn.y) < 600 * 8;
+  const r = map.roads.filter((r) => r.name === 'Park Street' && near(r))[2];
   const i = Math.floor(r.pts.length / 4) * 2;
   return [r.pts[i], r.pts[i + 1]] as const;
 })();
@@ -93,7 +95,7 @@ describe('people', () => {
   it('walk over the bridges, up on the decks, out of the way of what goes under them', () => {
     // Park Street's bridge over Frogmore Street: its pavements.
     const decks = new Decks(map.roads, () => 0);
-    const bridge = map.roads.find((r) => r.bridge && r.name === 'Park Street')!;
+    const bridge = map.roads.find((r) => r.bridge && r.name === 'Park Street' && Math.hypot(r.pts[0] - map.spawn.x, r.pts[1] - map.spawn.y) < 600 * 8)!;
     const [x, y] = [(bridge.pts[0] + bridge.pts[2]) / 2, (bridge.pts[1] + bridge.pts[3]) / 2];
     const people = new People(map, { rand: seeded(3) });
     const view = viewAt(x, y);

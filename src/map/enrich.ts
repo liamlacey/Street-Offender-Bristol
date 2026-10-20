@@ -174,7 +174,8 @@ export function addLidar(map: GameMap, dsm: Raster, dtm: Raster): LidarReport {
     }
     added.push(Math.round(t.x), Math.round(t.y), Math.round(t.r * px), Math.round(t.h * px));
   }
-  osm.push(...added);
+  // (One by one: too many to spread into a call.)
+  for (const v of added) osm.push(v);
   report.treesAdded = added.length / 4;
   report.wallsMeasured = wallHeights(map, g, dtm, grid);
   report.sheltersFound = findShelters(map, g, blocked);

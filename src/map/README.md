@@ -32,8 +32,9 @@ downloaded again unless asked for (`npm run map -- --refresh <area>`).
 
 Each area's LIDAR alignment (`lidarShift`, metres east and south) is worked out
 the first time it's built (see "Lining up" below) and then kept in `areas.json`.
-The areas make a 3 by 3 grid, each about 970 m by 945 m, with `cathedral` in the
-middle. Their shifts (east, south):
+The areas make a 5 by 5 grid, each about 970 m by 945 m (about 4.9 km by 4.7 km in
+all), with `cathedral` in the middle: the first 3 by 3 round it, then a ring of 16
+round those. Their shifts (east, south):
 
 | Area | Where | Shift |
 | --- | --- | --- |
@@ -46,6 +47,22 @@ middle. Their shifts (east, south):
 | `ashton` | south-west | 0.5 m, 0.5 m |
 | `hotwells` | west | 1 m, 0 m |
 | `clifton` | north-west | 1 m, 1 m |
+| `seawalls` | outer ring, north-west corner | 1 m, 0.5 m |
+| `whiteladies` | outer ring, north | 1.5 m, −0.5 m |
+| `redland` | outer ring, north | 0.5 m, 1 m |
+| `montpelier` | outer ring, north | 0 m, 0 m |
+| `stwerburghs` | outer ring, north-east corner | 0.5 m, 0.5 m |
+| `lawrencehill` | outer ring, east | 1.5 m, 0 m |
+| `stphilips` | outer ring, east | 2 m, 0.5 m |
+| `totterdown` | outer ring, east | 2 m, 0 m |
+| `knowle` | outer ring, south-east corner | 4 m, 0 m |
+| `windmillhill` | outer ring, south | 2 m, 0.5 m |
+| `bedminster` | outer ring, south | 2 m, 0.5 m |
+| `winterstoke` | outer ring, south | 2 m, 0 m |
+| `ashtonvale` | outer ring, south-west corner | 0.5 m, 0.5 m |
+| `bowerashton` | outer ring, west | 1 m, 1 m |
+| `gorge` | outer ring, west | 1 m, 0.5 m |
+| `observatory` | outer ring, west | 1 m, 0.5 m |
 
 ## Growing the map
 
