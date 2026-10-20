@@ -7,6 +7,8 @@ import { TerrainSheet } from '../world/TerrainSheet';
 const CHUNK = 512;
 /** Texture px per world px: marks are soft anyway, and this keeps memory down on phones. */
 const RESOLUTION = 0.5;
+/** The most chunks of marks kept (a quarter of a MB each): past this, those longest out of sight are let go. */
+const MOST = 120;
 
 interface Segment {
   x1: number;
@@ -22,13 +24,17 @@ interface Segment {
  * Tyre marks that stay on the streets. Segments are drawn into textures
  * covering the world in chunks (only where there are marks), so marks build
  * up and drawing them costs the same however many there are. The textures
- * are thrown away when the game scene ends. (From 2D Racer.)
+ * are thrown away when the game scene ends; and, past MOST of them, those
+ * longest out of sight (so a long game doesn't fill the phone). (From 2D Racer.)
  */
 export class SkidMarks {
   private pending: Segment[] = [];
   private readonly pen: Phaser.GameObjects.Graphics;
   /** Chunk textures created so far, and the images showing them. */
   private readonly chunks = new Map<string, TerrainSheet>();
+  /** When each was last near the view (frames). */
+  private readonly seen = new Map<string, number>();
+  private frame = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -82,11 +88,21 @@ export class SkidMarks {
   /** Lays the marks near the view over the hills (and hides the rest). Call once a frame. */
   update(view: Phaser.Geom.Rectangle, perspective: Perspective): void {
     const pad = 320;
+    this.frame++;
     for (const [key, sheet] of this.chunks) {
       const [i, j] = key.slice(5).split(',').map(Number);
       const near = (i + 1) * CHUNK > view.left - pad && i * CHUNK < view.right + pad && (j + 1) * CHUNK > view.top - pad && j * CHUNK < view.bottom + pad;
       sheet.setVisible(near);
-      if (near) sheet.update(perspective);
+      if (!near) continue;
+      sheet.update(perspective);
+      this.seen.set(key, this.frame);
+    }
+    if (this.chunks.size > MOST) {
+      const oldest = [...this.chunks.keys()].sort((a, b) => (this.seen.get(a) ?? 0) - (this.seen.get(b) ?? 0))[0];
+      this.chunks.get(oldest)!.destroy();
+      this.scene.textures.remove(oldest);
+      this.chunks.delete(oldest);
+      this.seen.delete(oldest);
     }
   }
 

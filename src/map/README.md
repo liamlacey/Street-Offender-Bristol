@@ -995,7 +995,10 @@ loop pauses now and then (`work.ts`). Then it takes over (`GameScene.enter`):
   things.
 - **Beyond that**, out of sight, it's the new region's own.
 - **What's been broken** (`changes.ts`) is broken again in each new region:
-  walls knocked through, posts knocked down, trees felled, parapets.
+  walls knocked through, posts knocked down, trees felled, parapets. Loose
+  things moved or smashed, and vehicles left standing (dented, shoved, got
+  out of), are put by outside the region and put back when it's back.
+  Tyre marks are kept up to a limit (the oldest out of sight go first).
 
 Only the region's tiles are kept, so the game holds two regions at most. A
 jump from the menu to somewhere outside the region makes the region there

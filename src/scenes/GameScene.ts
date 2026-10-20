@@ -215,6 +215,8 @@ export class GameScene extends Phaser.Scene {
   /** The loose things in the region (their pictures made as they come into view); and those moved out of it, put by (see `placeLoose`). */
   private loose: { body: LooseProp; image: Phaser.GameObjects.Image | null }[] = [];
   private away: { body: LooseProp; image: Phaser.GameObjects.Image | null }[] = [];
+  /** Vehicles left standing (dented, shoved, got out of) outside the region, put by till it's back (see `enter`). */
+  private parkedAway: Vehicle[] = [];
   /** The map's loose things smashed to pieces, by where they stood (see homeOf). */
   private readonly lostHomes = new Set<string>();
   /** The region of the map round you, made ready by the streamer (see streamer.ts); what's been broken (see Changes). */
@@ -464,6 +466,13 @@ export class GameScene extends Phaser.Scene {
       r.people.adopt(old.people, keep);
       r.boats.adopt(old.boats, keep);
     }
+    // The vehicles left standing, as they were left: those in this region back in it, the rest put by.
+    const inKeep = (v: Vehicle) => !!keep && v.x >= keep.x0 && v.x <= keep.x1 && v.y >= keep.y0 && v.y <= keep.y1;
+    const left = [...this.parkedAway, ...(old ? old.traffic.parked.filter((v) => !inKeep(v) && old.traffic.changed(v)) : [])];
+    const { x0, y0, x1, y1 } = r.map.region;
+    const here = (v: Vehicle) => v.x >= x0 && v.x < x1 && v.y >= y0 && v.y < y1;
+    r.traffic.putBack(left.filter(here));
+    this.parkedAway = left.filter((v) => !here(v));
     this.assign(r);
     this.placeProps();
     this.placeTrees();

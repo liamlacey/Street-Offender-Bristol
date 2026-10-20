@@ -2843,6 +2843,25 @@ export class Traffic {
     this.started = true;
   }
 
+  /**
+   * Vehicles standing where they were left, from a region before (dented,
+   * shoved out of their bays, or got out of): put back, in place of any of
+   * this one's own they'd be on top of.
+   */
+  putBack(list: Vehicle[]): void {
+    for (const v of list) {
+      for (const o of [...this.parked]) if (Math.hypot(o.x - v.x, o.y - v.y) < (o.length + v.length) / 2) this.take(o);
+      Object.assign(v, { mode: 'parked', vx: 0, vy: 0, spin: 0, speed: 0, post: undefined, spot: undefined, parking: false, siren: false, blues: 0 });
+      this.parked.push(v);
+      this.parkedById.set(v.id, v);
+    }
+  }
+
+  /** Whether a parked vehicle's not as it was made: dented, out of its bay, or one you've left. */
+  changed(v: Vehicle): boolean {
+    return !!v.wreck || !v.space || v.mode !== 'parked' || Math.hypot(v.x - v.space.x, v.y - v.space.y) > 0.5 * M;
+  }
+
   /** A way (its lanes and the turns between them) from the last region's traffic onto this one's: as far as its lanes are here (ending on a lane). */
   private carried(route: Path[], lane: (l: Lane | undefined) => Lane | undefined): Path[] {
     const out: Path[] = [];
