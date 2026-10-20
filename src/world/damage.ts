@@ -106,10 +106,11 @@ export function impactSpeed(car: CarState, x: number, y: number, reach: number, 
   return Math.max(0, ((car.vx - vx) * dx + (car.vy - vy) * dy) / len);
 }
 
-/** Slows a vehicle that's just broken through something. */
-export function giveWay(car: CarState, t: Toughness): void {
-  car.vx *= 1 - t.absorb;
-  car.vy *= 1 - t.absorb;
+/** Slows a vehicle (of `weight`, a car's 1) that's just broken through something: a heavy one hardly. */
+export function giveWay(car: CarState, t: Toughness, weight = 1): void {
+  const k = 1 - t.absorb / Math.max(1, weight);
+  car.vx *= k;
+  car.vy *= k;
 }
 
 /**

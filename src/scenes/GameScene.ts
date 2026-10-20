@@ -312,7 +312,8 @@ export class GameScene extends Phaser.Scene {
     });
 
     const { spawn } = map;
-    this.car = createCar(spawn.x, spawn.y, spawn.heading);
+    // Your armoured truck.
+    this.car = Object.assign(createCar(spawn.x, spawn.y, spawn.heading), { length: VEHICLES.own.length, width: VEHICLES.own.width, invMass: 1 / VEHICLES.own.mass });
     this.safe = { ...spawn };
     this.carShadow = this.add.image(0, 0, TEX.carShadow).setScale(1 / ART_SCALE).setTint(0x000000).setAlpha(0.35).setDepth(DEPTH.carShadow);
     this.carSprite = this.add.image(0, 0, TEX.car).setScale(1 / ART_SCALE).setDepth(DEPTH.car);
@@ -548,8 +549,8 @@ export class GameScene extends Phaser.Scene {
       throttle: this.sinking >= 0 || this.onFoot ? 0 : this.input_.throttle,
       slide: this.onFoot ? 0 : Math.max(Math.abs(lateralSpeed(this.car)), this.input_.handbrake ? speed * 0.6 : 0),
       surface: SURFACE_KIND[this.surface],
-      // (No engine on foot or on a bike; a deeper one in a lorry or a bus.)
-      engine: this.onFoot || kind === 'bike' ? 0 : kind === 'lorry' || kind === 'bus' || kind === 'double' ? 0.7 : kind === 'van' ? 0.85 : 1,
+      // (No engine on foot or on a bike; a deeper one in your truck, a lorry or a bus.)
+      engine: this.onFoot || kind === 'bike' ? 0 : kind === 'lorry' || kind === 'bus' || kind === 'double' || kind === 'own' ? 0.7 : kind === 'van' ? 0.85 : 1,
     });
     // The button to get out (slow enough), or in (something within reach).
     this.reachTimer -= dt;
@@ -868,8 +869,10 @@ export class GameScene extends Phaser.Scene {
       // What hit them (or went over them) loses some speed to it: you feel it.
       if (h.by === -1) {
         const [bvx, bvy] = [car.vx, car.vy];
-        car.vx *= 1 - h.loss;
-        car.vy *= 1 - h.loss;
+        // (Less, the heavier it is.)
+        const loss = h.loss * Math.sqrt(car.invMass ?? 1);
+        car.vx *= 1 - loss;
+        car.vy *= 1 - loss;
         if (h.how === 'hit') {
           // A thump: the front dented where they were hit, the car twisted round towards that side
           // (the speed it lost, lost there, off its middle), and a jolt.
@@ -929,7 +932,7 @@ export class GameScene extends Phaser.Scene {
 
   /** What you're driving, for its damage; and its picture. */
   private rideShape(): Shape {
-    return this.ride.kind === 'own' ? PLAYER_SHAPE : vehicleShape(this.ride);
+    return vehicleShape(this.ride);
   }
 
   private rideTexture(): string {
@@ -999,8 +1002,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.onFoot = false;
     const k = VEHICLES[this.ride.kind];
-    if (this.ride.kind === 'own') Object.assign(car, { length: undefined, width: undefined, invMass: undefined });
-    else Object.assign(car, { length: k.length, width: k.width, invMass: 1 / k.mass });
+    Object.assign(car, { length: k.length, width: k.width, invMass: 1 / k.mass });
     this.prev = { x: car.x, y: car.y, heading: car.heading };
     this.wreckShown = -1;
     this.carSprite.setTexture(this.rideTexture());
@@ -1092,6 +1094,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private hit(impulse: number): void {
+    // (A heavy vehicle's hits are harder, but not as much harder as its weight.)
+    impulse *= Math.sqrt(this.car.invMass ?? 1);
     this.bigHit = Math.max(this.bigHit, impulse);
     if (impulse > 90) this.effects.sparksAt(this.contact.x, this.contact.y, impulse);
   }
@@ -1501,7 +1505,6 @@ function deckSurface(road: Road): Surface {
 const ALARM_AT = 15;
 const ALARM_FOR = 12;
 
-const PLAYER_SHAPE: Shape = { length: CAR_LENGTH, width: CAR_WIDTH, stiffness: STIFFNESS.player, mirror: CAR_LENGTH / 2 - 15.75, screen: CAR_LENGTH / 2 - 13.25 };
 
 const shapes = new Map<string, Shape>();
 

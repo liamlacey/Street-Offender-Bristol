@@ -124,13 +124,13 @@ export class Wreckage {
    */
   hit(car: CarState, level: number): void {
     const weight = this.hooks.weight();
-    for (const post of this.posts[level].near(car.x, car.y, CAR_LENGTH) as Post[]) {
+    for (const post of this.posts[level].near(car.x, car.y, car.length ?? CAR_LENGTH) as Post[]) {
       const tough = this.toughness(post);
       const speed = impactSpeed(car, post.x, post.y, post.r + 1);
       if (speed > 0 && breaks(tough, speed, weight)) this.knockDown(post, car, tough, speed, level);
     }
     // A copy: knocking a wall down changes what the grid holds.
-    for (const wall of [...(this.walls[level].near(car.x, car.y, CAR_LENGTH) as Wall[])]) {
+    for (const wall of [...(this.walls[level].near(car.x, car.y, car.length ?? CAR_LENGTH) as Wall[])]) {
       const trunk = this.trunks.get(wall);
       if (!wall.kind && !trunk) continue;
       const [px, py] = nearestOnSegment(car.x, car.y, wall);
@@ -170,7 +170,7 @@ export class Wreckage {
     for (const [kind, count] of b.into) for (const d of debris(kind, count, body.x, body.y, car.vx, car.vy, rand, size)) this.hooks.addDebris(d, body.level);
     this.effects.burst(b.material, body.x, body.y, Math.round(4 + size));
     this.hooks.audio()?.shatter(b.material, speed);
-    giveWay(car, b);
+    giveWay(car, b, this.hooks.weight());
     return true;
   }
 
@@ -186,7 +186,7 @@ export class Wreckage {
     const [mx, my] = nearestOnSegment(car.x, car.y, wall);
     this.effects.burst('wood', mx, my, 16);
     this.hooks.audio()?.shatter('wood', speed);
-    giveWay(car, trunk.tough);
+    giveWay(car, trunk.tough, this.hooks.weight());
   }
 
   /** A fallen crown driven through: torn apart into clumps of leaves and branches, strewn the way the car went. */
@@ -198,7 +198,7 @@ export class Wreckage {
     for (const d of debris('twig', Math.round(Math.min(10, 3 + metres / 2)), c.x, c.y, car.vx * 0.6, car.vy * 0.6, rand, c.r * 1.4)) this.hooks.addDebris(d, 0);
     this.effects.burst('plant', car.x, car.y, 36);
     this.hooks.audio()?.shatter('plant', Math.hypot(car.vx, car.vy));
-    giveWay(car, { material: 'plant', strength: CROWN_BREAK, absorb: 0.15 });
+    giveWay(car, { material: 'plant', strength: CROWN_BREAK, absorb: 0.15 }, this.hooks.weight());
   }
 
   private toughness(post: Post): Toughness {
@@ -261,7 +261,7 @@ export class Wreckage {
     }
     this.effects.burst(tough.material, post.x, post.y, tough.material === 'wood' ? 24 : 14);
     this.hooks.audio()?.shatter(tough.material, speed);
-    giveWay(car, tough);
+    giveWay(car, tough, this.hooks.weight());
   }
 
   private breakWall(wall: Wall, x: number, y: number, car: CarState, speed: number, level: number): void {
@@ -291,7 +291,7 @@ export class Wreckage {
     this.hooks.wallBroken?.(kind, from, to, level);
     this.effects.burst(material, mx, my, kind === 'hedge' ? 30 : 18);
     this.hooks.audio()?.shatter(material, speed);
-    giveWay(car, WALLS[kind]);
+    giveWay(car, WALLS[kind], this.hooks.weight());
   }
 
   /** Starts something toppling over. */

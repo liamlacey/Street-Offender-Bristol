@@ -42,8 +42,8 @@ export const VEHICLES: Record<VehicleKind, { length: number; width: number; mass
   double: { length: 10.6 * 1.1 * M, width: 2.55 * 1.1 * M, mass: 11, traffic: 0, parked: 0, paint: 'bus' },
   // A bike and its rider (about 90 kg, against your car's tonne and more).
   bike: { length: 1.8 * 1.1 * M, width: 0.65 * 1.1 * M, mass: 0.08, traffic: 0.18, parked: 0, paint: 'bike' },
-  // Your own car, left where you got out of it (CarPhysics's CAR_LENGTH and CAR_WIDTH).
-  own: { length: 38, width: 18, mass: 1, traffic: 0, parked: 0, paint: 'car' },
+  // Yours: an armoured truck, armour plate on a lorry's chassis (about 8 tonnes), left where you got out of it.
+  own: { length: 6.4 * 1.1 * M, width: 2.5 * 1.1 * M, mass: 6, traffic: 0, parked: 0, paint: 'car' },
 };
 
 /** The colours, about as common as on Britain's roads (grey, black and white the most); vans mostly white; lorries' cabs. */

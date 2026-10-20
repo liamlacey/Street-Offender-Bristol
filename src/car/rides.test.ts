@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { NO_INPUT, createCar, stepCar, carHull, CAR_LENGTH } from './CarPhysics';
 import { WALKER, stepWalker, tuningFor } from './rides';
 import { VEHICLES } from '../world/traffic';
+import { STIFFNESS } from './dents';
+import { THINGS, WALLS, breaks, treeToughness } from '../world/damage';
 
 const run = (kind: Parameters<typeof tuningFor>[0], seconds: number) => {
   const car = createCar();
@@ -24,6 +26,18 @@ describe('what you can drive', () => {
     expect(bus.offsets[bus.offsets.length - 1] + bus.radius).toBeCloseTo(VEHICLES.bus.length / 2);
     for (let i = 1; i < bus.offsets.length; i++) expect(bus.offsets[i] - bus.offsets[i - 1]).toBeLessThanOrEqual(bus.radius * 1.2);
     expect(bus.invMass).toBeCloseTo(1 / 9);
+  });
+
+  it('gives you an armoured truck: through a wall or a tree at a speed a car would bounce off, and hard to dent', () => {
+    const weight = VEHICLES.own.mass;
+    // 8 m/s (18 mph).
+    const speed = 8 * 8;
+    for (const t of [WALLS.wall, WALLS.railing, THINGS.lamp, THINGS.bollard, treeToughness(15)]) {
+      expect(breaks(t, speed)).toBe(false);
+      expect(breaks(t, speed, weight)).toBe(true);
+    }
+    expect(STIFFNESS.own).toBeGreaterThan(STIFFNESS.double * 5);
+    expect(run('own', 20)).toBeGreaterThan(run('lorry', 20) * 1.4);
   });
 });
 

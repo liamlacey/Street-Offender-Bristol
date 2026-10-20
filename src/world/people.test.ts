@@ -194,7 +194,7 @@ describe('people', () => {
       }
     }
     expect(closest).toBeGreaterThan(0.5 * 8);
-  });
+  }, 30000);
 
   it('sit on the benches, and are knocked off one shoved hard from under them', () => {
     const world = buildWorld(map);

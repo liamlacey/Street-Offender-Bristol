@@ -12,9 +12,10 @@ import type { VehicleKind } from '../world/traffic';
 
 const M = 8;
 
-/** Each kind's handling: your own car's (DEFAULT_TUNING), changed. */
+/** Each kind's handling: a quick car's (DEFAULT_TUNING), changed. */
 const TUNED: Record<VehicleKind, Partial<CarTuning>> = {
-  own: {},
+  // Your armoured truck: a big engine for its weight, but it's heavy to stop and to turn.
+  own: { engineAccel: 340, maxForwardSpeed: 360, brakeDecel: 620, maxTurnRate: 2.8, fullSteerSpeed: 120, grip: 9.5, climbSpeedLoss: 2 },
   small: { engineAccel: 320, maxForwardSpeed: 330, maxTurnRate: 3.5 },
   hatch: { engineAccel: 330, maxForwardSpeed: 340 },
   saloon: { engineAccel: 340, maxForwardSpeed: 360, maxTurnRate: 3.2 },

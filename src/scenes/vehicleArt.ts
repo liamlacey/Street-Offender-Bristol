@@ -91,7 +91,7 @@ export function bodyLayout(kind: VehicleKind): { mirror: number; screen: number 
   if (kind === 'lorry') return { mirror: L / 2 - 4.9, screen: L / 2 - 3.3 };
   if (kind === 'bus' || kind === 'double') return { mirror: L / 2 - 2, screen: L / 2 - 1.5 };
   if (kind === 'bike') return { mirror: 0, screen: 0 };
-  if (kind === 'own') return { mirror: L / 2 - 15.75, screen: L / 2 - 13.25 };
+  if (kind === 'own') return { mirror: L / 2 - 9.5, screen: L / 2 - 7.5 };
   const [, , screen, bonnet] = LAYOUT[kind].map((f) => f * L);
   return { mirror: screen + 0.1 - L / 2, screen: (screen + bonnet) / 2 - L / 2 };
 }

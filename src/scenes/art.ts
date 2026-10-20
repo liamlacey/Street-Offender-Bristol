@@ -1,11 +1,11 @@
 /**
- * The game's pictures, drawn in code: the car, the trees, the street
+ * The game's pictures, drawn in code: your armoured truck, the trees, the street
  * furniture, and the puffs and sparks for smoke and crashes. Drawn at twice
  * the size they're shown, so they stay sharp when the camera's in close.
  */
 
 import * as Phaser from 'phaser';
-import { CAR_LENGTH, CAR_WIDTH } from '../car/CarPhysics';
+import { VEHICLES } from '../world/traffic';
 
 /** Texture px per game px. */
 export const ART_SCALE = 2;
@@ -92,47 +92,85 @@ function circle(ctx: Ctx, x: number, y: number, r: number, fill: string): void {
 }
 
 export function createArt(scene: Phaser.Scene): void {
-  const L = CAR_LENGTH;
-  const W = CAR_WIDTH;
+  const { length: L, width: W } = VEHICLES.own;
 
-  // The car, facing right: a red hatchback with a black roof stripe, like the old games' sporty little runabouts.
+  // Yours, facing right: an armoured truck in dark olive plate. A short cab in front with slit windows
+  // behind a bull bar; behind it the armoured body, its plates riveted, a hatch and a light bar on its roof.
   canvasTexture(scene, TEX.car, L, W, (ctx) => {
-    // Tyres peeking out.
-    ctx.fillStyle = '#151515';
-    for (const [x, y] of [[6, 0], [L - 14, 0], [6, W - 2.5], [L - 14, W - 2.5]]) ctx.fillRect(x, y, 8, 2.5);
-    // Body, with a lighter top edge for the light.
-    roundRect(ctx, 0.5, 1.2, L - 1, W - 2.4, 5, '#a3161c');
-    roundRect(ctx, 1.5, 1.8, L - 3, W - 5, 4.5, '#d42a2a');
-    // Bonnet creases.
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = 0.6;
+    const cab = 13;
+    // Big tyres peeking out: one axle under the cab, two under the body.
+    ctx.fillStyle = '#121212';
+    for (const x of [L - cab + 1.5, 8, 17]) {
+      ctx.fillRect(x, 0, 8, 2.2);
+      ctx.fillRect(x, W - 2.2, 8, 2.2);
+    }
+    // The body, its edges darker, the plate's top lighter where the light catches it.
+    roundRect(ctx, 0.5, 1, L - 3, W - 2, 2.5, '#262c22');
+    roundRect(ctx, 1.4, 1.8, L - cab - 2.6, W - 3.6, 1.6, '#4a5541');
+    roundRect(ctx, 2.6, 3, L - cab - 5, W - 6, 1.2, '#56624b');
+    // The plates' seams and rivets.
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.lineWidth = 0.5;
     ctx.beginPath();
-    ctx.moveTo(L - 12, 4.5);
-    ctx.lineTo(L - 3, 5.5);
-    ctx.moveTo(L - 12, W - 4.5);
-    ctx.lineTo(L - 3, W - 5.5);
+    for (const x of [13, 25, 36]) {
+      ctx.moveTo(x, 2);
+      ctx.lineTo(x, W - 2);
+    }
     ctx.stroke();
-    // Windscreen, roof, rear window.
-    roundRect(ctx, L - 16, 3.2, 5.5, W - 6.4, 1.5, '#1e2a36');
-    ctx.fillStyle = 'rgba(160,210,240,0.55)';
-    ctx.fillRect(L - 15.5, 4, 2, W - 8);
-    roundRect(ctx, 9, 3.4, 15.5, W - 6.8, 2, '#b81f22');
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    for (let x = 4; x < L - cab - 2; x += 3) {
+      ctx.fillRect(x, 2.4, 0.6, 0.6);
+      ctx.fillRect(x, W - 3, 0.6, 0.6);
+    }
+    // A round roof hatch, and a blue light bar at the body's front.
+    ctx.fillStyle = '#2c3327';
+    ctx.beginPath();
+    ctx.arc(19, W / 2, 3.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#56624b';
+    ctx.beginPath();
+    ctx.arc(19, W / 2, 2.7, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = '#1b1b1b';
-    ctx.fillRect(10, W / 2 - 2, 14, 4);
-    roundRect(ctx, 5, 3.6, 4.5, W - 7.2, 1.2, '#1e2a36');
-    // Wing mirrors.
-    ctx.fillStyle = '#7d1316';
-    ctx.fillRect(L - 17, 0.2, 2.5, 1.6);
-    ctx.fillRect(L - 17, W - 1.8, 2.5, 1.6);
-    // Headlights and tail lights.
+    ctx.fillRect(18.6, W / 2 - 2.7, 0.8, 5.4);
+    roundRect(ctx, L - cab - 4.5, 4, 2.4, W - 8, 0.8, '#151515');
+    ctx.fillStyle = '#3d7bff';
+    ctx.fillRect(L - cab - 4, 4.6, 1.4, 4);
+    ctx.fillStyle = '#ff3a3a';
+    ctx.fillRect(L - cab - 4, W - 8.6, 1.4, 4);
+    // The cab: lower, with slit windows in its plate.
+    roundRect(ctx, L - cab - 1, 2, cab - 1.5, W - 4, 2, '#3f4937');
+    roundRect(ctx, L - cab, 3.2, cab - 6, W - 6.4, 1.2, '#4c5843');
+    ctx.fillStyle = '#10171d';
+    ctx.fillRect(L - 7, 4, 1.6, W - 8);
+    ctx.fillStyle = 'rgba(150,200,230,0.5)';
+    ctx.fillRect(L - 6.8, 5, 0.6, W - 10);
+    ctx.fillStyle = '#10171d';
+    ctx.fillRect(L - cab + 1, 2, 4, 1);
+    ctx.fillRect(L - cab + 1, W - 3, 4, 1);
+    // Wing mirrors on stalks.
+    ctx.fillStyle = '#1b1f18';
+    ctx.fillRect(L - 9, 0, 1.6, 2);
+    ctx.fillRect(L - 9, W - 2, 1.6, 2);
+    // Bull bar across the front, headlights behind its bars.
     ctx.fillStyle = '#fff6c8';
-    ctx.fillRect(L - 2.2, 3, 1.8, 3.5);
-    ctx.fillRect(L - 2.2, W - 6.5, 1.8, 3.5);
+    ctx.fillRect(L - 4.2, 3.4, 1.6, 3.2);
+    ctx.fillRect(L - 4.2, W - 6.6, 1.6, 3.2);
+    roundRect(ctx, L - 2.6, 1.6, 2.4, W - 3.2, 1, '#151515');
+    ctx.fillStyle = '#5a5f63';
+    for (let y = 3; y < W - 3; y += 3) ctx.fillRect(L - 2.2, y, 1.8, 0.8);
+    // The back: its doors' seam, black and yellow stripes, and tail lights.
+    ctx.fillStyle = '#e2c23b';
+    ctx.fillRect(0.6, 2.5, 1.4, W - 5);
+    ctx.fillStyle = '#151515';
+    for (let y = 3.5; y < W - 3; y += 3) ctx.fillRect(0.6, y, 1.4, 1.4);
     ctx.fillStyle = '#ff3b30';
-    ctx.fillRect(0.4, 3, 1.4, 3);
-    ctx.fillRect(0.4, W - 6, 1.4, 3);
+    ctx.fillRect(0.4, 2.2, 1.6, 2);
+    ctx.fillRect(0.4, W - 4.2, 1.6, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(2.4, W / 2 - 0.3, 9, 0.6);
   });
-  canvasTexture(scene, TEX.carShadow, L, W, (ctx) => roundRect(ctx, 0, 0, L, W, 5, '#000'));
+  canvasTexture(scene, TEX.carShadow, L, W, (ctx) => roundRect(ctx, 0, 0, L, W, 2.5, '#000'));
 
   // Soft white blob for smoke and dust (tinted), and a spark.
   canvasTexture(scene, TEX.puff, 16, 16, (ctx) => {
