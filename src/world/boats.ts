@@ -26,7 +26,7 @@ import { BOAT_SIZE, type Berth, type BoatKind } from '../map/berths';
 import type { GameMap, Pts } from '../map/osm';
 import type { Body } from '../physics/collisions';
 import { PAUSE, collideBodies } from './traffic';
-import { type Work, drain } from './work';
+import { type Work, drain } from './work.ts';
 
 export interface Boat extends Body {
   id: number;

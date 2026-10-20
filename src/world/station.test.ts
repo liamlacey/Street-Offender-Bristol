@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { GameMap } from '../map/osm';
-import bristol from '../map/bristol.json';
+import { central } from '../test/central';
 import { type Mover, People } from './people';
 import { Traffic, type Vehicle } from './traffic';
 
-const map = bristol as unknown as GameMap;
+/** (The middle of Bristol, round where you start: see src/test/central.ts.) */
+const map: GameMap = central();
 
 /** How far apart two vehicles' sides are, px (less than 0, overlapping). */
 function apart(a: Vehicle, b: Vehicle): number {

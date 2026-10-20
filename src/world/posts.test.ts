@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { GameMap, Service } from '../map/osm';
-import bristol from '../map/bristol.json';
+import { central } from '../test/central';
 import { type KerbLane, ROOM, kerbsides } from './posts';
 import { Traffic, VEHICLES, type Vehicle } from './traffic';
 
 const M = 8;
-const map = bristol as unknown as GameMap;
+/** (The middle of Bristol, round where you start: see src/test/central.ts.) */
+const map: GameMap = central();
 
 describe('emergency services', () => {
   // A two-way street 7 m wide along y = 100, a police station on its south side (x 300 to 500), a zebra at x = 380.

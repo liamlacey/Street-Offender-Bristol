@@ -7,7 +7,7 @@
 
 import { type Area, type GameMap, type Lane, type Pts, type Road, pointInRing, ridgeAxis } from '../map/osm';
 import { lineLength, pointAlong, subPolyline } from './world';
-import { type Work, drain } from './work';
+import { type Work, drain } from './work.ts';
 
 /** A car park's bays: how wide, how deep, and the aisle between rows, px. */
 export const BAY_WIDTH = 2.5 * 8;

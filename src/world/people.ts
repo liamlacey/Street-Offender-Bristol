@@ -16,7 +16,7 @@
 import { type GameMap, type Pts, VEHICLE_ROADS, pointInRing } from '../map/osm';
 import type { Light } from './lights';
 import { offsetLine } from './world';
-import { type Work, drain, every } from './work';
+import { type Work, drain, every } from './work.ts';
 
 const M = 8;
 /** A vehicle standing still: its middle, which way it points, how long and half as wide, px; its level. */

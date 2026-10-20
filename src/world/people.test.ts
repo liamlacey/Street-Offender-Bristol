@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import mapData from '../map/bristol.json';
+import { central } from '../test/central';
 import type { GameMap } from '../map/osm';
 import { Decks } from './decks';
 import { type Mover, People } from './people';
 import { buildWorld } from './world';
 
-const map = mapData as unknown as GameMap;
+/** (The middle of Bristol, round where you start: see src/test/central.ts.) */
+const map: GameMap = central();
 const seeded = (seed: number) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 const still = (x: number, y: number): Mover => ({ x, y, angle: 0, length: 38, width: 18, vx: 0, vy: 0, id: -1 });
 const viewAt = (x: number, y: number) => ({ x0: x - 300, y0: y - 140, x1: x + 300, y1: y + 140 });

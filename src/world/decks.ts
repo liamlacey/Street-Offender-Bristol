@@ -16,7 +16,7 @@
 import { DECK_STEP, type GameMap, type Pts, type Road, pointInRing } from '../map/osm';
 import type { Segment } from '../physics/collisions';
 import { lineLength, offsetLine, pointAlong } from './world';
-import { type Work, drain } from './work';
+import { type Work, drain } from './work.ts';
 
 /** A road's pavement, how wide, px (as the ground's drawn). */
 const PAVEMENT = 2.4 * 8;

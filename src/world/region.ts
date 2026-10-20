@@ -18,7 +18,7 @@ import { People } from './people';
 import type { SurfaceGrid } from './surface';
 import { Terrain } from './terrain';
 import { Traffic } from './traffic';
-import type { Work } from './work';
+import type { Work } from './work.ts';
 import { type World, worldWork } from './world';
 
 export interface Region {

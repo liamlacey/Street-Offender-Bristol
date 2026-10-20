@@ -9,7 +9,7 @@ import { SurfaceGrid } from './surface';
 import type { Terrain } from './terrain';
 import { TerrainSheet } from './TerrainSheet';
 import { CHUNK, type ChunkIndex, type World, chunkKey } from './world';
-import { type Work, drain } from './work';
+import { type Work, drain } from './work.ts';
 
 /** How many pieces of ground are kept drawn at once (each is 1 MB of texture). */
 const KEEP = 48;

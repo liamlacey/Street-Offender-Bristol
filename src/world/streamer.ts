@@ -14,7 +14,7 @@ import { TileStore, fetchJson } from '../map/tileStore';
 import type { Overview } from './overview';
 import { type FirstIds, type Progress, type Region, regionWork } from './region';
 import type { SurfaceGrid } from './surface';
-import { type Work, runFor } from './work';
+import { type Work, runFor } from './work.ts';
 import type { World } from './world';
 
 /** A region's side, in tiles (2 km). */

@@ -11,7 +11,7 @@ import type { Building, GameMap, LineKind, Prop, PropKind, Pts, Road } from '../
 import { Decks, waterOf } from './decks';
 import { Terrain } from './terrain';
 import type { DebrisKind, ThingKind, WallKind } from './damage';
-import { type Work, drain, every } from './work';
+import { type Work, drain, every } from './work.ts';
 
 /** Size of the pieces the ground is drawn in, and indexed by, px. */
 export const CHUNK = 512;

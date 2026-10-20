@@ -5,7 +5,7 @@
  */
 
 import type { Ledge, TerrainData } from '../map/osm';
-import { type Work, drain } from './work';
+import { type Work, drain } from './work.ts';
 
 /** The cuts' index's cells, px. */
 const CUT_CELL = 32;

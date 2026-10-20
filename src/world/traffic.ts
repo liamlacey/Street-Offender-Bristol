@@ -18,7 +18,7 @@ import { type Space, parkingWork } from './parking';
 import { type Kerbside, kerbsidesWork } from './posts';
 import { Terrain } from './terrain';
 import { lineLength, offsetLine, subPolyline } from './world';
-import { type Work, drain, every } from './work';
+import { type Work, drain, every } from './work.ts';
 
 const M = 8;
 
@@ -919,6 +919,10 @@ const SHIFT = 2 * M;
 /** Backing off, out of a knot nose to nose, px/s. */
 const BACK_OFF = 1.2 * M;
 
+/** Not turning across the way of one on a call that'd be there within this, seconds. */
+const SIREN_SEEN = 3.5;
+/** Oncoming along another road, but this near the end of its lane and turning off it: in the way (it's coming across), px. */
+const TURNING = 20 * M;
 /** Two turning into the same lane from different ways: within this far of it, the one further off lets the other in first. */
 const MERGE = 25 * M;
 /** Knocked: how long it waits before driving off again, seconds; and how quickly it slides to a stop. */
@@ -1899,7 +1903,8 @@ export class Traffic {
       // (On a turn, the road it's turning onto.)
       const theirs = o.id >= 0 ? (o as Vehicle).route.find((p) => p.lane)?.lane : undefined;
       const mine = v.route.find((p) => p.lane)?.lane;
-      if (oncoming && theirs && mine && theirs.road !== mine.road) continue;
+      // (Not one turning off it, though, or about to: it's coming across.)
+      if (oncoming && theirs && mine && theirs.road !== mine.road && !this.turningAcross(o as Vehicle)) continue;
       const reach = oncoming ? (v.r + o.r) * 0.8 : v.r + o.r * 0.85;
       for (const [x, y, level, d] of samples) {
         if (d >= gap) break;
@@ -1975,6 +1980,24 @@ export class Traffic {
         if (p.lane && !exit.lane && v.route[k + 2]?.lane && this.nodes[p.lane.to].degree >= 3 && !v.siren) {
           const end = d + p.length;
           if (end > -1 && end < gap && !this.roomIn(v, exit, v.route[k + 2].lane!)) {
+            gap = Math.max(0, end - 0.5);
+            lead = 0;
+            hold = AT_LINE;
+            blocker = undefined;
+          }
+          break;
+        }
+        d += p.length;
+      }
+    }
+    // Not turning across the way of one on a call that's nearly there (wherever its lane meets this one's turn): it waits at the end of its lane till it's by.
+    if (this.sirens.length && !v.siren) {
+      let d = -v.s - front;
+      for (let k = 0; k + 1 < v.route.length && d < WATCH; k++) {
+        const [p, turn] = [v.route[k], v.route[k + 1]];
+        if (p.lane && !turn.lane && turn.turn) {
+          const end = d + p.length;
+          if (end > -1 && end < gap && this.sirenComing(v, turn)) {
             gap = Math.max(0, end - 0.5);
             lead = 0;
             hold = AT_LINE;
@@ -2414,6 +2437,21 @@ export class Traffic {
   }
 
   /** Whether one on a call is coming up behind it, close, its way (it pulls over and lets it by). */
+  /** Whether one on a call is coming at a turn (it'd be there within a few seconds, or it's by it now). */
+  private sirenComing(v: Vehicle, turn: Path): boolean {
+    for (const o of this.sirens) {
+      if (o === v || o.level !== v.level) continue;
+      const speed = Math.hypot(o.vx, o.vy);
+      for (let k = 0; k + 1 < turn.pts.length; k += 4) {
+        const [dx, dy] = [turn.pts[k] - o.x, turn.pts[k + 1] - o.y];
+        const dist = Math.hypot(dx, dy);
+        if (dist < 6 * M) return true;
+        if (dist < SIGHT && speed > 2 * M && (o.vx * dx + o.vy * dy) / (speed * dist) > 0.3 && dist / speed < SIREN_SEEN) return true;
+      }
+    }
+    return false;
+  }
+
   private yieldingTo(v: Vehicle): boolean {
     if (!this.sirens.length) return false;
     const [cx, cy] = [Math.cos(v.angle), Math.sin(v.angle)];
@@ -2676,6 +2714,14 @@ export class Traffic {
         }
       }
     }
+  }
+
+  /** Whether one's turning off its road (left or right), or about to (within TURNING of the end of its lane). */
+  private turningAcross(o: Vehicle): boolean {
+    const [now, next] = o.route;
+    if (!now) return false;
+    if (!now.lane) return !!now.turn;
+    return now.length - o.s < TURNING && !!next && !next.lane && !!next.turn;
   }
 
   /** The vehicles (driving and parked) within `reach` of a point. */

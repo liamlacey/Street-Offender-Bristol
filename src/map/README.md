@@ -32,9 +32,9 @@ downloaded again unless asked for (`npm run map -- --refresh <area>`).
 
 Each area's LIDAR alignment (`lidarShift`, metres east and south) is worked out
 the first time it's built (see "Lining up" below) and then kept in `areas.json`.
-The areas make a 5 by 5 grid, each about 970 m by 945 m (about 4.9 km by 4.7 km in
+The areas make a 7 by 7 grid, each about 970 m by 945 m (about 6.8 km by 6.6 km in
 all), with `cathedral` in the middle: the first 3 by 3 round it, then a ring of 16
-round those. Their shifts (east, south):
+round those, then a ring of 24 round those (the "second ring"). Their shifts (east, south):
 
 | Area | Where | Shift |
 | --- | --- | --- |
@@ -63,6 +63,30 @@ round those. Their shifts (east, south):
 | `bowerashton` | outer ring, west | 1 m, 1 m |
 | `gorge` | outer ring, west | 1 m, 0.5 m |
 | `observatory` | outer ring, west | 1 m, 0.5 m |
+| `seamills` | second ring, north-west corner | −0.5 m, 0.5 m |
+| `sneydpark` | second ring, north | 0 m, 1 m |
+| `westburypark` | second ring, north | 1 m, 1.5 m |
+| `bishopston` | second ring, north | 0.5 m, 1 m |
+| `ashleydown` | second ring, north | −0.5 m, 1 m |
+| `eastville` | second ring, north | 0.5 m, 2 m |
+| `whitehall` | second ring, north-east corner | 0.5 m, 0 m |
+| `easton` | second ring, east | 1.5 m, 0 m |
+| `redfield` | second ring, east | 3 m, 0.5 m |
+| `bartonhill` | second ring, east | 4 m, 0 m |
+| `stannes` | second ring, east | 5 m, 0 m |
+| `brislington` | second ring, east | 6 m, 0 m |
+| `broomhill` | second ring, south-east corner | 7 m, 0.5 m |
+| `filwood` | second ring, south | 7 m, 1 m |
+| `knowlewest` | second ring, south | 4.5 m, 1.5 m |
+| `headleypark` | second ring, south | 4 m, 1.5 m |
+| `bedminsterdown` | second ring, south | 3.5 m, 1.5 m |
+| `colliters` | second ring, south | 1.5 m, 0.5 m |
+| `yanley` | second ring, south-west corner | 0.5 m, 0.5 m |
+| `longashton` | second ring, west | 0 m, 0 m |
+| `ashtoncourt` | second ring, west | −1 m, −1.5 m |
+| `nightingale` | second ring, west | −1 m, 1 m |
+| `leighwoods` | second ring, west | 0.5 m, 0.5 m |
+| `abbotsleigh` | second ring, west | 0 m, 1 m |
 
 ## Growing the map
 

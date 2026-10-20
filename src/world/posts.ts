@@ -6,7 +6,7 @@
 
 import type { GameMap, Pts, Service } from '../map/osm';
 import { pointAlong } from './world';
-import { type Work, drain } from './work';
+import { type Work, drain } from './work.ts';
 
 const M = 8;
 

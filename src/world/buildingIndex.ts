@@ -9,7 +9,7 @@
 import { type Building, pointInRing, ridgeAxis } from '../map/osm';
 import type { BuildingLook } from './buildingLook';
 import type { Terrain } from './terrain';
-import { type Work, drain, every } from './work';
+import { type Work, drain, every } from './work.ts';
 import type { World } from './world';
 
 /** The squares buildings are found in, px. */

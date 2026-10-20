@@ -5,7 +5,7 @@ import { TILE, assemble, splitMap, tilesFor } from '../map/regions';
 import { Changes } from './changes';
 import { type Region, regionWork } from './region';
 import { SurfaceGrid } from './surface';
-import { drain } from './work';
+import { drain } from './work.ts';
 
 const map = bristol as unknown as GameMap;
 const { index, tiles } = splitMap(map);
