@@ -1,5 +1,6 @@
 import type * as Phaser from 'phaser';
-import { LOOKS, type People, type Person, type Picnic } from '../world/people';
+import { type Bird, type Gather, LOOKS, type People, type Person, type Picnic } from '../world/people';
+import type { Act } from '../world/streetLife';
 import type { Perspective } from '../world/perspective';
 import { ART_SCALE, canvasTexture } from './art';
 
@@ -103,6 +104,134 @@ function blanket(scene: Phaser.Scene, pattern: number): string {
   return key;
 }
 
+/**
+ * A performer, from above, facing right (the crowd's way), in one of a few
+ * frames: strumming a guitar, bowing a violin, beating a drum, juggling
+ * three balls; or a living statue on a box, painted all over silver.
+ */
+export function performerTexture(scene: Phaser.Scene, look: number, act: Act, frame: number): string {
+  const key = `performer-${act}-${look % LOOKS}-${frame}`;
+  canvasTexture(scene, key, 12, 12, (ctx) => {
+    const ellipse = (x: number, y: number, rx: number, ry: number, fill: string) => {
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    const line = (ax: number, ay: number, bx: number, by: number, width: number, stroke: string) => {
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = width;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+    };
+    if (act === 'statue') {
+      // The box they stand on.
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(2.4, 2.4, 8, 8);
+      ctx.fillStyle = '#4a4d52';
+      ctx.fillRect(2, 2, 7.6, 7.6);
+    }
+    ctx.save();
+    ctx.translate(1, 1);
+    person(ctx, look, 'stand');
+    ctx.restore();
+    if (act === 'statue') {
+      // Painted all over: silver.
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.fillStyle = 'rgba(196,202,208,0.88)';
+      ctx.fillRect(2.2, 2.2, 7.2, 7.2);
+      ctx.globalCompositeOperation = 'source-over';
+      ellipse(6.6, 6, 0.6, 0.6, 'rgba(255,255,255,0.6)');
+      return;
+    }
+    const [cx, cy] = [6, 6];
+    if (act === 'guitar') {
+      // Its body at their hip, its neck out to their left; the strumming hand.
+      line(cx + 0.8, cy + 0.6, cx + 2.2, cy - 3.4, 0.7, '#4a2e16');
+      ellipse(cx + 0.9, cy + 1.3, 1.5, 1.1, '#b06a2a');
+      ellipse(cx + 0.9, cy + 1.2, 0.45, 0.45, '#2a1a0e');
+      ellipse(cx + 1.5 + (frame ? 0.5 : -0.3), cy + 1.9, 0.55, 0.5, '#e6c2a2');
+    } else if (act === 'violin') {
+      // Under their chin, the bow across it, to and fro.
+      ellipse(cx + 0.9, cy - 1.4, 1.1, 0.6, '#8a4a1e');
+      line(cx + 2.6 - frame * 1.2, cy - 2.6, cx - 0.2 - frame * 1.2, cy + 0.4, 0.35, '#d8cfb8');
+    } else if (act === 'drums') {
+      // A drum in front of them, the sticks up and down.
+      ellipse(cx + 2.4, cy, 1.9, 1.9, '#b33a2e');
+      ellipse(cx + 2.4, cy, 1.5, 1.5, '#e8e4da');
+      line(cx + 0.6, cy - 1.2, cx + (frame ? 2.4 : 1.6), cy - (frame ? 0.6 : 1.6), 0.35, '#c9a46a');
+      line(cx + 0.6, cy + 1.2, cx + (frame ? 1.6 : 2.4), cy + (frame ? 1.6 : 0.6), 0.35, '#c9a46a');
+    } else {
+      // Three balls up in the air in front of them, round and round.
+      ['#e0412c', '#f2c21a', '#2f6fd0'].forEach((c, i) => {
+        const a = ((frame / 3 + i / 3) * Math.PI * 2);
+        ellipse(cx + 2.4 + Math.cos(a) * 1.2, cy + Math.sin(a) * 2, 0.55, 0.55, c);
+      });
+    }
+  });
+  return key;
+}
+
+/** How many frames each act has. */
+export const ACT_FRAMES: Record<Act, number> = { guitar: 2, violin: 2, drums: 2, juggler: 3, statue: 1 };
+
+/** What's on the ground in front of a performer: an open guitar case (with coins in it), or a hat. */
+function takings(scene: Phaser.Scene, act: Act): string {
+  const key = act === 'guitar' || act === 'violin' ? 'takings-case' : 'takings-hat';
+  if (key === 'takings-case')
+    canvasTexture(scene, key, 6, 3, (ctx) => {
+      ctx.fillStyle = '#2a1e16';
+      ctx.fillRect(0, 0, 6, 3);
+      ctx.fillStyle = '#8a2234';
+      ctx.fillRect(0.4, 0.4, 5.2, 2.2);
+      ctx.fillStyle = '#e8c45a';
+      for (const [x, y] of [[1.4, 1], [2.8, 1.8], [4.2, 1.2], [3.4, 0.9]]) ctx.fillRect(x, y, 0.6, 0.6);
+    });
+  else
+    canvasTexture(scene, key, 3, 3, (ctx) => {
+      ctx.fillStyle = '#2b2b30';
+      ctx.beginPath();
+      ctx.arc(1.5, 1.5, 1.45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#141416';
+      ctx.beginPath();
+      ctx.arc(1.5, 1.5, 0.95, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#e8c45a';
+      ctx.fillRect(1.2, 1.2, 0.6, 0.6);
+    });
+  return key;
+}
+
+/** A pigeon from above, facing right: standing, pecking (head down), or flying (wings up, wings down). */
+function pigeonTexture(scene: Phaser.Scene, pose: 'stand' | 'peck' | 'fly0' | 'fly1'): string {
+  const key = `pigeon-${pose}`;
+  canvasTexture(scene, key, 6, 6, (ctx) => {
+    const ellipse = (x: number, y: number, rx: number, ry: number, fill: string) => {
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    if (pose === 'fly0' || pose === 'fly1') {
+      const spread = pose === 'fly0' ? 2.6 : 1.6;
+      ellipse(2.8, 3 - spread * 0.7, 0.9, spread * 0.55, '#7d8590');
+      ellipse(2.8, 3 + spread * 0.7, 0.9, spread * 0.55, '#7d8590');
+    } else ellipse(3.2, 3.3, 1.3, 0.75, 'rgba(0,0,0,0.2)');
+    // Tail, body, the sheen on its neck, its head and beak.
+    ellipse(1.3, 3, 0.8, 0.5, '#5d6570');
+    ellipse(2.8, 3, 1.3, 0.85, '#8a929c');
+    const hx = pose === 'peck' ? 4.6 : 4.1;
+    ellipse(hx - 0.5, 3, 0.5, 0.55, '#6a7d74');
+    ellipse(hx, 3, 0.45, 0.45, '#5a6068');
+    ellipse(hx + 0.5, 3, 0.25, 0.15, '#d9a080');
+  });
+  return key;
+}
+
 export function personTexture(scene: Phaser.Scene, look: number, pose: Pose): string {
   const key = `person-${look % LOOKS}-${pose}`;
   if (pose === 'down') canvasTexture(scene, key, 16, 8, (ctx) => person(ctx, look, pose));
@@ -118,6 +247,8 @@ export function personTexture(scene: Phaser.Scene, look: number, pose: Pose): st
 export class PeopleLayer {
   private readonly sprites = new Map<Person, Phaser.GameObjects.Image>();
   private readonly blankets = new Map<Picnic, Phaser.GameObjects.Image>();
+  private readonly pitches = new Map<Gather, Phaser.GameObjects.Image>();
+  private readonly birds = new Map<Bird, Phaser.GameObjects.Image>();
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -140,7 +271,8 @@ export class PeopleLayer {
       if (p.x < view.left - pad || p.x > view.right + pad || p.y < view.top - pad || p.y > view.bottom + pad) continue;
       seen.add(p);
       const pose: Pose = p.mode === 'down' ? 'down' : p.mode === 'sit' ? 'sit' : p.speed < 2 ? 'stand' : p.step < 0.5 ? 'step0' : 'step1';
-      const key = personTexture(this.scene, p.look, pose);
+      const act = p.mode === 'perform' && p.act && p.act !== 'vendor' ? p.act : null;
+      const key = act ? performerTexture(this.scene, p.look, act, Math.floor(p.step * ACT_FRAMES[act]) % ACT_FRAMES[act]) : personTexture(this.scene, p.look, pose);
       let s = this.sprites.get(p);
       if (!s) {
         s = this.scene.add.image(0, 0, key).setScale(SIZE / ART_SCALE);
@@ -174,6 +306,50 @@ export class PeopleLayer {
       if (spread.has(c)) continue;
       b.destroy();
       this.blankets.delete(c);
+    }
+    // The performers' takings, on the ground in front of them.
+    const out = new Set<Gather>();
+    for (const g of this.people.pitches) {
+      if (!g.host || g.host.mode !== 'perform' || !g.act || g.x < view.left - pad || g.x > view.right + pad || g.y < view.top - pad || g.y > view.bottom + pad) continue;
+      out.add(g);
+      let t = this.pitches.get(g);
+      if (!t) {
+        t = this.scene.add.image(0, 0, takings(this.scene, g.act)).setScale(SIZE / ART_SCALE).setDepth(this.depths.ground - 0.01);
+        this.pitches.set(g, t);
+      }
+      const [x, y] = [g.x + Math.cos(g.angle) * 1.1 * 8, g.y + Math.sin(g.angle) * 1.1 * 8];
+      const lift = perspective.lift(this.base(x, y, 0));
+      t.setPosition(perspective.x(x, lift), perspective.y(y, lift)).setRotation(g.angle + Math.PI / 2);
+    }
+    for (const [g, t] of this.pitches) {
+      if (out.has(g)) continue;
+      t.destroy();
+      this.pitches.delete(g);
+    }
+    // The pigeons, pecking about, or flying off (up over everything, flapping).
+    const flying = new Set<Bird>();
+    const now = this.scene.time.now;
+    for (const f of this.people.flocks) {
+      if (!f.birds.length || f.x < view.left - 60 || f.x > view.right + 60 || f.y < view.top - 60 || f.y > view.bottom + 60) continue;
+      for (const b of f.birds) {
+        flying.add(b);
+        const pose = b.flying ? (Math.floor(now / 90 + b.angle * 3) % 2 ? 'fly0' : 'fly1') : b.peck && Math.floor(now / 250 + b.angle * 5) % 2 ? 'peck' : 'stand';
+        const key = pigeonTexture(this.scene, pose);
+        let im = this.birds.get(b);
+        if (!im) {
+          im = this.scene.add.image(0, 0, key).setScale(SIZE / ART_SCALE);
+          this.birds.set(b, im);
+        } else if (im.texture.key !== key) im.setTexture(key);
+        const lift = perspective.lift(this.base(b.x, b.y, 0) + 0.2 * 8 + b.z);
+        im.setPosition(perspective.x(b.x, lift), perspective.y(b.y, lift))
+          .setRotation(b.angle)
+          .setDepth(b.flying ? this.depths.deck + 1 : this.depths.ground);
+      }
+    }
+    for (const [b, im] of this.birds) {
+      if (flying.has(b)) continue;
+      im.destroy();
+      this.birds.delete(b);
     }
   }
 }

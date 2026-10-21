@@ -362,6 +362,33 @@ export function createArt(scene: Phaser.Scene): void {
       roundRect(ctx, 0.2, 0, 1, 5, 0.5, '#d2372b');
     });
   }
+  // The food carts, from above (serving side along x): the cart, its counter, and a striped parasol over it; hot dogs, coffee, ice cream, crêpes.
+  const carts: [string, string, string][] = [['#c62d2a', '#f4f0e6', '#e9b23a'], ['#5a3b26', '#efe2c8', '#2e2a26'], ['#e58bb0', '#fbf3f6', '#7cc8e0'], ['#2f5d9a', '#f2f2ee', '#e2a64a']];
+  carts.forEach(([stripe, white, trim], k) => {
+    canvasTexture(scene, `${TEX.prop('foodcart')}-${k}`, 18, 18, (ctx) => {
+      // The cart, and its wheels' shadow.
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.fillRect(3.6, 6.2, 12, 7);
+      roundRect(ctx, 2.5, 5, 13, 8, 1, trim);
+      roundRect(ctx, 11.5, 5.6, 3.4, 6.8, 0.6, '#d9d9d4');
+      // The parasol: eight panels, every other one striped.
+      const [cx, cy, r] = [8, 9, 7.6];
+      for (let i = 0; i < 8; i++) {
+        ctx.fillStyle = i % 2 ? white : stripe;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, r, (i * Math.PI) / 4, ((i + 1) * Math.PI) / 4);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+      ctx.lineWidth = 0.4;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+      circle(ctx, cx, cy, 0.8, '#3a3a3a');
+    });
+  });
   // A dead traffic light: no lamp lit.
   canvasTexture(scene, TEX.light('off'), 12, 16, (ctx) => {
     circle(ctx, 6, 2.5, 2.2, '#2a2d31');

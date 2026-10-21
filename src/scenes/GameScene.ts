@@ -1875,7 +1875,7 @@ export class GameScene extends Phaser.Scene {
         l.image = null;
       } else
         l.image ??= this.add
-          .image(body.x, body.y, body.home ? TEX.prop(body.kind as PropKind) : TEX.debris(body.kind as DebrisKind))
+          .image(body.x, body.y, body.kind === 'foodcart' ? `${TEX.prop('foodcart')}-${body.variant ?? 0}` : body.home ? TEX.prop(body.kind as PropKind) : TEX.debris(body.kind as DebrisKind))
           .setScale(1 / ART_SCALE)
           .setDepth(body.level === 1 ? DEPTH.onDeck : DEPTH.props);
       const image = l.image;

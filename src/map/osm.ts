@@ -424,7 +424,8 @@ export type PropKind =
   | 'ladder'
   | 'mooring'
   | 'pump'
-  | 'trolley';
+  | 'trolley'
+  | 'foodcart';
 
 export interface Prop {
   kind: PropKind;

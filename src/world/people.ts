@@ -16,6 +16,7 @@
 import { type GameMap, type Pts, VEHICLE_ROADS, pointInRing } from '../map/osm';
 import { type Store, TROLLEY_GAP } from '../map/stores';
 import { type TrolleyRow, trolleyRows } from './parking';
+import { type Act, pedestrianBusy, streetLifeWork } from './streetLife';
 import type { Light } from './lights';
 import { offsetLine } from './world';
 import { type Work, drain, every } from './work.ts';
@@ -52,7 +53,7 @@ const PAVEMENT = 2.4 * M;
 const WALK = 1.35 * M;
 const RUN = 4.2 * M;
 /** At most this many about at once; and how many per unit of how busy it is round you (see `weight`). */
-const MOST = 160;
+const MOST = 220;
 const PER_WEIGHT = 0.5;
 /** Kept going this far beyond the view, px; gone beyond `FAR`. */
 const NEAR = 30 * M;
@@ -69,7 +70,7 @@ const R = 0.3 * M;
 const SHOPPERS = 16;
 const HOLD = 0.85 * M;
 
-export type Mode = 'walk' | 'stand' | 'wander' | 'kerb' | 'cross' | 'queue' | 'board' | 'flee' | 'dive' | 'down' | 'sit' | 'shop';
+export type Mode = 'walk' | 'stand' | 'wander' | 'kerb' | 'cross' | 'queue' | 'board' | 'flee' | 'dive' | 'down' | 'sit' | 'shop' | 'perform' | 'vend' | 'join';
 
 /** A bench or picnic table (as the world has it: it can be knocked about, or smashed). */
 export interface Seat {
@@ -117,6 +118,46 @@ export interface Trip {
   car: [number, number, number, number, number];
   /** Where they're going (x, y, ...), the next first. */
   route: number[];
+}
+
+/**
+ * Somewhere people gather on the busy pedestrian streets and squares (see
+ * streetLife.ts): a performer's pitch (a crowd round it, watching), or a food
+ * cart (a queue at it).
+ */
+export interface Gather {
+  kind: 'pitch' | 'cart';
+  x: number;
+  y: number;
+  /** Which way the performer faces (the crowd's in front), or the cart's serving side. */
+  angle: number;
+  act?: Act;
+  /** The cart (the scene's loose thing). */
+  cart?: Trolley;
+  /** The performer or the vendor there, if there is one. */
+  host: Person | null;
+}
+
+/** A pigeon: where (and how high, flying), which way it's facing, how fast it's going; pecking, or flying off. */
+export interface Bird {
+  x: number;
+  y: number;
+  z: number;
+  angle: number;
+  vx: number;
+  vy: number;
+  /** Till its next hop, or how long it's been flying, s. */
+  timer: number;
+  peck: boolean;
+  flying: boolean;
+}
+
+/** A flock of pigeons on a busy street or square: where they peck about; and, flown off, how long till they're back. */
+export interface Flock {
+  x: number;
+  y: number;
+  birds: Bird[];
+  away: number;
 }
 
 /** A picnic on the grass: its blanket (where, which way, which pattern), and how many are sitting round it. */
@@ -182,6 +223,9 @@ export interface Person {
   underAlong: number;
   /** Shopping (see Trip), or null. */
   trip: Trip | null;
+  /** A performer's act (or a food cart's vendor), and where they're gathered (performing, selling, watching, queuing), or null. */
+  act: Act | 'vendor' | null;
+  gather: Gather | null;
 }
 
 /** A vehicle as the people see it: where, which way, how big, how fast; a bus's stop. */
@@ -318,6 +362,10 @@ export class People {
   private rows: TrolleyRow[][] = [];
   /** Just put about the view (see `populate`): the car parks to be filled once the parked cars are known. */
   private fresh = false;
+  /** The performers' pitches and the food carts (see Gather), and the pigeons. */
+  readonly pitches: Gather[] = [];
+  carts: Gather[] = [];
+  readonly flocks: Flock[] = [];
 
   constructor(
     private readonly map: GameMap,
@@ -345,6 +393,9 @@ export class People {
   *setup(): Work {
     this.rows = trolleyRows(this.map);
     yield;
+    const life = yield* streetLifeWork(this.map);
+    for (const p of life.pitches) this.pitches.push({ kind: 'pitch', x: p.x, y: p.y, angle: p.angle, act: p.act, host: null });
+    for (const f of life.flocks) this.flocks.push({ x: f.x, y: f.y, birds: [], away: 0 });
     yield* this.buildWalks();
     yield* this.buildSpots();
     yield* this.buildCrossings();
@@ -353,6 +404,18 @@ export class People {
   /** The benches and picnic tables people sit at, and the shopping trolleys they push (the scene's loose things: see GameScene). */
   useSeats(seats: Seat[]): void {
     this.trolleys = (seats as (Seat & Partial<Trolley>)[]).filter((t): t is Seat & Trolley => t.kind === 'trolley');
+    // The food carts (the same carts as before, where they were: their vendors and queues with them).
+    const old = this.carts;
+    this.carts = (seats as (Seat & Partial<Trolley>)[])
+      .filter((t): t is Seat & Trolley => t.kind === 'foodcart' && !t.gone)
+      .map((cart) => old.find((g) => g.cart === cart) ?? { kind: 'cart', x: cart.x, y: cart.y, angle: cart.angle, cart, host: null });
+    for (const p of this.people) {
+      const g = p.gather;
+      if (g?.kind !== 'cart' || this.carts.includes(g)) continue;
+      const same = this.carts.find((c) => Math.hypot(c.x - g.x, c.y - g.y) < 1);
+      p.gather = same ?? null;
+      if (same && g.host === p) same.host = p;
+    }
     this.seats = seats.filter((b) => (b.kind === 'bench' || b.kind === 'picnic') && b.level === 0);
     this.seatGrid.clear();
     this.seats.forEach((b, i) => {
@@ -428,7 +491,12 @@ export class People {
         const off = r.width / 2 + PAVEMENT / 2;
         if (r.pavement !== 'right') add(offsetLine(r.pts, off), busy, i, level);
         if (r.pavement !== 'left') add(offsetLine(r.pts, -off), busy, i, level);
-      } else if (r.kind === 'pedestrian') add(r.pts, 2.5, -1, level);
+      } else if (r.kind === 'pedestrian') {
+        // Busier the more shops and the like along it, spread across it (three ways along it, if it's wide enough).
+        const busy = 2.5 + Math.min(4.5, pedestrianBusy(this.map, r.pts) * 0.15);
+        if (r.width < 4 * M) add(r.pts, busy, -1, level);
+        else for (const o of [-0.3, 0, 0.3]) add(o ? offsetLine(r.pts, r.width * o) : r.pts, busy / 2, -1, level);
+      }
       else if (r.kind === 'footway' || r.kind === 'steps' || r.kind === 'cycleway') add(r.pts, r.kind === 'cycleway' ? 0.3 : 0.9, r.kind === 'cycleway' ? -2 : -1, level);
     }
   }
@@ -664,6 +732,8 @@ export class People {
       under: null,
       underAlong: 0,
       trip: null,
+      act: null,
+      gather: null,
     };
     // (Never in a vehicle standing there: gone again at once.)
     if (this.blocks.some((b) => Math.abs(b.x - x) < b.length && Math.abs(b.y - y) < b.length && bodyDist(b, x, y) < b.r + 0.3 * M)) p.gone = true;
@@ -711,7 +781,10 @@ export class People {
     const [x0, y0, x1, y1] = [view.x0 - NEAR, view.y0 - NEAR, view.x1 + NEAR, view.y1 + NEAR];
     for (let i = this.people.length - 1; i >= 0; i--) {
       const p = this.people[i];
-      if (p.x < view.x0 - FAR || p.x > view.x1 + FAR || p.y < view.y0 - FAR || p.y > view.y1 + FAR || p.gone) this.people.splice(i, 1);
+      if (p.x < view.x0 - FAR || p.x > view.x1 + FAR || p.y < view.y0 - FAR || p.y > view.y1 + FAR || p.gone) {
+        this.leaveGather(p);
+        this.people.splice(i, 1);
+      }
     }
     // Picnics: gone once no one's at them and they're out of sight (or far off).
     for (let i = this.picnics.length - 1; i >= 0; i--) {
@@ -756,6 +829,7 @@ export class People {
     const burst = this.fresh && this.blocks.some((b) => !b.you);
     if (burst) this.fresh = false;
     for (let k = burst ? 10 : 1; k > 0; k--) this.shoppers(x0, y0, x1, y1, burst ? () => false : seen, burst);
+    this.streetLife(x0, y0, x1, y1, seen, all);
     // Waiting at the bus stops near the view.
     for (const [i, [sx, sy]] of this.stops.entries()) {
       if (sx < x0 || sx > x1 || sy < y0 || sy > y1 || seen(sx, sy)) continue;
@@ -784,6 +858,13 @@ export class People {
     const stopAt = new Map(this.stops.map(([x, y], k) => [`${x},${y}`, k]));
     const areaAt = new Map(this.areas.map((r, k) => [ptsKey(r), k]));
     const storeAt = new Map(this.stores.map((st, k) => [`${st.door[0]},${st.door[1]}`, k]));
+    const pitchAt = new Map(this.pitches.map((g) => [`${g.x},${g.y}`, g]));
+    // The pigeons round the view, as they were.
+    const flockAt = new Map(this.flocks.map((f) => [`${f.x},${f.y}`, f]));
+    for (const f of old.flocks) {
+      const mine = flockAt.get(`${f.x},${f.y}`);
+      if (mine && inside(f.x, f.y)) Object.assign(mine, { birds: f.birds, away: f.away });
+    }
     const picnics = new Set<Picnic>();
     for (const p of old.people) {
       if (p.gone || !inside(p.x, p.y)) continue;
@@ -817,6 +898,12 @@ export class People {
           this.letGo(p);
           lost = true;
         } else p.trip.store = k;
+      }
+      if (p.gather?.kind === 'pitch') {
+        const g = pitchAt.get(`${p.gather.x},${p.gather.y}`) ?? null;
+        if (g && p.gather.host === p) g.host = p;
+        p.gather = g;
+        if (!g && (p.mode === 'perform' || p.mode === 'stand')) lost = true;
       }
       if (p.picnic) picnics.add(p.picnic);
       this.people.push(p);
@@ -990,8 +1077,24 @@ export class People {
         case 'shop':
           this.shopping(p, dt);
           break;
+        case 'perform':
+          // (Playing, juggling, or still as a statue.)
+          p.speed = 0;
+          if (p.act !== 'statue') p.step = (p.step + dt * (p.act === 'juggler' ? 1.6 : 2.2)) % 1;
+          if (p.gather) p.angle = p.gather.angle;
+          break;
+        case 'vend':
+          this.vend(p);
+          break;
+        case 'join':
+          if (this.goTo(p, p.tx, p.ty, p.pace, dt)) {
+            p.mode = 'stand';
+            p.speed = 0;
+          }
+          break;
         case 'stand':
           p.timer -= dt;
+          if (p.gather) this.watch(p);
           if (p.timer < 0) this.leave(p);
           break;
         case 'kerb':
@@ -1020,6 +1123,7 @@ export class People {
     }
     this.hitBy(all);
     this.buses(movers, dt);
+    this.pigeons(dt, view, all);
   }
 
   /** Along their walk, keeping to their side of it; at its end, on to another starting there (or back the way they came). */
@@ -1058,6 +1162,8 @@ export class People {
       p.next += p.dir;
       if (p.next < 0 || p.next >= n) this.endOfWalk(p);
     }
+    // Passing a performer or a food cart: now and then, they stop to watch, or join the queue.
+    if (p.mode === 'walk' && !p.joining && this.rand() < dt * 0.5) this.stopBy(p);
     // Passing a crossing: now and then, over the road.
     if (p.mode === 'walk' && this.rand() < dt * 3) {
       for (const i of this.crossingGrid.get(key(p.x, p.y)) ?? []) {
@@ -1211,6 +1317,7 @@ export class People {
 
   /** Back to walking: onto the nearest walk within 15 m (or wandering about the park they're in; or standing a while longer). */
   private rejoin(p: Person): void {
+    this.leaveGather(p);
     const near = this.inRoad(p.x, p.y, undefined, p.level) ? this.nearestWalk(p.x, p.y, 15 * M, false, p.level) : this.nearestWalk(p.x, p.y, 15 * M, true, p.level);
     if (near) {
       const [x, y, k, seg] = near;
@@ -1349,6 +1456,7 @@ export class People {
   scare(p: Person, x: number, y: number): void {
     if (p.mode === 'down' || p.mode === 'board' || p.mode === 'dive') return;
     this.letGo(p);
+    this.leaveGather(p);
     if (p.mode !== 'flee') p.was = p.mode;
     p.mode = 'flee';
     p.stop = -1;
@@ -1475,6 +1583,7 @@ export class People {
   /** Knocked down by a vehicle going `speed` px/s: thrown, and down for a moment, or for good. */
   knock(p: Person, v: { vx: number; vy: number; id?: number }, speed: number): void {
     this.letGo(p);
+    this.leaveGather(p);
     if (p.mode !== 'down' && p.mode !== 'flee' && p.mode !== 'dive') p.was = p.mode;
     p.mode = 'down';
     p.stop = -1;
@@ -1489,6 +1598,192 @@ export class People {
     p.timer = DOWN[0] + this.rand() * (DOWN[1] - DOWN[0]);
     // What hit them loses a good part of its speed to the knock: 12%, and more the faster it was going (up to 30%).
     this.hits.push({ person: p, speed, by: v.id, how: 'hit', loss: speed < 1.2 * M ? 0 : Math.min(0.3, 0.12 + (speed / (40 * M)) * 0.16) });
+  }
+
+  // --- Street life (see streetLife.ts) ---
+
+  /** Where a pitch or a cart is now (a cart can be knocked about). */
+  private placeOf(g: Gather): [number, number] {
+    return g.cart ? [g.cart.x, g.cart.y] : [g.x, g.y];
+  }
+
+  /** Those gathered at a pitch or a cart (watching, queuing; not its performer or vendor). */
+  private gathered(g: Gather): Person[] {
+    return this.people.filter((q) => q.gather === g && q !== g.host);
+  }
+
+  /** Where someone watching a performer stands: in front of them, somewhere round an arc (closer round a living statue). */
+  private inCrowd(g: Gather): [number, number] {
+    const a = g.angle + (this.rand() - 0.5) * 2.4;
+    const d = (g.act === 'statue' ? 1.8 : 2.4) * M + this.rand() * 1.4 * M;
+    return [g.x + Math.cos(a) * d, g.y + Math.sin(a) * d];
+  }
+
+  /** Where the `k`th in a cart's queue stands: out from its serving side, one behind another. */
+  private inQueue(g: Gather, k: number): [number, number] {
+    const [x, y] = this.placeOf(g);
+    const d = 1.5 * M + k * 0.8 * M;
+    return [x + Math.cos(g.angle) * d + (this.rand() - 0.5) * 0.25 * M, y + Math.sin(g.angle) * d + (this.rand() - 0.5) * 0.25 * M];
+  }
+
+  /**
+   * The performers at their pitches and the vendors at their carts near the
+   * view (coming out of sight, as everyone does), a crowd round each
+   * performer, a queue at each cart. Not every pitch is taken (the same ones
+   * aren't, by where they are), nor a cart that's been knocked about.
+   */
+  private streetLife(x0: number, y0: number, x1: number, y1: number, seen: (x: number, y: number) => boolean, all: boolean): void {
+    for (const g of [...this.pitches, ...this.carts]) {
+      const [gx, gy] = this.placeOf(g);
+      if (g.host || gx < x0 || gx > x1 || gy < y0 || gy > y1 || seen(gx, gy) || (!all && this.rand() > 0.02)) continue;
+      if (g.cart && (g.cart.gone || g.cart.moved || Math.hypot(g.cart.x - g.x, g.cart.y - g.y) > 0.5 * M)) continue;
+      if (g.kind === 'pitch' && Math.abs(Math.round(g.x + g.y)) % 5 === 0) continue;
+      if (g.kind === 'pitch') {
+        const p = this.make(g.x, g.y, 'perform');
+        if (p.gone) continue;
+        Object.assign(p, { act: g.act, gather: g, angle: g.angle });
+        g.host = p;
+        for (let k = (g.act === 'statue' ? 2 : 3) + Math.floor(this.rand() * 6); k > 0; k--) {
+          const [x, y] = this.inCrowd(g);
+          const q = this.make(x, y, 'stand');
+          Object.assign(q, { gather: g, timer: 20 + this.rand() * 70, angle: Math.atan2(g.y - y, g.x - x) });
+        }
+      } else {
+        const [ux, uy] = [Math.cos(g.angle), Math.sin(g.angle)];
+        const p = this.make(gx - ux * 1.3 * M, gy - uy * 1.3 * M, 'vend');
+        if (p.gone) continue;
+        Object.assign(p, { act: 'vendor', gather: g, angle: g.angle });
+        g.host = p;
+        for (let k = 0, n = Math.floor(this.rand() * 4); k < n; k++) {
+          const [x, y] = this.inQueue(g, k);
+          const q = this.make(x, y, 'stand');
+          Object.assign(q, { gather: g, timer: 8 + this.rand() * 15 + k * 8, angle: g.angle + Math.PI });
+        }
+      }
+    }
+  }
+
+  /** Walking past a performer (or a food cart) close by: now and then, they stop and watch (or join the queue), if there's room. */
+  private stopBy(p: Person): void {
+    for (const g of [...this.pitches, ...this.carts]) {
+      if (!g.host || g.host.level !== p.level) continue;
+      const [gx, gy] = this.placeOf(g);
+      if (Math.abs(gx - p.x) > 7 * M || Math.abs(gy - p.y) > 7 * M || Math.hypot(gx - p.x, gy - p.y) > 7 * M) continue;
+      const n = this.gathered(g).length;
+      if (g.kind === 'pitch' ? n >= 12 || this.rand() > 0.4 : n >= 4 || this.rand() > 0.25) continue;
+      [p.tx, p.ty] = g.kind === 'pitch' ? this.inCrowd(g) : this.inQueue(g, n);
+      if (!this.walkable(p.tx, p.ty, p.level)) continue;
+      p.mode = 'join';
+      p.gather = g;
+      p.timer = g.kind === 'pitch' ? 15 + this.rand() * 60 : 8 + this.rand() * 15 + n * 8;
+      return;
+    }
+  }
+
+  /** Watching a performer (or queuing at a cart): facing them; once they've gone, off soon after. */
+  private watch(p: Person): void {
+    const g = p.gather!;
+    if (!g.host) {
+      p.timer = Math.min(p.timer, 1 + this.rand() * 3);
+      return;
+    }
+    const [gx, gy] = g.kind === 'cart' ? this.placeOf(g) : [g.x, g.y];
+    let turn = Math.atan2(gy - p.y, gx - p.x) - p.angle;
+    turn -= Math.round(turn / (Math.PI * 2)) * Math.PI * 2;
+    p.angle += turn * 0.1;
+  }
+
+  /** Selling from their cart; knocked about (or smashed), they're off. */
+  private vend(p: Person): void {
+    p.speed = 0;
+    const g = p.gather;
+    const c = g?.cart;
+    if (!g || !c || c.gone || c.moved || Math.hypot(c.x - g.x, c.y - g.y) > 0.5 * M) {
+      this.scare(p, c?.x ?? p.x, c?.y ?? p.y);
+      return;
+    }
+    p.angle = g.angle;
+  }
+
+  /** No longer at a pitch or a cart (gone, scared, knocked down, done): if they were its performer or vendor, it's free. */
+  private leaveGather(p: Person): void {
+    const g = p.gather;
+    if (!g) return;
+    if (g.host === p) g.host = null;
+    p.gather = null;
+  }
+
+  /**
+   * The pigeons: pecking about where they gather, hopping out of the way of
+   * anyone walking through; anything coming at them fast, or close, or
+   * anyone running, and they're up and away, all at once; back a minute or
+   * two later (out of sight).
+   */
+  private pigeons(dt: number, view: PeopleView, all: Mover[]): void {
+    for (const f of this.flocks) {
+      const near = f.x > view.x0 - NEAR && f.x < view.x1 + NEAR && f.y > view.y0 - NEAR && f.y < view.y1 + NEAR;
+      if (!f.birds.length) {
+        f.away -= dt;
+        const inSight = f.x > view.x0 - 3 * M && f.x < view.x1 + 3 * M && f.y > view.y0 - 3 * M && f.y < view.y1 + 3 * M;
+        if (!near || inSight || f.away > 0) continue;
+        for (let k = 5 + Math.floor(this.rand() * 8); k > 0; k--) {
+          const [a, d] = [this.rand() * Math.PI * 2, this.rand() * 2.2 * M];
+          f.birds.push({ x: f.x + Math.cos(a) * d, y: f.y + Math.sin(a) * d, z: 0, angle: this.rand() * Math.PI * 2, vx: 0, vy: 0, timer: this.rand() * 2, peck: this.rand() < 0.5, flying: false });
+        }
+        continue;
+      }
+      if (!near) continue;
+      // Danger: you or anything else coming fast, or close by; or someone running.
+      let threat: [number, number] | null = null;
+      for (const m of all) {
+        if ((m.level ?? 0) !== 0 || Math.abs(m.x - f.x) > 10 * M || Math.abs(m.y - f.y) > 10 * M) continue;
+        const [sp, d] = [Math.hypot(m.vx, m.vy), Math.hypot(m.x - f.x, m.y - f.y)];
+        if ((sp > 1.5 * M && d < 7 * M + m.length / 2) || (sp > 0.3 * M && d < 3.5 * M + m.length / 2)) threat = [m.x, m.y];
+      }
+      for (const p of this.people) if ((p.mode === 'flee' || p.mode === 'dive') && Math.abs(p.x - f.x) < 4 * M && Math.abs(p.y - f.y) < 4 * M) threat = [p.x, p.y];
+      for (let i = f.birds.length - 1; i >= 0; i--) {
+        const b = f.birds[i];
+        if (b.flying) {
+          b.timer += dt;
+          b.x += b.vx * dt;
+          b.y += b.vy * dt;
+          b.z += 2.5 * M * dt;
+          if (b.timer > 3.5) f.birds.splice(i, 1);
+          continue;
+        }
+        if (threat) {
+          // Up and away from it (each its own way, more or less).
+          const a = Math.atan2(b.y - threat[1], b.x - threat[0]) + (this.rand() - 0.5) * 1.6;
+          const v = (5 + this.rand() * 3) * M;
+          Object.assign(b, { flying: true, timer: 0, angle: a, vx: Math.cos(a) * v, vy: Math.sin(a) * v, peck: false });
+          continue;
+        }
+        // Someone walking right by: quickly out of their way.
+        for (const q of this.close.get(`${Math.floor(b.x / NEAR_CELL)},${Math.floor(b.y / NEAR_CELL)}`) ?? []) {
+          const d = Math.hypot(b.x - q.x, b.y - q.y);
+          if (q.level !== 0 || d > 0.7 * M || d < 1e-6) continue;
+          // (To the side of the way they're going, not on ahead of them.)
+          const [nx, ny] = [-Math.sin(q.angle), Math.cos(q.angle)];
+          const side = (b.x - q.x) * nx + (b.y - q.y) * ny >= 0 ? 1 : -1;
+          b.x += nx * side * 2.5 * M * dt;
+          b.y += ny * side * 2.5 * M * dt;
+          b.angle = Math.atan2(ny * side, nx * side);
+        }
+        // Pecking about: now and then a few steps, back towards the others if they've strayed.
+        b.timer -= dt;
+        if (b.timer <= 0) {
+          const home = Math.hypot(b.x - f.x, b.y - f.y) > 2.5 * M;
+          b.angle = home ? Math.atan2(f.y - b.y, f.x - b.x) + (this.rand() - 0.5) : this.rand() * Math.PI * 2;
+          b.peck = !home && this.rand() < 0.5;
+          b.timer = 0.6 + this.rand() * 1.6;
+        }
+        if (!b.peck) {
+          b.x += Math.cos(b.angle) * 0.45 * M * dt;
+          b.y += Math.sin(b.angle) * 0.45 * M * dt;
+        }
+      }
+      if (!f.birds.length) f.away = 40 + this.rand() * 80;
+    }
   }
 
   // --- Shopping (see Trip) ---

@@ -779,9 +779,9 @@ but the water and the buildings.
   keep off the roads. At the end of one, on along another that starts within 6 m (if the
   way there keeps off the roads), or back.
 - **How many**: along each walk, for every 10 m, 1 on a quiet pavement, more on busier
-  streets (0.7 + 0.25 × the road's `activity`, at most 4), 2.5 on a pedestrian street,
+  streets (0.7 + 0.25 × the road's `activity`, at most 4), 2.5 or more on a pedestrian street (see below),
   0.9 on a footway, 0.3 on a cycleway; and the spots where they stand (below). Round the
-  view (30 m beyond it) there are 0.5 people for each of those (at most 160), coming into
+  view (30 m beyond it) there are 0.5 people for each of those (at most 220), coming into
   being out of sight, gone 55 m beyond it.
 - **Where they stand** (in groups of 2 to 5, facing in, or on their own facing the way the
   spot faces, for half a minute to two and a half): outside each business, on the nearest
@@ -840,6 +840,36 @@ but the water and the buildings.
   3 m/s), up and on their way if it's moved or broken.
 - **Picnics**: at about a third of the park, garden and lawn spots (not under a tree), 2 to 5
   sit in a ring on a blanket, facing in, for one to four minutes, then pack up and go.
+- **Busy pedestrian streets** (`src/world/streetLife.ts`): how busy each pedestrian street
+  is, by the shops, cafés and the like within 25 m of it per 100 m (Broadmead, East Street,
+  Corn Street, Cotham Hill: 15 to 50). Along each, 2.5 people per 10 m, plus 0.15 for each
+  of those (at most 4.5 more), and spread across it: three ways along it (down the middle,
+  and 30% of its width either side), each with half as many (on one 4 m wide or less,
+  just the middle).
+- **Street life** on the busy ones (12 or more) and the busy squares (`place=square`,
+  `highway=pedestrian` areas and the like, at least 300 m², with at least 4 shops and the
+  like within 30 m): every 28 m along such a street (from 10 m in), and one for every
+  350 m² of such a square (at most 6), a performer's pitch, a food cart or a flock of
+  pigeons (or, a quarter of the time, nothing), by where it is, so the same each time;
+  never within 12 m of another, in a building, or within 2 m of a road. A performer and a
+  cart stand to one side of the street (facing across it), pigeons in the middle.
+  - **Performers**: playing the guitar, the violin or the drums, juggling, or a living
+    statue (silver, on a box), with an open guitar case or a hat in front of them. Four
+    pitches in five have someone on them, coming (out of sight) with 3 to 8 watching (2 to
+    7 round a statue), in an arc 2.4 to 3.8 m in front of them, for 20 s to a minute and a
+    half. Anyone walking past within 7 m may stop to watch (2 in 5 of those who look,
+    up to 12 watching) for 15 s to a minute and a quarter. Scared off, the performer runs,
+    and the crowd drifts off within a few seconds.
+  - **Food carts** (hot dogs, coffee, ice cream, crêpes: a cart under a striped parasol):
+    loose things, knocked about and smashed like a bench (into planks, plastic and bits
+    of rail). A vendor behind each, 0 to 3 queuing in front (one behind another, 0.8 m
+    apart), each served in 8 to 23 s, longer further back; passers-by within 7 m join the
+    queue (1 in 4 of those who look, up to 4). Knock the cart, and the vendor runs.
+  - **Pigeons**: 5 to 12, pecking about within 2.5 m or so, walking a few steps now and
+    then, side-stepping anyone walking right by. Anything coming at them faster than
+    1.5 m/s within 7 m (or slower, within 3.5 m), or anyone running near, and they're all
+    up and away (5 to 8 m/s, climbing), gone in 3.5 s; back 40 s to 2 minutes later, out
+    of sight.
 - **Shoppers and trolleys** at the big shops with car parks (below): up to 16 at each shop near
   the view at once, one coming about every half second till there are (coming into a
   region, ten at once: some at their cars already, loading them). Half come out of the
@@ -1111,6 +1141,8 @@ first, with the loading screen up.
 - `osm.ts`: reads OSM's XML and makes the map (`buildMap`): projection, roads,
   ground, lines, buildings, trees, props, crossings, surfaces. Tested in `osm.test.ts`.
 - `berths.ts`: where boats moor, and the ferry routes and stops.
+- `../world/streetLife.ts`: the busy pedestrian streets and squares, and where their
+  performers, food carts and pigeons are. Tested in `streetLife.test.ts`.
 - `stores.ts`: the big shops with car parks, their doors and trolley bays. Tested (and the
   shoppers pushing the trolleys) in `src/world/shoppers.test.ts`.
 - `landmarks.ts`: landmarks' colours (and heights, roof shapes), and streets' looks;

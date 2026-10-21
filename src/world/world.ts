@@ -10,6 +10,7 @@ import type { Body, Circle, Segment } from '../physics/collisions';
 import type { Building, GameMap, LineKind, Prop, PropKind, Pts, Road } from '../map/osm';
 import { Decks, waterOf } from './decks';
 import { trolleyRows } from './parking';
+import { streetLifeWork } from './streetLife';
 import { Terrain } from './terrain';
 import type { DebrisKind, ThingKind, WallKind } from './damage';
 import { type Work, drain, every } from './work.ts';
@@ -57,6 +58,8 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
   block: { r: 5, invMass: 0.4 },
   // A shopping trolley: on wheels, it rolls a long way.
   trolley: { r: 2.5, length: 8, invMass: 9 },
+  // A food cart: on wheels, but heavy (a stove, a fridge).
+  foodcart: { r: 6, length: 13, invMass: 1.2 },
 };
 
 /** A tree trunk's radius, px. */
@@ -111,6 +114,8 @@ export interface LooseProp extends Body {
   /** A trolley: taken into the shop (not there), or full of shopping (see people.ts). */
   inside?: boolean;
   full?: boolean;
+  /** Which of its kind's looks (a food cart: hot dogs, coffee, ice cream, crêpes). */
+  variant?: number;
 }
 
 /** A loose thing's place on the map: what it is and where it stood (the same in each region of the map it's in). */
@@ -568,6 +573,12 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
       fixed.push({ ...p, level });
     }
   });
+  // The food carts on the busy pedestrian streets and squares (see streetLife.ts).
+  for (const c of (yield* streetLifeWork(map)).carts) {
+    const l = LOOSE.foodcart!;
+    const p = { kind: 'foodcart' as const, x: c.x, y: c.y };
+    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: c.angle, spin: 0, moved: false, level: 0, home: homeOf(p), variant: c.kind });
+  }
   // The trolleys in the big shops' car parks' shelters (more than half full, each its own way).
   for (const rows of trolleyRows(map)) {
     for (const [x, y, angle, count] of rows.slice(1)) {
