@@ -3,7 +3,8 @@ import type { GameMap } from '../map/osm';
 import { pointInRing } from '../map/osm';
 import { central } from '../test/central';
 import { type Mover, People } from './people';
-import { BUSY_STREET, pedestrianBusy, streetLife } from './streetLife';
+import { parkingSpaces } from './parking';
+import { BUSY_STREET, footprints, onFootprints, pedestrianBusy, streetLife } from './streetLife';
 import { buildWorld } from './world';
 
 /** (The middle of Bristol, round where you start: see src/test/central.ts.) */
@@ -46,6 +47,24 @@ describe('street life', () => {
     const world = buildWorld(map);
     expect(world.loose.filter((l) => l.kind === 'stall').length).toBe(life.stalls.length);
     expect(world.loose.filter((l) => l.kind === 'aboard').length).toBe(life.boards.length);
+  });
+
+  it("takes over the bays of a car park a market's held in (the Tobacco Factory's): no one parks under a stall", () => {
+    const rect = (x0: number, y0: number, x1: number, y1: number) => [x0, y0, x1, y0, x1, y1, x0, y1];
+    const park = rect(0, 0, 400, 300);
+    const market: GameMap = {
+      attribution: '', pxPerMetre: M, width: 1000, height: 1000, origin: { lat: 0, lon: 0 }, spawn: { x: 0, y: 0, heading: 0 },
+      areas: [{ kind: 'parking', rings: [park] }], roads: [], lines: [], buildings: [], trees: [], props: [], crossings: [], signals: [], controllers: [],
+      markets: [{ name: 'Market', ring: rect(100, 50, 292, 242) }],
+    };
+    const stalls = streetLife(market).stalls;
+    expect(stalls.length).toBeGreaterThan(10);
+    const spaces = parkingSpaces(market);
+    // Bays still about the rest of the car park, but none under the stalls.
+    expect(spaces.length).toBeGreaterThan(20);
+    const taken = footprints(streetLife(market));
+    for (const b of spaces) expect(onFootprints(taken, b.x, b.y, b.angle, b.length / 2, 1.25 * M)).toBe(false);
+    for (const t of stalls) for (const b of spaces) expect(Math.hypot(b.x - t.x, b.y - t.y)).toBeGreaterThan(2 * M);
   });
 
   it('has charity fundraisers in twos, and Big Issue sellers, catching passers-by one at a time', () => {

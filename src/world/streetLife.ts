@@ -82,7 +82,7 @@ export function* streetLifeWork(map: GameMap): Work<StreetLife> {
     for (let k = 0; k + 1 < pts.length; k += 2) [x0, y0, x1, y1] = [Math.min(x0, pts[k]), Math.min(y0, pts[k + 1]), Math.max(x1, pts[k]), Math.max(y1, pts[k + 1])];
     return { pts, x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
   };
-  const solid = map.buildings.filter((b) => b.solid && !b.bottom).map((b) => bounded(b.rings[0], 0));
+  const solid = (map.buildings ?? []).filter((b) => b.solid && !b.bottom).map((b) => bounded(b.rings[0], 0));
   const roads = map.roads.filter((r) => VEHICLE_ROADS.has(r.kind)).map((r) => ({ ...bounded(r.pts, r.width / 2 + 2 * M), reach: r.width / 2 + 2 * M }));
   const within = (x: number, y: number, b: { x0: number; y0: number; x1: number; y1: number }) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
   /** Clear ground for something: not in a building, nor out on a road, nor within `apart` of anything else. */
@@ -130,7 +130,7 @@ export function* streetLifeWork(map: GameMap): Work<StreetLife> {
     }
   }
   const v = map.venues ?? [];
-  for (const a of map.areas) {
+  for (const a of map.areas ?? []) {
     if (a.kind !== 'plaza') continue;
     if (pause()) yield;
     const ring = a.rings[0];
@@ -243,4 +243,51 @@ function nearestAlong(pts: Pts, x: number, y: number): { along: number; distance
     run += len;
   }
   return { along, distance: best };
+}
+
+/**
+ * What the street life takes up on the ground, as circles (x, y, r) and
+ * rectangles (x, y, angle, half its length along the angle, half across): a
+ * stall, a cart, a performer and the crowd in front of them, the pigeons, an
+ * A-board. No one parks there (see parking.ts).
+ */
+export function footprints(life: StreetLife): { circles: [number, number, number][]; rects: [number, number, number, number, number][] } {
+  const circles: [number, number, number][] = [];
+  const rects: [number, number, number, number, number][] = [];
+  // (A stall's angle is the way it faces: it's wide across that.)
+  for (const s of life.stalls) rects.push([s.x, s.y, s.angle, STALL_DEEP / 2 + 0.5 * M, STALL_WIDE / 2 + 0.3 * M]);
+  for (const c of life.carts) circles.push([c.x, c.y, 1.6 * M]);
+  for (const p of life.pitches) circles.push([p.x, p.y, 1 * M], [p.x + Math.cos(p.angle) * 3 * M, p.y + Math.sin(p.angle) * 3 * M, 2 * M]);
+  for (const f of life.flocks) circles.push([f.x, f.y, 3 * M]);
+  for (const b of life.boards) circles.push([b.x, b.y, 0.6 * M]);
+  return { circles, rects };
+}
+
+/** Whether a rectangle (x, y, angle, half along, half across) overlaps any of the footprints. */
+export function onFootprints(f: ReturnType<typeof footprints>, x: number, y: number, angle: number, hl: number, hw: number): boolean {
+  const [ux, uy] = [Math.cos(angle), Math.sin(angle)];
+  for (const [cx, cy, r] of f.circles) {
+    if (Math.abs(cx - x) > hl + hw + r || Math.abs(cy - y) > hl + hw + r) continue;
+    const [a, b] = [(cx - x) * ux + (cy - y) * uy, -(cx - x) * uy + (cy - y) * ux];
+    if (Math.hypot(Math.max(0, Math.abs(a) - hl), Math.max(0, Math.abs(b) - hw)) < r) return true;
+  }
+  for (const [rx, ry, ra, rl, rw] of f.rects) {
+    if (Math.abs(rx - x) > hl + hw + rl + rw || Math.abs(ry - y) > hl + hw + rl + rw) continue;
+    if (rectsOverlap([x, y, angle, hl, hw], [rx, ry, ra, rl, rw])) return true;
+  }
+  return false;
+}
+
+/** Whether two rectangles (x, y, angle, half along, half across) overlap (by their separating axes). */
+function rectsOverlap(a: [number, number, number, number, number], b: [number, number, number, number, number]): boolean {
+  const axes = (r: typeof a) => [[Math.cos(r[2]), Math.sin(r[2])], [-Math.sin(r[2]), Math.cos(r[2])]];
+  const reach = (r: typeof a, [ax, ay]: number[]) => {
+    const [u, v] = axes(r);
+    return r[3] * Math.abs(u[0] * ax + u[1] * ay) + r[4] * Math.abs(v[0] * ax + v[1] * ay);
+  };
+  for (const axis of [...axes(a), ...axes(b)]) {
+    const d = Math.abs((b[0] - a[0]) * axis[0] + (b[1] - a[1]) * axis[1]);
+    if (d > reach(a, axis) + reach(b, axis)) return false;
+  }
+  return true;
 }

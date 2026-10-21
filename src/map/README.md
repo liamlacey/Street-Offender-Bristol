@@ -701,7 +701,7 @@ front and back) or fire engines (red, a ladder on top).
 - Its siren's heard up to 260 m away (the nearest one): a police car's wail, an
   ambulance's or a fire engine's two tones. You can take any of them and drive it.
 
-**Parked cars:** in the car parks' bays (65% of them taken; not the big shops' trolley shelters) and in the parking lanes'
+**Parked cars:** in the car parks' bays (65% of them taken; not the big shops' trolley shelters, nor under a market's stalls or the street life: see People) and in the parking lanes'
 bays (55%, plus 1.2% per point of the street's activity, at most 92%; loading bays
 25%), not at bus stops (the bays aren't painted there either). Parallel bays face the
 way the traffic on that side goes; end-on ones either way round. No lorries.
@@ -887,7 +887,11 @@ but the water and the buildings.
   the market and clear of the buildings and roads; at most 40 a market. Each is loose
   (heavy: shoved, or smashed into planks, plastic and bits of rail), has a trader behind
   it (who runs if it's knocked), and up to 3 browsing along its front (passers-by within
-  7 m stop to, 1 in 3 of those who look) for 10 to 35 s.
+  7 m stop to, 1 in 3 of those who look) for 10 to 35 s. A market held in a car park (the
+  Tobacco Factory's) takes over its bays: no one parks in a bay under a stall (its
+  footprint, and 0.5 m in front of it), nor, anywhere, in one under a food cart (1.6 m
+  round it), a performer and the crowd in front of them, the pigeons (3 m round them) or
+  an A-board.
 - **Shoppers and trolleys** at the big shops with car parks (below): up to 16 at each shop near
   the view at once, one coming about every half second till there are (coming into a
   region, ten at once: some at their cars already, loading them). Half come out of the

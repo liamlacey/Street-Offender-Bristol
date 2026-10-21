@@ -7,6 +7,7 @@
 
 import { type Area, type GameMap, type Lane, type Pts, type Road, pointInRing, ridgeAxis } from '../map/osm';
 import { lineLength, pointAlong, subPolyline } from './world';
+import { footprints, onFootprints, streetLifeWork } from './streetLife';
 import { type Work, drain } from './work.ts';
 
 /** A car park's bays: how wide, how deep, and the aisle between rows, px. */
@@ -249,13 +250,16 @@ export function parkingSpaces(map: GameMap): Space[] {
 /** The same, a little at a time (see work.ts). */
 export function* parkingWork(map: GameMap): Work<Space[]> {
   const out: Space[] = [];
+  // (None where a market's stalls are, nor a food cart, a performer and their crowd, the pigeons, an A-board: see streetLife.ts.)
+  const taken = footprints(yield* streetLifeWork(map));
+  const free = (s: Space) => !onFootprints(taken, s.x, s.y, s.angle, s.length / 2, s.endOn ? BAY_WIDTH / 2 : 1 * 8);
   for (const a of map.areas) {
     if (a.kind !== 'parking') continue;
     const { spaces } = carParkBays(map, a);
     // (Not the trolley shelters.)
     const store = storeOf(map, a);
     const shelters = store < 0 ? [] : shelterSpaces(map, store, spaces);
-    out.push(...spaces.filter((s) => !shelters.includes(s)));
+    out.push(...spaces.filter((s) => !shelters.includes(s) && free(s)));
     yield;
   }
   for (const r of map.roads) {
@@ -263,7 +267,7 @@ export function* parkingWork(map: GameMap): Work<Space[]> {
     for (const lane of r.lanes ?? []) {
       if (lane.kind !== 'parking') continue;
       const s = r.laneSpans ?? [];
-      for (let k = 0; k + 1 < s.length; k += 2) out.push(...streetBays(r, lane, s[k], s[k + 1]).spaces.filter((b) => !atBusStop(map, b.x, b.y)));
+      for (let k = 0; k + 1 < s.length; k += 2) out.push(...streetBays(r, lane, s[k], s[k + 1]).spaces.filter((b) => !atBusStop(map, b.x, b.y) && free(b)));
     }
   }
   return out;
