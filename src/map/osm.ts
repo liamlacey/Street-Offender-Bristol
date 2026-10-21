@@ -41,7 +41,9 @@ export type AreaKind =
   | 'forecourt'
   /** Paved for vehicles, not people (OSM's `area:highway=service`: a bus station's yard). */
   | 'yard'
-  | 'island';
+  | 'island'
+  /** A railway station's platform (`railway=platform`): paved, raised, its edges along the tracks. */
+  | 'platform';
 
 export interface Area {
   kind: AreaKind;
@@ -83,7 +85,8 @@ export type RoadKind =
   | 'footway'
   | 'cycleway'
   | 'steps'
-  | 'track';
+  | 'track'
+  | 'rail';
 
 export interface Road {
   kind: RoadKind;
@@ -96,6 +99,10 @@ export interface Road {
   bridge?: boolean;
   /** A bridge's deck's height every DECK_STEP px along it, px (as the terrain's: above its base), measured by the LIDAR. */
   deck?: number[];
+  /** In a tunnel, underground (a railway's: see Tunnels): a level of its own, under everything. */
+  tunnel?: boolean;
+  /** A railway's track: sidings, a yard's or a crossover between tracks (OSM's `service`), not a running line. */
+  siding?: boolean;
   /** Through an archway under a building (OSM's `tunnel=building_passage`): the building's walls open to let it through. */
   passage?: boolean;
   /** Along an arcade or colonnade (`covered=arcade/colonnade`): under the front of a building, open along its side. */
@@ -500,6 +507,9 @@ export interface GameMap {
   ledges?: Ledge[];
   /** The bus routes through the map (see BusRoute). */
   busRoutes?: BusRoute[];
+  /** The train services through the map (see TrainRoute), and the railway stations. */
+  trainRoutes?: TrainRoute[];
+  railStations?: RailStation[];
   /** The bus stations, and their bays (see BusStation). */
   busStations?: BusStation[];
   /** The police stations, fire stations, hospitals and ambulance stations (see Service). */
@@ -599,6 +609,26 @@ export interface BusRoute {
   legs: number[];
   /** Where it stops, in order: x, y, ... */
   stops: number[];
+}
+
+/**
+ * A train service (OSM's `route=train`, one way): the tracks it runs along,
+ * as a bus route's roads (`legs`: rail * 2 + 1 the way against its line, -1
+ * a gap), and where it stops (on the track: its `stop` nodes), in order.
+ */
+export interface TrainRoute {
+  name: string;
+  /** Who runs it: GWR, CrossCountry, ... (how the train looks). */
+  operator?: string;
+  legs: number[];
+  stops: number[];
+}
+
+/** A railway station (`railway=station`, not a heritage line's): its name, and where it is. */
+export interface RailStation {
+  name: string;
+  x: number;
+  y: number;
 }
 
 /**
@@ -986,11 +1016,23 @@ const ROAD_WIDTH: Record<RoadKind, number> = {
   cycleway: 2.4,
   steps: 2.4,
   track: 3,
+  // A railway track: its bed of ballast (side by side, a double track's beds meet).
+  rail: 3.8,
 };
+
+/** The railways with trains on them (`railway=*`). */
+const RAILWAYS: ReadonlySet<string | undefined> = new Set(['rail', 'light_rail', 'narrow_gauge', 'preserved']);
+
+/** Whether a way's in a tunnel (not just through a building). */
+export function inTunnel(tags: Tags): boolean {
+  return !!tags.tunnel && tags.tunnel !== 'no' && tags.tunnel !== 'building_passage';
+}
 
 export const VEHICLE_ROADS: ReadonlySet<RoadKind> = new Set(['trunk', 'primary', 'secondary', 'tertiary', 'street', 'service', 'track']);
 
 export function roadKind(tags: Tags): RoadKind | null {
+  // A railway's track (not one disused, or a miniature railway's): a way of its own, through its tunnels too.
+  if (RAILWAYS.has(tags.railway) && tags.area !== 'yes') return 'rail';
   // Being built (or mended: Pero's Bridge): what it'll be.
   const kind = ROAD_KINDS[tags.highway === 'construction' ? tags.construction : tags.highway];
   if (!kind) return null;
@@ -1020,6 +1062,7 @@ export function areaKind(tags: Tags): AreaKind | null {
   // A floating jetty (a pontoon) rides on the water; a pier stands on legs.
   if (tags.man_made === 'pier') return tags.floating === 'yes' ? 'pontoon' : 'pier';
   if (tags['area:highway'] === 'traffic_island' || tags.footway === 'traffic_island') return 'island';
+  if (tags.railway === 'platform' || (tags.public_transport === 'platform' && (tags.train === 'yes' || tags.railway === 'platform'))) return 'platform';
   if (tags.landuse === 'flowerbed') return 'flowerbed';
   if (tags.natural === 'wood' || tags.landuse === 'forest' || tags.natural === 'scrub') return 'wood';
   if (tags.leisure === 'pitch' || tags.leisure === 'sports_centre') return tags.surface && tags.surface !== 'grass' ? 'plaza' : 'pitch';
@@ -1055,6 +1098,7 @@ export const AREA_ORDER: Record<AreaKind, number> = {
   forecourt: 6,
   yard: 6,
   island: 12,
+  platform: 7,
 };
 
 const LINE_KINDS: Record<string, LineKind> = {
@@ -1520,6 +1564,13 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       if (ring) addArea(area, [ring], t);
       continue;
     }
+    if (area === 'platform' && !closed) {
+      // A platform mapped as a line along its edge: as wide as tagged (or 3 m), out to one side... both, as it's not known which.
+      const pts = pointsOf(way.nodes);
+      const half = ((metres(t.width) ?? 3) * PX_PER_METRE) / 2;
+      if (pts && pts.length >= 4) addArea('platform', [[...sideOf(pts, half), ...reversePts(sideOf(pts, -half))]], t);
+      continue;
+    }
     if (area === 'pier' && !closed) {
       // A jetty mapped as a line: a deck along it.
       const pts = pointsOf(way.nodes);
@@ -1527,7 +1578,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       continue;
     }
 
-    const lineKind = t.barrier === 'kerb' && DROPPED_KERB.has(t.kerb) ? undefined : t.barrier ? LINE_KINDS[t.barrier] : t.railway === 'rail' || t.railway === 'tram' ? 'rail' : t.man_made === 'quay' && !closed ? 'quay' : undefined;
+    const lineKind = t.barrier === 'kerb' && DROPPED_KERB.has(t.kerb) ? undefined : t.barrier ? LINE_KINDS[t.barrier] : t.railway === 'tram' ? 'rail' : t.man_made === 'quay' && !closed ? 'quay' : undefined;
     if (lineKind) {
       const pts = pointsOf(way.nodes);
       const tagged = metres(t.height);
@@ -1590,6 +1641,8 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     const bridge = t.bridge !== undefined && t.bridge !== 'no';
     const arcade = t.covered === 'arcade' || t.covered === 'colonnade';
     const passage = t.tunnel === 'building_passage' || arcade;
+    const tunnel = kind === 'rail' && inTunnel(t);
+    const siding = kind === 'rail' && !!t.service;
     const surface = paving(t.surface);
     let marks: number[] | undefined;
     if (vehicle && kind !== 'service' && kind !== 'track' && width >= 6 * PX_PER_METRE) {
@@ -1649,6 +1702,8 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       pts: roundPts(pts),
       ...(oneway ? { oneway } : {}),
       ...(bridge ? { bridge } : {}),
+      ...(tunnel ? { tunnel } : {}),
+      ...(siding ? { siding } : {}),
       ...(passage ? { passage } : {}),
       ...(arcade ? { arcade } : {}),
       ...(t.service === 'parking_aisle' ? { aisle: true } : {}),
@@ -2290,11 +2345,13 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     if (best) station(best, null);
   }
 
-  // The bus routes: the roads each runs along, in order and which way along each, and its stops.
+  // The bus routes, and the train services: the roads (or tracks) each runs along, in order and which way along each, and its stops.
   const busRoutes: BusRoute[] = [];
+  const trainRoutes: TrainRoute[] = [];
   for (const rel of data.relations.values()) {
     const t = rel.tags;
-    if (t.route !== 'bus' || t.disused) continue;
+    if ((t.route !== 'bus' && t.route !== 'train') || t.disused) continue;
+    const train = t.route === 'train';
     const members = rel.members.filter((m) => m.type === 'way');
     // An old-style route mapped both ways at once (ways marked forward and backward) can't be followed in order.
     if (members.some((m) => m.role === 'backward')) continue;
@@ -2304,7 +2361,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     ways.forEach((m, i) => {
       const road = roadIndexOfWay.get(m.ref);
       const way = data.ways.get(m.ref);
-      if (road === undefined || !way || !VEHICLE_ROADS.has(roads[road].kind)) {
+      if (road === undefined || !way || (train ? roads[road].kind !== 'rail' : !VEHICLE_ROADS.has(roads[road].kind))) {
         if (legs.length && legs[legs.length - 1] !== -1) legs.push(-1);
         return;
       }
@@ -2331,7 +2388,8 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       const [x, y] = [proj.x(n.lon), proj.y(n.lat)];
       if (x >= 0 && y >= 0 && x <= width && y <= height) stops.push(round(x), round(y));
     }
-    busRoutes.push({ ref: t.ref ?? '', ...(t.colour ? { colour: t.colour } : {}), legs, stops });
+    if (train) trainRoutes.push({ name: t.name ?? '', ...(t.operator ? { operator: t.operator } : {}), legs, stops });
+    else busRoutes.push({ ref: t.ref ?? '', ...(t.colour ? { colour: t.colour } : {}), legs, stops });
   }
 
   // The bus stations: each stop_area's bays (a stop at the dead end of a way only buses use), and their platforms.
@@ -2507,6 +2565,15 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
   // The gateways: their buildings made archways over the roads through them.
   gateways(buildings, roads);
 
+  // The railway stations (not a heritage line's).
+  const railStations: RailStation[] = [];
+  for (const n of data.nodes.values()) {
+    const t = n.tags;
+    if (t.railway !== 'station' || !t.name || t.usage === 'tourism' || t.station === 'miniature') continue;
+    const [x, y] = [proj.x(n.lon), proj.y(n.lat)];
+    if (inside(x, y)) railStations.push({ name: t.name, x: round(x), y: round(y) });
+  }
+
   // The open-air markets: outlines, or round a point.
   const markets: Market[] = [];
   const addMarket = (t: Tags, ring: Pts | null) => {
@@ -2562,6 +2629,8 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     ...(treeKinds.length ? { treeSpecies: treeKinds } : {}),
     ...(solar.length ? { solar } : {}),
     ...(busRoutes.length ? { busRoutes } : {}),
+    ...(trainRoutes.length ? { trainRoutes } : {}),
+    ...(railStations.length ? { railStations } : {}),
     ...(busStations.length ? { busStations } : {}),
     ...(services.length ? { services } : {}),
     ...(berths.length ? { berths } : {}),
@@ -2728,9 +2797,34 @@ function storesOf(data: OsmData, proj: Projection, buildings: Building[], tagsOf
     return { pts, x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
   };
   const solid = buildings.filter((b) => b.solid).map((b) => bounded(b.rings[0], 0));
-  const ways = roads.filter((r) => VEHICLE_ROADS.has(r.kind)).map((r) => ({ ...bounded(r.pts, r.width / 2 + PX_PER_METRE), half: r.width / 2 }));
+  const ways = roads.filter((r) => VEHICLE_ROADS.has(r.kind) || (r.kind === 'rail' && !r.tunnel)).map((r) => ({ ...bounded(r.pts, r.width / 2 + PX_PER_METRE), half: r.width / 2 }));
   const within = (x: number, y: number, b: { x0: number; y0: number; x1: number; y1: number }) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
   const clear = (x: number, y: number) =>
     !solid.some((b) => within(x, y, b) && pointInRing(x, y, b.pts)) && !ways.some((r) => within(x, y, r) && distanceToLine(x, y, r.pts) < r.half + 0.5 * PX_PER_METRE);
   return findStores(candidates, parks, clear, PX_PER_METRE);
+}
+
+/** A line `off` px to the left of `pts` (each corner moved out along the average of its sides' normals). */
+function sideOf(pts: Pts, off: number): Pts {
+  const out: Pts = [];
+  const n = pts.length / 2;
+  for (let i = 0; i < n; i++) {
+    let [nx, ny] = [0, 0];
+    for (const j of [i - 1, i]) {
+      if (j < 0 || j + 1 >= n) continue;
+      const [dx, dy] = [pts[j * 2 + 2] - pts[j * 2], pts[j * 2 + 3] - pts[j * 2 + 1]];
+      const len = Math.hypot(dx, dy) || 1;
+      [nx, ny] = [nx - dy / len, ny + dx / len];
+    }
+    const len = Math.hypot(nx, ny) || 1;
+    out.push(pts[i * 2] + (nx / len) * off, pts[i * 2 + 1] + (ny / len) * off);
+  }
+  return out;
+}
+
+/** A line's points, the other way round. */
+function reversePts(pts: Pts): Pts {
+  const out: Pts = [];
+  for (let i = pts.length - 2; i >= 0; i -= 2) out.push(pts[i], pts[i + 1]);
+  return out;
 }

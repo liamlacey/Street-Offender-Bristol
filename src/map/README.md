@@ -153,7 +153,7 @@ pedestrian may also get:
   lying along it; none within 3 m of a road meeting it, over the water, in a building,
   or within 2 m of another. People sit at them as at any picnic table.
 
-**Roads and paths** (`highway=*`; tunnels left out; one being built or mended,
+**Roads and paths** (`highway=*`; tunnels left out (a railway's aren't: see Railways); one being built or mended,
 `highway=construction`, as what it'll be, `construction=*`: Pero's Bridge is shut
 for repairs in OSM, and is a footbridge here). Kind from `highway`; width
 from `width`, else `lanes` × 3.3 m, else by kind (primary 10 m, secondary 9,
@@ -506,6 +506,66 @@ height; the squares beside one get the same points along the side they share (a
 fan from their middle), or there'd be hairline gaps where they meet. The mesh is
 drawn as pairs of triangles sharing a side (Phaser's `buildOrderedIndices(1)`),
 half as much to send to the GPU as a quad for every triangle.
+
+## Railways
+
+**The track** (`railway=rail`, `light_rail`, `narrow_gauge`, `preserved`; not disused,
+abandoned or a miniature railway's): a way of its own (`kind: 'rail'`), 3.8 m wide (its
+bed: side by side, a double track's beds meet), through its tunnels too
+(`tunnel=*`, not `building_passage`: `tunnel: true`). Sidings, yards' tracks and
+crossovers (`service=*`) are marked `siding`. Drawn as it is: a bed of grey-brown
+ballast with darker edges, timber sleepers across it (2.6 m long, every 0.65 m), and
+the two steel rails on them 1.5 m apart (a dark foot, a bright worn top), the rails
+drawn over a road at a level crossing. Driven along as a road. It opens a building's
+walls where it runs into it (Temple Meads' train shed) as any way does; one in a
+tunnel doesn't.
+
+**Bridges**: a railway bridge (`bridge=*`) is a deck like a road's (see Levels): the
+LIDAR measures it, it has parapets where it's up off the ground, you drive onto it
+only at its ends, and under it from the road below.
+
+**Tunnels**: level 2, under everything (`Decks` with `tunnels`, `src/world/decks.ts`).
+In and out only at its ends (its portals, where it meets the track in the open: an end
+on into more tunnel is a joint); walled both sides all along it (unbreakable, as rock
+is); its floor from the ground's height at one portal to the other's. On the surface,
+each portal is drawn: its dark mouth going in (5 m of it), under a stone arch. Down in
+one, everything above is in the dark (82%) and the tunnel's drawn over it, lit (sooty
+walls, a lamp every 12 m with its pool of light), you in it; and the trains down there
+with you. Only the trains go in them.
+
+**Platforms** (`railway=platform`, or `public_transport=platform` + `train=yes`; one
+mapped as a line along its edge made an area 3 m wide, or as tagged): long concrete
+slabs, with white coping stones along their edges and, just in, the yellow line. People
+wait along each, down its middle every 12 m (as at a bus stop).
+
+**Stations** (`railway=station`, not a heritage line's, kept as `railStations`), and the
+**services** (`route=train`, one way: kept as `trainRoutes`, the tracks each runs along
+in order and which way, as a bus route's roads, and its stops, its `stop` nodes).
+
+**Trains** (`src/world/trains.ts`, drawn by `src/scenes/TrainLayer.ts`): each a unit of
+carriages on a service, the unit its company runs on it: a GWR Class 800 to and from
+London (5 carriages, 26 m), Class 158s on the longer GWR routes (Cardiff, Portsmouth,
+Weymouth, Worcester, Exeter: 2 of 22.6 m), Class 166 Turbos on the locals (3 of 23 m);
+CrossCountry's Voyagers (4 of 23 m). Not on a service with no stops (the Portishead
+branch's goods trains, the Harbour Railway). Drawn from above in their livery: GWR's
+dark green, CrossCountry's silver with its maroon, grey roofs with their kit on them,
+their doors, and the cabs at each end yellow (as the law says) with their windscreens;
+each carriage lying between its bogies (cutting the corner on a curve), its roof 3.8 m
+up, with its shadow. Up to 6 in a region; each service sends one about every 3 to 6
+minutes, from where its track comes into the region or wherever along it is out of
+sight near you (coming into a region, some out on the line already); gone off the end
+of their track, or 600 m from the view, out of sight. Up to their line's speed (22 to
+26 m/s), speeding up at 0.6 m/s², braking at 0.9 m/s² for their next stop (stopping
+with the front at it) and for whatever's on the line ahead (the train ahead, you, the
+traffic, anyone on the track): looking as far as they'd take to stop and 40 m more,
+and close, sounding their horn and braking hard (1.6 m/s²). At a stop, the doors open
+for 22 to 40 s: from each carriage up to 3 get off onto the platform (on whichever side
+there is one) and walk off along it to the way out, and those waiting near it walk to
+the nearest door (on their side, along it as far as they are) and get on. The traffic
+waits for them at a level crossing. You hit them as anything heavy (a carriage is 38 to
+45 times your car), each knock marking it where it was hit (and a hard one smashing
+glass); damaged enough (knocks adding up to 2500), smoking, and wrecked, blackened,
+it stops its train for good. People are hit by them as by any vehicle.
 
 ## Traffic
 
@@ -1165,6 +1225,8 @@ first, with the loading screen up.
 - `berths.ts`: where boats moor, and the ferry routes and stops.
 - `../world/streetLife.ts`: the busy pedestrian streets and squares, and where their
   performers, food carts and pigeons are. Tested in `streetLife.test.ts`.
+- `../world/trains.ts`, `../scenes/TrainLayer.ts`: the trains (see Railways). Tested in
+  `trains.test.ts`.
 - `stores.ts`: the big shops with car parks, their doors and trolley bays. Tested (and the
   shoppers pushing the trolleys) in `src/world/shoppers.test.ts`.
 - `landmarks.ts`: landmarks' colours (and heights, roof shapes), and streets' looks;

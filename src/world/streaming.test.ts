@@ -12,7 +12,7 @@ const { index, tiles } = splitMap(map);
 const M = 8;
 
 /** A region centred on a corner of the tiles (its surfaces left out: they need a canvas). */
-function region(cx: number, cy: number, ids = { traffic: 0, people: 1, boats: 1 }): Region {
+function region(cx: number, cy: number, ids = { traffic: 0, people: 1, boats: 1, trains: 1 }): Region {
   const b = { x0: TILE * (cx - 2), y0: TILE * (cy - 2), x1: TILE * (cx + 2), y1: TILE * (cy + 2) };
   const r = assemble(index, tilesFor(index, b.x0, b.y0, b.x1, b.y1).map((k) => tiles.get(k)!), b);
   // eslint-disable-next-line require-yield
@@ -30,7 +30,7 @@ describe('moving from one region of the map to the next', () => {
     a.traffic.update(1 / 30, player, view, () => 'green');
     a.people.update(1 / 30, view, { ...player, angle: 0, id: -1 }, [], () => 'green', () => true);
   }
-  const b = region(6, 5, { traffic: a.traffic.lastId + 100_000, people: a.people.lastId + 100_000, boats: a.boats.lastId + 100_000 });
+  const b = region(6, 5, { traffic: a.traffic.lastId + 100_000, people: a.people.lastId + 100_000, boats: a.boats.lastId + 100_000, trains: a.trains.lastId + 100_000 });
   const inKeep = (p: { x: number; y: number }) => p.x >= keep.x0 && p.x <= keep.x1 && p.y >= keep.y0 && p.y <= keep.y1;
   const driving = a.traffic.vehicles.filter(inKeep);
   const walking = a.people.people.filter((p) => inKeep(p) && !p.gone);

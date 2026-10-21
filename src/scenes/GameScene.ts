@@ -37,6 +37,8 @@ import { type Light, lightAt } from '../world/lights';
 import { CHUNK, type LooseProp, type Post, type World, beacons, chunkKey, homeOf } from '../world/world';
 import { Changes } from '../world/changes';
 import type { FirstIds, Progress, Region } from '../world/region';
+import { type Obstacle, Trains } from '../world/trains';
+import { TrainLayer } from './TrainLayer';
 import { Streamer } from '../world/streamer';
 import { ART_SCALE, TEX, TREE_KINDS, TREE_RADIUS, createArt } from './art';
 import { CarEffects } from './CarEffects';
@@ -90,6 +92,10 @@ const DEPTH = {
   effects: 5,
   trees: 6,
   buildings: 7,
+  /** Down in a tunnel: everything above it darkened, the tunnel over that, and you in it. */
+  dark: 8,
+  tunnel: 8.5,
+  inTunnel: 9,
 };
 
 /** How high the camera is when the view's shorter side is CAMERA_VIEW px, px (higher as it pulls back; the lower it is, the more the buildings lean). */
@@ -142,9 +148,13 @@ export class GameScene extends Phaser.Scene {
   /** What's up high on the fixed things: the cranes' jibs. */
   private raised: (Shown & { prop: number })[] = [];
   /** What you hit on each level: the ground's, and the bridges' decks'. */
-  private walls!: [SegmentGrid, SegmentGrid];
-  private posts!: [CircleGrid, CircleGrid];
+  private walls!: [SegmentGrid, SegmentGrid, SegmentGrid];
+  private posts!: [CircleGrid, CircleGrid, CircleGrid];
   private decks!: Decks;
+  /** The tunnels (level 2), drawn only when you're down in one, everything above in the dark. */
+  private tunnels!: Decks;
+  private tunnelLayer!: DeckLayer;
+  private dark!: Phaser.GameObjects.Rectangle;
   private ledges!: Ledges;
   private ledgeLayer!: LedgeLayer;
   /** Falling (off a drop, a bridge, a quay): how high above the ground below, px, how fast, px/s (up), and from how high. */
@@ -209,6 +219,8 @@ export class GameScene extends Phaser.Scene {
   private trafficLayer!: TrafficLayer;
   private boats!: Boats;
   private boatLayer!: BoatLayer;
+  private trains!: Trains;
+  private trainLayer!: TrainLayer;
   private ripples!: WaterRipples;
   private people!: People;
   private peopleLayer!: PeopleLayer;
@@ -309,6 +321,9 @@ export class GameScene extends Phaser.Scene {
     this.buildings = new Buildings(this, region.buildings, DEPTH.buildings);
     this.ledgeLayer = new LedgeLayer(this, this.ledges, (x, y) => this.groundAt(x, y), DEPTH.ledges);
     this.deckLayer = new DeckLayer(this, this.decks);
+    this.tunnelLayer = new DeckLayer(this, this.tunnels);
+    // (Far bigger than the screen, however it's zoomed: it's all dark.)
+    this.dark = this.add.rectangle(0, 0, 20000, 20000, 0x05070a, 0.82).setScrollFactor(0).setDepth(DEPTH.dark).setVisible(false);
     this.wallLayer = new WallLayer(this, this.walls, (x, y, level) => this.surfaceHeight(x, y, level), DEPTH.walls);
     this.wreckage = new Wreckage(this, this.walls, this.posts, this.effects, {
       groundAt: (x, y) => this.groundAt(x, y),
@@ -358,6 +373,10 @@ export class GameScene extends Phaser.Scene {
     this.peopleLayer = new PeopleLayer(this, this.people, (x, y, level) => this.surfaceHeight(x, y, level), { ground: DEPTH.props + 0.05, deck: DEPTH.onDeck });
     this.ripples = new WaterRipples(this, this.surfaces, (x, y) => this.groundAt(x, y), DEPTH.ripples);
     this.boatLayer = new BoatLayer(this, this.boats, (x, y) => this.groundAt(x, y), DEPTH.boats);
+    // The trains: on the ground just under the car, on a bridge over it, down in a tunnel only seen while you're down there.
+    this.trainLayer = new TrainLayer(this, this.trains, (x, y, level) => this.surfaceHeight(x, y, level), (level) =>
+      level === 2 ? (this.level === 2 ? DEPTH.inTunnel - 0.05 : null) : level === 1 ? DEPTH.onDeck : DEPTH.car - 0.05,
+    );
     this.trafficLayer = new TrafficLayer(this, this.traffic, (x, y, level) => this.surfaceHeight(x, y, level), (x, y, reach) => this.decks.atEnd(x, y, reach), {
       ground: DEPTH.car - 0.05,
       onDeck: DEPTH.onDeck,
@@ -382,6 +401,7 @@ export class GameScene extends Phaser.Scene {
     this.ground.update(cam.worldView, this.perspective, true);
     const v0 = cam.worldView;
     this.people.populate({ x0: v0.left, y0: v0.top, x1: v0.right, y1: v0.bottom }, true);
+    this.trains.populate({ x0: v0.left, y0: v0.top, x1: v0.right, y1: v0.bottom }, 0, true);
 
     const kb = this.input.keyboard!;
     const K = Phaser.Input.Keyboard.KeyCodes;
@@ -431,13 +451,13 @@ export class GameScene extends Phaser.Scene {
   /** Where the next region's ids start: well on from this one's (see the systems' `adopt`). */
   private firstIds(): FirstIds {
     const on = (n: number | undefined) => (n ?? 0) + 100_000;
-    return { traffic: on(this.traffic?.lastId), people: on(this.people?.lastId), boats: on(this.boats?.lastId) };
+    return { traffic: on(this.traffic?.lastId), people: on(this.people?.lastId), boats: on(this.boats?.lastId), trains: on(this.trains?.lastId) + 1e6 };
   }
 
   /** The region's parts, as the scene's own. */
   private assign(r: Region): void {
     this.region = r;
-    ({ world: this.world, terrain: this.terrain, surfaces: this.surfaces, walls: this.walls, posts: this.posts, decks: this.decks, ledges: this.ledges, kerbs: this.kerbs, humps: this.humps, traffic: this.traffic, boats: this.boats, people: this.people } = r);
+    ({ world: this.world, terrain: this.terrain, surfaces: this.surfaces, walls: this.walls, posts: this.posts, decks: this.decks, tunnels: this.tunnels, ledges: this.ledges, kerbs: this.kerbs, humps: this.humps, traffic: this.traffic, boats: this.boats, people: this.people, trains: this.trains } = r);
   }
 
   /** Round the view, KEEP px out: what's carried over from one region to the next. */
@@ -466,6 +486,7 @@ export class GameScene extends Phaser.Scene {
       r.traffic.adopt(old.traffic, keep);
       r.people.adopt(old.people, keep);
       r.boats.adopt(old.boats, keep);
+      r.trains.adopt(old.trains, keep);
     }
     // The vehicles left standing, as they were left: those in this region back in it, the rest put by.
     const inKeep = (v: Vehicle) => !!keep && v.x >= keep.x0 && v.x <= keep.x1 && v.y >= keep.y0 && v.y <= keep.y1;
@@ -487,11 +508,13 @@ export class GameScene extends Phaser.Scene {
       this.buildings.use(r.buildings);
       this.ledgeLayer.use(this.ledges);
       this.deckLayer.use(this.decks);
+      this.tunnelLayer.use(this.tunnels);
       this.wallLayer.use(this.walls);
       this.wreckage.use(this.walls, this.posts);
       this.peopleLayer.use(this.people);
       this.ripples.use(this.surfaces);
       this.boatLayer.use(this.boats);
+      this.trainLayer.use(this.trains);
       this.trafficLayer.use(this.traffic);
     }
   }
@@ -512,7 +535,7 @@ export class GameScene extends Phaser.Scene {
     for (const p of this.world.fixed) {
       // Those on a bridge stand on its deck, and are drawn over it.
       const deck = p.level === 1 ? this.decks.over(p.x, p.y) : null;
-      const z = deck ? this.decks.height(deck.deck, deck.along) : this.groundAt(p.x, p.y);
+      const z = this.surfaceHeight(p.x, p.y, p.level);
       // (A bike rack with the bikes locked to it.)
       const make = () => {
         const image = this.add
@@ -725,6 +748,19 @@ export class GameScene extends Phaser.Scene {
     this.deckLayer.update(view, this.perspective, (i) =>
       this.level === 1 || this.decks.atEnd(this.car.x, this.car.y, this.carLength() / 2 + 4, this.decks.decks[i]) ? DEPTH.deckBelow : DEPTH.deckAbove,
     );
+    // Down in a tunnel: everything above in the dark; the tunnel, and you, over it.
+    const under = this.level === 2;
+    this.dark.setVisible(under);
+    if (under) {
+      const cam = this.cameras.main;
+      this.dark.setPosition(cam.width / 2, cam.height / 2);
+      this.tunnelLayer.update(view, this.perspective, () => DEPTH.tunnel);
+    } else this.tunnelLayer.hide();
+    const carDepth = under ? DEPTH.inTunnel : DEPTH.car;
+    if (this.carSprite.depth !== carDepth) {
+      this.carSprite.setDepth(carDepth);
+      this.carShadow.setDepth(carDepth - 0.1);
+    }
     this.buildings.update(view, this.perspective, this.car.x, this.car.y);
     // Before the trees: it moves the ones coming down.
     this.wreckage.update(view, this.perspective);
@@ -735,6 +771,7 @@ export class GameScene extends Phaser.Scene {
     this.ledgeLayer.update(view, this.perspective);
     this.trafficLayer.update(view, this.perspective, this.level, this.time.now / 1000);
     this.boatLayer.update(view, this.perspective, this.time.now / 1000);
+    this.trainLayer.update(view, this.perspective);
     this.ripples.update(view, this.perspective, dt);
     this.peopleLayer.update(view, this.perspective);
     this.updateStreet(dt);
@@ -873,6 +910,7 @@ export class GameScene extends Phaser.Scene {
     const v = cam.worldView;
     this.traffic.refill();
     this.people.populate({ x0: v.left, y0: v.top, x1: v.right, y1: v.bottom }, true);
+    this.trains.populate({ x0: v.left, y0: v.top, x1: v.right, y1: v.bottom }, 0, true);
     if (to.name && to.name !== this.street) {
       this.street = to.name;
       this.events.emit(STREET_EVENT, to.name);
@@ -897,9 +935,9 @@ export class GameScene extends Phaser.Scene {
     const high = this.level === 1 ? this.carHeight() : 0;
     const before = this.surface;
     // On a bridge, its deck's surface and slope; otherwise the ground's.
-    const on = this.level === 1 ? this.decks.over(car.x, car.y) : null;
+    const on = this.deckAt(this.level, car.x, car.y);
     this.surface = on ? deckSurface(on.deck.road) : this.surfaces.at(car.x, car.y);
-    const [sx, sy] = on ? this.decks.slope(on.deck, on.along) : this.terrain.slope(car.x, car.y);
+    const [sx, sy] = on ? on.decks.slope(on.deck, on.along) : this.terrain.slope(car.x, car.y);
     const [px, py] = [car.x, car.y];
     stepCar(car, this.input_, dt, SURFACE_GRIP[SURFACE_KIND[this.surface]], tuningFor(this.ride.kind), { x: sx, y: sy });
     // Over a speed hump: a jolt, and a little hop.
@@ -967,6 +1005,18 @@ export class GameScene extends Phaser.Scene {
       // A good knock: a long blast of its horn, once it's stopped.
       if (fresh && bump > 120) this.time.delayedCall(700, () => this.audio?.horn(this.hearing(v.x, v.y), true));
     }
+    // The trains: you're thrown off (they barely notice), and they're dented.
+    for (const c of this.trains.carriages()) {
+      if (c.level !== this.level || Math.abs(c.x - car.x) > c.length || Math.abs(c.y - car.y) > c.length) continue;
+      const bump = collideCarWithBody(car, c, CAR_BUMP, this.contact);
+      if (bump <= 0) continue;
+      const [ux, uy] = [Math.cos(c.angle), Math.sin(c.angle)];
+      const [rx, ry] = [this.contact.x - c.x, this.contact.y - c.y];
+      this.trains.knock(c, bump, rx * ux + ry * uy, -rx * uy + ry * ux);
+      this.hit(bump);
+      this.dent(null, this.contact.x, this.contact.y, bump);
+      if (bump > 150) for (const d of debris('glass', 6, this.contact.x, this.contact.y, c.vx * 0.3, c.vy * 0.3, Math.random, 8)) this.addDebris(d, c.level);
+    }
     // The boats (moored, under way, or adrift), on the water under the bridges: knocked adrift, and dented.
     if (this.level === 0) {
       for (const b of this.boats.near(car.x, car.y, this.carLength())) {
@@ -979,7 +1029,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     // Up onto a bridge at its end, or down off it.
-    const level = this.decks.levelAt(this.level, car.x, car.y);
+    const level = this.levelAt(this.level, car.x, car.y);
     if (level !== this.level) {
       this.level = level;
       // So no tyre mark joins one level to the other.
@@ -1035,6 +1085,7 @@ export class GameScene extends Phaser.Scene {
     } catch (e) {
       console.error('boats:', e);
     }
+    this.updateTrains(dt);
     this.updatePeople(dt, controllers, signals, time);
     // Boats knocked into each other, or into the side of the harbour; and cars knocked into the boats.
     for (const h of this.boats.hits) {
@@ -1101,6 +1152,28 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * The trains run on: braking for you, the traffic and anyone on the line
+   * ahead (and sounding their horns); smoke from a carriage that's badly
+   * damaged.
+   */
+  private updateTrains(dt: number): void {
+    const view = this.cameras.main.worldView;
+    const near = (x: number, y: number) => x > view.left - 900 && x < view.right + 900 && y > view.top - 900 && y < view.bottom + 900;
+    const obstacles: Obstacle[] = [{ x: this.car.x, y: this.car.y, r: this.carWidth() / 2 + 2, level: this.level }];
+    for (const v of [...this.traffic.vehicles, ...this.traffic.parked]) if (near(v.x, v.y)) obstacles.push({ x: v.x, y: v.y, r: v.r, level: v.level });
+    for (const p of this.people.people) if (p.mode !== 'down' && near(p.x, p.y)) obstacles.push({ x: p.x, y: p.y, r: 1.5, level: p.level });
+    try {
+      this.trains.update(dt, { x0: view.left, y0: view.top, x1: view.right, y1: view.bottom }, obstacles);
+    } catch (e) {
+      console.error('trains:', e);
+    }
+    for (const [x, y] of this.trains.horns) this.audio?.horn(this.hearing(x, y), true);
+    for (const c of this.trains.carriages()) {
+      if (c.damage > 0.55 && Math.random() < dt * (c.damage >= 1 ? 12 : 5) && x0y0Seen(view, c.x, c.y)) this.effects.smokeAt(c.x + (Math.random() - 0.5) * c.length * 0.6, c.y);
+    }
+  }
+
+  /**
    * Damage where a vehicle (or your car, for null) has been hit, at (x, y),
    * this hard: dents and scratches there, and what comes off falls to the
    * ground (a smashed light's glass, a mirror, a hubcap, the bumper).
@@ -1160,6 +1233,11 @@ export class GameScene extends Phaser.Scene {
     // (On foot, or on a bike, you brush past people.)
     const player: Mover = { x: car.x, y: car.y, angle: car.heading, length: this.carLength(), width: this.carWidth(), vx: car.vx, vy: car.vy, id: -1, level: this.level, bike: this.onFoot || this.ride.kind === 'bike', onFoot: this.onFoot };
     const movers: Mover[] = [];
+    // The trains' carriages (their doors open at a stop: see People's trains).
+    for (const c of this.trains.carriages()) {
+      if (Math.abs(c.x - car.x) > view.width + 400 || Math.abs(c.y - car.y) > view.height + 400) continue;
+      movers.push({ x: c.x, y: c.y, angle: c.angle, length: c.length, width: c.r * 2, vx: c.vx, vy: c.vy, id: c.id, level: c.level, ...(this.trains.dwelling(c.train) ? { dwelling: true, train: true, fresh: c.train.dwell > 0 && c.train.fresh } : { train: true }) });
+    }
     for (const v of [...this.traffic.vehicles, ...this.traffic.parked]) {
       if (Math.abs(v.x - car.x) > view.width + 400 || Math.abs(v.y - car.y) > view.height + 400) continue;
       if (v.mode === 'parked' && v.vx === 0 && v.vy === 0) continue;
@@ -1168,7 +1246,7 @@ export class GameScene extends Phaser.Scene {
     const light = (i: number) => (this.signalHeads[i]?.gone ? 'green' : lightAt(controllers[signals[i].controller], signals[i].controller, signals[i].group, time));
     // Open ground: not the water, not a building's (or a wall's) way; up on a bridge, its deck, inside the parapets.
     const walkable = (x: number, y: number, level: number) => {
-      if (level === 1 ? !this.decks.over(x, y) : this.surfaces.at(x, y) === Surface.Deep) return false;
+      if (level ? !this.deckAt(level, x, y) : this.surfaces.at(x, y) === Surface.Deep) return false;
       // Not over the edge of a drop.
       if (level === 0 && this.ledges.by(x, y, 0.6 * 8)) return false;
       return !this.walls[level].near(x, y, 4).some((w) => {
@@ -1189,7 +1267,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.onFoot && Math.hypot(car.vx, car.vy) < 4) blocks.push({ x: car.x, y: car.y, angle: car.heading, length: this.carLength(), r: this.carWidth() / 2, level: this.level, you: true });
     this.people.blocks = blocks;
     try {
-      this.people.update(dt, { x0: view.left, y0: view.top, x1: view.right, y1: view.bottom }, player, movers, light, walkable, (level, x, y) => this.decks.stepAt(level, x, y, this.groundAt(x, y)));
+      this.people.update(dt, { x0: view.left, y0: view.top, x1: view.right, y1: view.bottom }, player, movers, light, walkable, (level, x, y) => this.stepAt(level, x, y));
     } catch (e) {
       console.error('people:', e);
     }
@@ -1229,6 +1307,10 @@ export class GameScene extends Phaser.Scene {
     this.people.hits.length = 0;
     // Those out in the road, for the traffic to stop for.
     this.traffic.pedestrians = this.people.inTheRoad().map((p) => ({ id: -100 - p.id, x: p.x, y: p.y, angle: p.angle, r: 0.4 * 8, length: 0.8 * 8, vx: 0, vy: 0, level: p.level }));
+    // (And the trains: the traffic waits for one going over a level crossing.)
+    for (const c of this.trains.carriages()) {
+      if (Math.abs(c.x - car.x) < view.width + 400 && Math.abs(c.y - car.y) < view.height + 400) this.traffic.pedestrians.push({ id: c.id, x: c.x, y: c.y, angle: c.angle, r: c.r, length: c.length, vx: c.vx, vy: c.vy, level: c.level });
+    }
   }
 
   /**
@@ -1350,7 +1432,7 @@ export class GameScene extends Phaser.Scene {
     const h = car.heading;
     const off = this.carWidth() / 2 + 0.7 * 8;
     const free = (x: number, y: number) =>
-      (this.level === 1 || this.surfaces.at(x, y) !== Surface.Deep) &&
+      (this.level !== 0 || this.surfaces.at(x, y) !== Surface.Deep) &&
       !this.walls[this.level].near(x, y, 4).some((w) => {
         const [px, py] = nearestOnSegment(x, y, w);
         return Math.hypot(px - x, py - y) < w.r + 3;
@@ -1415,8 +1497,8 @@ export class GameScene extends Phaser.Scene {
       if (collideCarWithBody(car, body) > 0) body.moved = true;
     }
     this.stride += Math.hypot(car.x - px, car.y - py);
-    this.level = this.decks.stepAt(this.level, car.x, car.y, this.groundAt(car.x, car.y));
-    this.surface = this.level === 1 ? Surface.Road : this.surfaces.at(car.x, car.y);
+    this.level = this.stepAt(this.level, car.x, car.y);
+    this.surface = this.level ? Surface.Road : this.surfaces.at(car.x, car.y);
     if (this.level !== 0) return;
     // Off the side of a bridge, or over the edge of a drop: falling (but not off a quay: you can't swim, so that's as far as you go).
     if (high && high - this.groundAt(car.x, car.y) > 0.5 * 8) return this.fall(high - this.groundAt(car.x, car.y));
@@ -1686,17 +1768,37 @@ export class GameScene extends Phaser.Scene {
     cam.centerOn(this.shown.x + this.lookX + sx, this.shown.y + this.lookY + sy);
   }
 
-  /** How high the car is, px: on the ground, or on the deck of the bridge it's on. */
+  /** How high the car is, px: on the ground, on the deck of the bridge it's on, or down in its tunnel. */
   private carHeight(): number {
-    const { x, y } = this.car;
-    const on = this.level === 1 ? this.decks.over(x, y) : null;
-    return on ? this.decks.height(on.deck, on.along) : this.groundAt(x, y);
+    return this.surfaceHeight(this.car.x, this.car.y, this.level);
   }
 
-  /** The height of what's underfoot at (x, y) on a level, px: the ground, or a bridge's deck. */
+  /** The height of what's underfoot at (x, y) on a level, px: the ground, a bridge's deck, or a tunnel's floor. */
   private surfaceHeight(x: number, y: number, level: number): number {
-    const deck = level === 1 ? this.decks.over(x, y) : null;
-    return deck ? this.decks.height(deck.deck, deck.along) : this.groundAt(x, y);
+    const on = this.deckAt(level, x, y);
+    return on ? on.decks.height(on.deck, on.along) : this.groundAt(x, y);
+  }
+
+  /** The bridge's deck (level 1) or the tunnel (level 2) at (x, y), if it's on one. */
+  private deckAt(level: number, x: number, y: number): { decks: Decks; deck: Decks['decks'][number]; along: number } | null {
+    const decks = level === 1 ? this.decks : level === 2 ? this.tunnels : null;
+    const on = decks?.over(x, y);
+    return decks && on ? { decks, ...on } : null;
+  }
+
+  /** Which level a vehicle at (x, y) is on now, having been on `level`: onto a bridge or into a tunnel only at its end, off once it's off it. */
+  private levelAt(level: number, x: number, y: number): number {
+    if (level === 1) return this.decks.levelAt(1, x, y);
+    if (level === 2) return this.tunnels.levelAt(2, x, y);
+    return this.decks.levelAt(0, x, y) || this.tunnels.levelAt(0, x, y);
+  }
+
+  /** The same, on foot (stepping onto it only where it's level with the ground). */
+  private stepAt(level: number, x: number, y: number): number {
+    const ground = this.groundAt(x, y);
+    if (level === 1) return this.decks.stepAt(1, x, y, ground);
+    if (level === 2) return this.tunnels.stepAt(2, x, y, ground);
+    return this.decks.stepAt(0, x, y, ground) || this.tunnels.stepAt(0, x, y, ground);
   }
 
   /** A piece of something broken, flying off loose: it ends up in the way. */
@@ -1887,8 +1989,7 @@ export class GameScene extends Phaser.Scene {
       if (!show && !body.moved) continue;
       this.shownLoose.add(i);
       if (!show || !image) continue;
-      const deck = body.level === 1 ? this.decks.over(body.x, body.y) : null;
-      const s = p.lift(deck ? this.decks.height(deck.deck, deck.along) : this.groundAt(body.x, body.y));
+      const s = p.lift(this.surfaceHeight(body.x, body.y, body.level));
       image.setPosition(p.x(body.x, s), p.y(body.y, s)).setRotation(body.angle);
     }
   }
@@ -2022,4 +2123,9 @@ interface Shown {
   image: Phaser.GameObjects.Image | null;
   make?: () => Phaser.GameObjects.Image;
   gone?: boolean;
+}
+
+/** Whether (x, y) is in (or just round) the view. */
+function x0y0Seen(view: Phaser.Geom.Rectangle, x: number, y: number): boolean {
+  return x > view.left - 40 && x < view.right + 40 && y > view.top - 40 && y < view.bottom + 40;
 }

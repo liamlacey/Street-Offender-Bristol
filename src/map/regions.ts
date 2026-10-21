@@ -14,7 +14,7 @@
  * it's in. Pure, so it's tested.
  */
 
-import type { BusRoute, BusStation, Controller, Crossing, GameMap, Market, Pts, Service, Signal, TerrainData } from './osm';
+import type { BusRoute, BusStation, Controller, Crossing, GameMap, Market, Pts, RailStation, Service, Signal, TerrainData, TrainRoute } from './osm';
 import type { Area, Building, Ledge, Line, PaintMark, Prop, Road } from './osm';
 import type { Berth, FerryRoute } from './berths';
 import type { Store } from './stores';
@@ -35,6 +35,8 @@ export interface MapIndex {
   controllers: Controller[];
   /** Their legs by the roads' ids (road * 2 + which way, as in the whole map). */
   busRoutes: BusRoute[];
+  trainRoutes: TrainRoute[];
+  railStations: RailStation[];
   ferries: FerryRoute[];
   /** The lie of the land's grid (its heights are in the tiles). */
   terrain?: Omit<TerrainData, 'heights'>;
@@ -170,6 +172,8 @@ export function splitMap(map: GameMap): { index: MapIndex; tiles: Map<string, Ti
     tiles: { cols, rows, keys: [...tiles.keys()].sort() },
     controllers: map.controllers,
     busRoutes: map.busRoutes ?? [],
+    trainRoutes: map.trainRoutes ?? [],
+    railStations: map.railStations ?? [],
     ferries: map.ferries ?? [],
     ...(td ? { terrain: { cell: td.cell, cols: td.cols, rows: td.rows, base: td.base } } : {}),
   };
@@ -270,7 +274,7 @@ export function* assembleWork(index: MapIndex, unsorted: Tile[], bounds: { x0: n
     return rowsOf.flat();
   };
   yield;
-  const legs = (r: BusRoute): BusRoute => ({
+  const legs = <R extends { legs: number[] }>(r: R): R => ({
     ...r,
     legs: r.legs.map((leg) => {
       if (leg < 0) return leg;
@@ -301,6 +305,8 @@ export function* assembleWork(index: MapIndex, unsorted: Tile[], bounds: { x0: n
     treeSpecies,
     solar: flat('solar'),
     busRoutes: index.busRoutes.map(legs),
+    trainRoutes: (index.trainRoutes ?? []).map(legs),
+    railStations: index.railStations ?? [],
     busStations,
     services,
     stores,

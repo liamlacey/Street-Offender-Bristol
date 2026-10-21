@@ -79,6 +79,15 @@ function gravel(size: number): HTMLCanvasElement {
   }, 21);
 }
 
+/** A railway's ballast: grey-brown stones, packed close. */
+function ballast(size: number): HTMLCanvasElement {
+  return tile(size, (ctx, rand) => {
+    ctx.fillStyle = '#7a746a';
+    ctx.fillRect(0, 0, size, size);
+    speckle(ctx, rand, size, size * 9, ['#5d5850', '#958e83', '#6a655d', '#a69f93', '#4e4a44'], 1.1);
+  }, 29);
+}
+
 function asphalt(size: number, base: string, seed: number): HTMLCanvasElement {
   return tile(
     size,
@@ -232,6 +241,8 @@ export function artPalette(ctx: Ctx): Palette {
     yard: pattern(slabs([128, 127, 123], 48, 48, 'rgba(45,45,42,0.3)', 41)),
     slipway: pattern(slabs([164, 160, 152], 64, 64, 'rgba(70,68,62,0.18)', 23)),
     island: pavement,
+    // A platform: long concrete slabs (its edges are drawn over: see ground.ts).
+    platform: pattern(slabs([170, 166, 158], 32, 48, 'rgba(70,66,58,0.22)', 47)),
   };
   return {
     surface: false,
@@ -243,6 +254,7 @@ export function artPalette(ctx: Ctx): Palette {
     cycleway: pattern(asphalt(64, '#7a5049', 16)),
     steps: '#b3aa9a',
     track: pattern(soil(64)),
+    ballast: pattern(ballast(64)),
     kerb: '#c2bfb6',
     parapet: '#7c7366',
     asphalt: pattern(asphalt(128, '#48494c', 17)),

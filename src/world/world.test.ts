@@ -310,6 +310,31 @@ describe('Decks', () => {
     expect(high.over(400, 46)).toBeNull();
   });
 
+  it('has its tunnels a level of their own (2): in only at a portal, walled all along, from the ground at one end to the ground at the other', () => {
+    // A railway 200 m long in a tunnel under a hill, from (0, 0) east; the ground 4 m higher at its far end.
+    const tunnel: Road = { kind: 'rail', width: 3.8 * 8, pts: [0, 0, 1600, 0], tunnel: true };
+    const tunnels = new Decks([tunnel, { ...tunnel, pts: [0, 400, 1600, 400], tunnel: false }], (x) => x / 50, () => false, true);
+    expect(tunnels.decks).toHaveLength(1);
+    // In at its mouth; not from above it, in the middle; and out again off its end.
+    expect(tunnels.levelAt(0, 20, 0)).toBe(2);
+    expect(tunnels.levelAt(0, 800, 0)).toBe(0);
+    expect(tunnels.levelAt(2, 800, 0)).toBe(2);
+    expect(tunnels.levelAt(2, 1700, 0)).toBe(0);
+    // Its floor from one end's ground to the other's.
+    expect(tunnels.height(tunnels.decks[0], 0)).toBeCloseTo(0);
+    expect(tunnels.height(tunnels.decks[0], 1600)).toBeCloseTo(32);
+    // Walled both sides, all the way.
+    const walls = tunnels.parapets();
+    const sides = new Set(walls.map((w) => Math.sign(w.ay)));
+    expect(sides).toEqual(new Set([1, -1]));
+    for (const side of [1, -1]) {
+      const along = walls.filter((w) => Math.sign(w.ay) === side).reduce((n, w) => n + Math.hypot(w.bx - w.ax, w.by - w.ay), 0);
+      expect(along).toBeGreaterThan(1590);
+    }
+    // And a bridge's decks don't include it.
+    expect(new Decks([tunnel], () => 0).decks).toHaveLength(0);
+  });
+
   it('finds Park Street\'s bridge over Frogmore Street in Bristol', () => {
     const bristol = new Decks(map.roads, () => 0);
     expect(bristol.decks.some((d) => d.road.name === 'Park Street')).toBe(true);

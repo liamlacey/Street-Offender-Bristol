@@ -18,6 +18,7 @@ import { People } from './people';
 import type { SurfaceGrid } from './surface';
 import { Terrain } from './terrain';
 import { Traffic } from './traffic';
+import { Trains } from './trains';
 import type { Work } from './work.ts';
 import { type World, worldWork } from './world';
 
@@ -26,10 +27,12 @@ export interface Region {
   world: World;
   terrain: Terrain;
   surfaces: SurfaceGrid;
-  /** What you hit on each level: the ground's, and the bridges' decks'. */
-  walls: [SegmentGrid, SegmentGrid];
-  posts: [CircleGrid, CircleGrid];
+  /** What you hit on each level: the ground's, the bridges' decks', the tunnels'. */
+  walls: [SegmentGrid, SegmentGrid, SegmentGrid];
+  posts: [CircleGrid, CircleGrid, CircleGrid];
   decks: Decks;
+  /** The tunnels (level 2: see Decks). */
+  tunnels: Decks;
   ledges: Ledges;
   kerbs: Kerbs;
   humps: Humps;
@@ -37,6 +40,7 @@ export interface Region {
   traffic: Traffic;
   boats: Boats;
   people: People;
+  trains: Trains;
 }
 
 /** How far along making a region is (0 to 1), and what it's doing. */
@@ -50,6 +54,7 @@ export interface FirstIds {
   traffic: number;
   people: number;
   boats: number;
+  trains: number;
 }
 
 /**
@@ -68,9 +73,9 @@ export function* regionWork(map: RegionMap, ids: FirstIds, surfaces: (world: Wor
   stage(0.2, 'Painting the roads');
   const grid = yield* surfaces(world, map.region);
   // (Put in a few thousand at a time: a region has a great many walls.)
-  const walls: [SegmentGrid, SegmentGrid] = [new SegmentGrid([]), new SegmentGrid([])];
-  const posts: [CircleGrid, CircleGrid] = [new CircleGrid([]), new CircleGrid([])];
-  for (const level of [0, 1]) {
+  const walls: [SegmentGrid, SegmentGrid, SegmentGrid] = [new SegmentGrid([]), new SegmentGrid([]), new SegmentGrid([])];
+  const posts: [CircleGrid, CircleGrid, CircleGrid] = [new CircleGrid([]), new CircleGrid([]), new CircleGrid([])];
+  for (const level of [0, 1, 2]) {
     for (const [k, w] of world.walls[level].entries()) {
       walls[level].add(w);
       if (k % 4000 === 3999) yield;
@@ -82,6 +87,7 @@ export function* regionWork(map: RegionMap, ids: FirstIds, surfaces: (world: Wor
   }
   stage(0.3, 'Putting up the buildings');
   const decks = new Decks(map.roads, (x, y) => terrain.at(x, y) * terrain.px, waterOf(map));
+  const tunnels = new Decks(map.roads, (x, y) => terrain.at(x, y) * terrain.px, () => false, true);
   yield;
   const ledges = new Ledges(map);
   const kerbs = new Kerbs(map);
@@ -98,6 +104,9 @@ export function* regionWork(map: RegionMap, ids: FirstIds, surfaces: (world: Wor
   stage(0.75, 'Filling the streets');
   const people = new People(map, { seats: world.loose, firstId: ids.people }, true);
   yield* people.setup();
+  stage(0.92, 'Running the trains');
+  const trains = new Trains(map, { firstId: ids.trains }, true);
+  yield* trains.setup();
   stage(0.95, 'Looking round');
-  return { map, world, terrain, surfaces: grid, walls, posts, decks, ledges, kerbs, humps, buildings, traffic, boats, people };
+  return { map, world, terrain, surfaces: grid, walls, posts, decks, tunnels, ledges, kerbs, humps, buildings, traffic, boats, people, trains };
 }

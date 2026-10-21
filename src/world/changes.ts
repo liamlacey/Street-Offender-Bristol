@@ -59,7 +59,7 @@ export class Changes {
    * `bounds`), and puts in what's been added: the posts it's knocked down
    * there, for the scene to take away what showed them.
    */
-  apply(walls: [SegmentGrid, SegmentGrid], posts: [CircleGrid, CircleGrid], bounds: Bounds): { post: Post; level: number }[] {
+  apply(walls: [SegmentGrid, SegmentGrid, SegmentGrid], posts: [CircleGrid, CircleGrid, CircleGrid], bounds: Bounds): { post: Post; level: number }[] {
     const inside = (x: number, y: number) => x >= bounds.x0 && x <= bounds.x1 && y >= bounds.y0 && y <= bounds.y1;
     for (const w of this.walls) {
       const [mx, my] = [(w.ax + w.bx) / 2, (w.ay + w.by) / 2];

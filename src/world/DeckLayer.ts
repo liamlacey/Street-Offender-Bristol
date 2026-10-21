@@ -150,6 +150,11 @@ export class DeckLayer {
     texture.refresh();
   }
 
+  /** Every piece out of sight (a tunnel's, while you're not down in it). */
+  hide(): void {
+    for (const s of this.sheets) for (const p of s.pieces.values()) p.sheet.setVisible(false);
+  }
+
   /** Call once a frame: lays the decks near the view where the perspective puts them, each at its depth (the pieces of them near it, drawn as they come near). */
   update(view: Phaser.Geom.Rectangle, perspective: Perspective, depthOf: (deck: number) => number): void {
     let fresh = 0;

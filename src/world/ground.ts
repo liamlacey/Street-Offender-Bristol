@@ -36,6 +36,8 @@ export interface Palette {
   cycleway: Fill;
   steps: Fill;
   track: Fill;
+  /** A railway's bed of stones. */
+  ballast: Fill;
   kerb: Fill;
   parapet: Fill;
   asphalt: Fill;
@@ -68,6 +70,7 @@ export function surfacePalette(): Palette {
     yard: s(Surface.Road),
     slipway: s(Surface.Pavement),
     island: s(Surface.Pavement),
+    platform: s(Surface.Pavement),
   };
   const pave = s(Surface.Pavement);
   return {
@@ -80,6 +83,8 @@ export function surfacePalette(): Palette {
     cycleway: s(Surface.Road),
     steps: pave,
     track: s(Surface.Dirt),
+    // (Driven along as a road.)
+    ballast: s(Surface.Road),
     kerb: pave,
     parapet: pave,
     asphalt: s(Surface.Road),
@@ -137,9 +142,13 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
     // On one side only: a strip from the middle of the road out (the road's drawn over the inner half).
     else if (r.pavement) stroke(ctx, offsetLine(r.pts, ((r.width / 2 + PAVEMENT) / 2) * (r.pavement === 'left' ? 1 : -1)), palette.pavement, r.width / 2 + PAVEMENT);
   }
+  // The railways' beds and sleepers (not those in tunnels: they're under everything), and the platforms beside them.
+  const rails = roads.filter((r) => r.kind === 'rail' && !r.tunnel);
+  for (const r of rails) drawTrack(ctx, r, palette, 'bed');
+  if (rails.length) for (const i of index.areas) if (map.areas[i].kind === 'platform') drawPlatform(ctx, map.areas[i], palette);
   // Footpaths, cycle paths, pedestrian streets and steps.
   for (const r of roads) {
-    if (VEHICLE_ROADS.has(r.kind) && r.kind !== 'track') continue;
+    if ((VEHICLE_ROADS.has(r.kind) && r.kind !== 'track') || r.kind === 'rail') continue;
     stroke(ctx, r.pts, pathFill(r, palette), r.width);
     if (r.kind === 'steps' && !palette.surface && r.steps) drawSteps(ctx, r, r.steps);
     else if (r.kind === 'steps' && !palette.surface) {
@@ -154,6 +163,10 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
   // Kerbs, then the tarmac over them, so the roads run together at junctions.
   for (const r of vehicle) stroke(ctx, r.pts, palette.kerb, r.width + KERB * 2);
   for (const r of vehicle) stroke(ctx, r.pts, r.surface && r.surface !== 'asphalt' ? palette.paving[r.surface] : palette.asphalt, r.width);
+  // The rails, over everything (across the roads at a level crossing).
+  for (const r of rails) drawTrack(ctx, r, palette, 'rails');
+  // The tunnels' mouths (their portals), where the railway goes in.
+  for (const r of roads) if (r.tunnel && !palette.surface) drawPortals(ctx, r, map.roads);
 
   if (!palette.surface) {
     // The road markings, painted on a layer of their own, worn, then laid on the road.
@@ -232,8 +245,30 @@ export function drawDeck(ctx: Ctx, r: Road, palette: Palette, raised?: [number, 
     }
     for (const w of edges.parapets) {
       const along = [w.ax, w.ay, w.bx, w.by];
+      if (r.tunnel) {
+        // A tunnel's walls: sooty brick, and its lamps along them now and then.
+        stroke(ctx, along, '#1d1b19', 9);
+        stroke(ctx, along, '#4a4038', 4);
+        continue;
+      }
       stroke(ctx, along, '#3f3a34', 5);
       stroke(ctx, along, '#b9ae99', 3.5);
+    }
+    if (r.tunnel) {
+      // Its lamps, every 12 m down one side, a pool of light under each.
+      for (const [a, b] of raised ?? [[0, lineLength(r.pts)]]) {
+        for (let d = a + 6 * 8; d < b; d += 12 * 8) {
+          const [x, y, tx, ty] = pointAlong(r.pts, d);
+          const [lx, ly] = [x - ty * (r.width / 2 + 2), y + tx * (r.width / 2 + 2)];
+          const glow = ctx.createRadialGradient(lx, ly, 0, lx, ly, 3 * 8);
+          glow.addColorStop(0, 'rgba(255,214,140,0.35)');
+          glow.addColorStop(1, 'rgba(255,214,140,0)');
+          ctx.fillStyle = glow;
+          ctx.fillRect(lx - 3 * 8, ly - 3 * 8, 6 * 8, 6 * 8);
+          ctx.fillStyle = '#ffe2a0';
+          ctx.fillRect(lx - 1, ly - 1, 2, 2);
+        }
+      }
     }
     ctx.lineCap = 'butt';
   } else {
@@ -254,10 +289,98 @@ export function drawDeck(ctx: Ctx, r: Road, palette: Palette, raised?: [number, 
       }
     }
   }
+  if (r.kind === 'rail') {
+    drawTrack(ctx, r, palette, 'bed');
+    drawTrack(ctx, r, palette, 'rails');
+    ctx.lineCap = 'round';
+    return;
+  }
   const fill = r.pavementOf ? palette.pavement : vehicle ? (r.surface && r.surface !== 'asphalt' ? palette.paving[r.surface] : palette.asphalt) : pathFill(r, palette);
   stroke(ctx, r.pts, fill, r.width);
   if (vehicle) drawMarkings(ctx, [r], palette.marking);
   ctx.lineCap = 'round';
+}
+
+/** Standard gauge, between the rails' middles, px; and a sleeper's length, how far apart they are, px. */
+const GAUGE = 1.5 * 8;
+const SLEEPER = 2.6 * 8;
+const SLEEPERS = 0.65 * 8;
+
+/**
+ * A railway track: its bed of ballast (`bed`), with the timber sleepers
+ * across it; or its two steel rails along them (`rails`), drawn last, over
+ * a road it crosses.
+ */
+function drawTrack(ctx: Ctx, r: Road, palette: Palette, part: 'bed' | 'rails'): void {
+  if (palette.surface) {
+    if (part === 'bed') stroke(ctx, r.pts, palette.ballast, r.width);
+    return;
+  }
+  if (part === 'bed') {
+    // The bed's edges a little darker, sloping away.
+    stroke(ctx, r.pts, 'rgba(70,64,56,0.55)', r.width + 1.5);
+    stroke(ctx, r.pts, palette.ballast, r.width);
+    ctx.lineCap = 'butt';
+    ctx.setLineDash([2.2, SLEEPERS - 2.2]);
+    stroke(ctx, r.pts, '#4f3c2c', SLEEPER);
+    ctx.setLineDash([1, SLEEPERS - 1]);
+    stroke(ctx, r.pts, 'rgba(140,110,80,0.45)', SLEEPER - 1);
+    ctx.setLineDash([]);
+    ctx.lineCap = 'round';
+    return;
+  }
+  // Each rail: its dark foot, and the bright, worn top the wheels run on.
+  for (const side of [-1, 1]) {
+    const line = offsetLine(r.pts, (side * GAUGE) / 2);
+    stroke(ctx, line, '#3c3b39', 1.7);
+    stroke(ctx, line, '#c4c8cc', 0.7);
+  }
+}
+
+/**
+ * A tunnel's portals: at each end of it that isn't on into more tunnel, its
+ * dark mouth going in, under a stone arch.
+ */
+function drawPortals(ctx: Ctx, r: Road, all: Road[]): void {
+  const p = r.pts;
+  const n = p.length;
+  const length = lineLength(p);
+  const joined = (x: number, y: number) => all.some((o) => o !== r && o.tunnel && [0, o.pts.length - 2].some((k) => Math.hypot(o.pts[k] - x, o.pts[k + 1] - y) < 2));
+  for (const [end, x, y] of [[0, p[0], p[1]], [1, p[n - 2], p[n - 1]]] as const) {
+    if (joined(x, y)) continue;
+    const into = Math.min(length, 5 * 8);
+    const mouth = end ? subPolyline(p, length - into, length) : subPolyline(p, 0, into);
+    if (mouth.length < 4) continue;
+    ctx.lineCap = 'butt';
+    stroke(ctx, mouth, '#0c0b0a', r.width + 3);
+    // The arch's face across the mouth.
+    const [, , tx, ty] = pointAlong(p, end ? length : 0);
+    const h = r.width / 2 + 4;
+    stroke(ctx, [x - ty * h, y + tx * h, x + ty * h, y - tx * h], '#7c7264', 4);
+    stroke(ctx, [x - ty * h, y + tx * h, x + ty * h, y - tx * h], '#9b9182', 2);
+    ctx.lineCap = 'round';
+  }
+}
+
+/**
+ * A railway platform: its concrete, and along its edges the white coping
+ * stones and, just in from them, the yellow line to stand behind.
+ */
+function drawPlatform(ctx: Ctx, a: GameMap['areas'][number], palette: Palette): void {
+  fillRings(ctx, a.rings, palette.area.platform);
+  if (palette.surface) return;
+  ctx.save();
+  ctx.beginPath();
+  for (const ring of a.rings) {
+    ctx.moveTo(ring[0], ring[1]);
+    for (let k = 2; k < ring.length; k += 2) ctx.lineTo(ring[k], ring[k + 1]);
+    ctx.closePath();
+  }
+  ctx.clip('evenodd');
+  strokeRings(ctx, a.rings, '#e2c534', 12);
+  strokeRings(ctx, a.rings, palette.area.platform, 9);
+  strokeRings(ctx, a.rings, '#dedad0', 3.5);
+  ctx.restore();
 }
 
 function pathFill(r: Road, p: Palette): Fill {

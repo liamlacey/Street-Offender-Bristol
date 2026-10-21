@@ -83,7 +83,7 @@ export function* streetLifeWork(map: GameMap): Work<StreetLife> {
     return { pts, x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
   };
   const solid = (map.buildings ?? []).filter((b) => b.solid && !b.bottom).map((b) => bounded(b.rings[0], 0));
-  const roads = map.roads.filter((r) => VEHICLE_ROADS.has(r.kind)).map((r) => ({ ...bounded(r.pts, r.width / 2 + 2 * M), reach: r.width / 2 + 2 * M }));
+  const roads = map.roads.filter((r) => VEHICLE_ROADS.has(r.kind) || (r.kind === 'rail' && !r.tunnel)).map((r) => ({ ...bounded(r.pts, r.width / 2 + 2 * M), reach: r.width / 2 + 2 * M }));
   const within = (x: number, y: number, b: { x0: number; y0: number; x1: number; y1: number }) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
   /** Clear ground for something: not in a building, nor out on a road, nor within `apart` of anything else. */
   const clearFor = (x: number, y: number, apart: number) =>

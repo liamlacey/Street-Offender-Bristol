@@ -96,17 +96,30 @@ export function nearestAlong(pts: Pts, x: number, y: number): { along: number; d
 
 export class Decks {
   readonly decks: Deck[] = [];
+  /** Which level its decks are: 1, the bridges'; 2, the tunnels' (underground: see `tunnels`). */
+  readonly level: number;
 
   private readonly ground: (x: number, y: number) => number;
   private readonly wet: (x: number, y: number) => boolean;
 
-  /** `ground` gives the ground's height (px) anywhere; `wet`, whether a point's over the water (see waterOf). */
-  constructor(roads: Road[], ground: (x: number, y: number) => number, wet: (x: number, y: number) => boolean = () => false) {
+  /**
+   * `ground` gives the ground's height (px) anywhere; `wet`, whether a
+   * point's over the water (see waterOf). With `tunnels`, the tunnels
+   * instead of the bridges: the same, but under everything, a level of
+   * their own (2), in and out only at their ends (the portals), walled along
+   * all their length, from the ground at one end to the ground at the other.
+   */
+  constructor(roads: Road[], ground: (x: number, y: number) => number, wet: (x: number, y: number) => boolean = () => false, tunnels = false) {
     this.ground = ground;
     this.wet = wet;
+    this.level = tunnels ? 2 : 1;
     const all: [Road, number][] = [];
     roads.forEach((road, index) => {
-      if (!road.bridge || road.pts.length < 4) return;
+      if (!(tunnels ? road.tunnel : road.bridge && !road.tunnel) || road.pts.length < 4) return;
+      if (tunnels) {
+        all.push([road, index]);
+        return;
+      }
       all.push([road, index]);
       // Its pavements, either side (or one), as wide as on the ground, at its height.
       if (!road.pavement) return;
@@ -215,10 +228,10 @@ export class Decks {
    */
   levelAt(level: number, x: number, y: number): number {
     const on = this.over(x, y);
-    if (level === 1) return on ? 1 : 0;
+    if (level === this.level) return on ? this.level : 0;
     if (!on) return 0;
     const { deck, along } = on;
-    if ((deck.open0 && along < DECK_END) || (deck.open1 && along > deck.length - DECK_END)) return 1;
+    if ((deck.open0 && along < DECK_END) || (deck.open1 && along > deck.length - DECK_END)) return this.level;
     return 0;
   }
 
@@ -230,8 +243,8 @@ export class Decks {
    */
   stepAt(level: number, x: number, y: number, ground: number): number {
     const on = this.over(x, y);
-    if (level === 1) return on ? 1 : 0;
-    return on && Math.abs(this.height(on.deck, on.along) - ground) < 0.6 * 8 ? 1 : 0;
+    if (level === this.level) return on ? this.level : 0;
+    return on && Math.abs(this.height(on.deck, on.along) - ground) < 0.6 * 8 ? this.level : 0;
   }
 
   /**
@@ -272,6 +285,8 @@ export class Decks {
    */
   raised(d: Deck): [number, number][] {
     if (d.raised) return d.raised;
+    // (A tunnel's walled all the way through.)
+    if (this.level === 2) return (d.raised = [[0, d.length]]);
     const step = DECK_STEP / 2;
     const onGround = (a: number) => {
       const [x, y] = pointAlong(d.road.pts, a);

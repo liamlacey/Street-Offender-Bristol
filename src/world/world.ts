@@ -148,8 +148,9 @@ export interface FixedProp extends Prop {
 export interface World {
   map: GameMap;
   /** What you crash into on each level: [0] the ground, [1] the bridges' decks. */
-  walls: [Wall[], Wall[]];
-  posts: [Post[], Post[]];
+  /** What you hit on each level: the ground, the bridges' decks, the tunnels. */
+  walls: [Wall[], Wall[], Wall[]];
+  posts: [Post[], Post[], Post[]];
   loose: LooseProp[];
   /** The props that are fixed or painted on (all but the loose ones). */
   fixed: FixedProp[];
@@ -477,6 +478,8 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   const CELL = 256;
   const wayGrid = new Map<string, Set<Road>>();
   for (const r of map.roads) {
+    // (A railway in a tunnel is under everything: it opens no building's walls.)
+    if (r.tunnel) continue;
     const pad = Math.max(0, openReach(r)) + 4;
     for (let k = 0; k + 3 < r.pts.length; k += 2) {
       const [ax, ay, bx, by] = [r.pts[k], r.pts[k + 1], r.pts[k + 2], r.pts[k + 3]];
@@ -545,13 +548,17 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   // The edge of the map.
   const edge: Wall[] = [];
   addRing(edge, [0, 0, map.width, 0, map.width, map.height, 0, map.height], 0, true, 0);
-  const walls: [Wall[], Wall[]] = [
+  // The tunnels: their walls (all along them, open at the portals), and nothing else down there.
+  const tunnels = new Decks(map.roads, (x, y) => terrain.at(x, y) * terrain.px, () => false, true);
+  const walls: [Wall[], Wall[], Wall[]] = [
     [...buildings, ...ground, ...edge],
     [...buildingsUp, ...deck, ...(yield* decks.parapetsWork()).map((p) => ({ ...p, level: 1, kind: 'parapet' as const })), ...edge],
+    // (Rock: they can't be knocked through, as a building's walls can't.)
+    (yield* tunnels.parapetsWork()).map((p) => ({ ...p, level: 2 })),
   ];
 
   // Trees grow on the ground; anything else standing on a bridge is on the bridge.
-  const posts: [Post[], Post[]] = [[], []];
+  const posts: [Post[], Post[], Post[]] = [[], [], []];
   const levelOf = (x: number, y: number) => (onDeck(x, y) ? 1 : 0);
   // (A tree's by its id in the whole map, in a region of it: it's the same tree, if it's knocked down, in the next region it's in.)
   const treeIds = (map as GameMap & { ids?: { trees: number[] } }).ids?.trees;

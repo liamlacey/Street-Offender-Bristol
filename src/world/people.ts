@@ -13,7 +13,7 @@
  * their way.
  */
 
-import { type GameMap, type Pts, VEHICLE_ROADS, pointInRing } from '../map/osm';
+import { type GameMap, type Pts, VEHICLE_ROADS, pointInRing, ridgeAxis } from '../map/osm';
 import { type Store, TROLLEY_GAP } from '../map/stores';
 import { type TrolleyRow, trolleyRows } from './parking';
 import { type Act, pedestrianBusy, streetLifeWork } from './streetLife';
@@ -252,6 +252,8 @@ export interface Mover {
   bike?: boolean;
   /** Someone on foot (you, out of a car): nothing to run from. */
   onFoot?: boolean;
+  /** A train's carriage (people get on and off it at its doors, either side, when it's waiting at a stop). */
+  train?: boolean;
 }
 
 export interface PeopleView {
@@ -583,6 +585,20 @@ export class People {
         if (this.platforms.some(([px, py]) => Math.hypot(px - r.stops[i], py - r.stops[i + 1]) < 30 * M)) continue;
         const near = this.nearestWalk(r.stops[i], r.stops[i + 1], 12 * M);
         if (near) this.stops.push([near[0], near[1]]);
+      }
+    }
+    this.platformStops();
+  }
+
+  /** Where people wait along the railway platforms: down the middle of each, every 12 m (and they're as busy as a bus stop's). */
+  private platformStops(): void {
+    for (const a of this.map.areas) {
+      if (a.kind !== 'platform') continue;
+      const ring = a.rings[0];
+      const { ox, oy, ux, uy, t0, t1 } = ridgeAxis(ring);
+      for (let t = t0 + 4 * M; t < t1 - 4 * M; t += 12 * M) {
+        const [x, y] = [ox + ux * t, oy + uy * t];
+        if (pointInRing(x, y, ring)) this.stops.push([x, y]);
       }
     }
   }
@@ -1364,10 +1380,10 @@ export class People {
     const [sx, sy] = this.stops[p.stop];
     // A bus at the stop, its door open: over to it, and on.
     for (const b of movers) {
-      if (!b.dwelling || Math.hypot(b.x - sx, b.y - sy) > 20 * M) continue;
+      if (!b.dwelling || Math.hypot(b.x - sx, b.y - sy) > (b.train ? b.length / 2 + 6 * M : 20 * M)) continue;
       p.mode = 'board';
       p.stop = -1;
-      [p.tx, p.ty] = door(b);
+      [p.tx, p.ty] = b.train ? trainDoor(b, p.x, p.y) : door(b);
       return;
     }
   }
@@ -1380,6 +1396,10 @@ export class People {
         this.served.delete(b.id);
         continue;
       }
+      if (b.train) {
+        this.alight(b);
+        continue;
+      }
       if (b.bay) {
         this.bay(b, b.bay, dt);
         continue;
@@ -1390,6 +1410,30 @@ export class People {
       for (let k = Math.floor(this.rand() * 4); k > 0; k--) {
         const p = this.make(dx + (this.rand() - 0.5) * M, dy + (this.rand() - 0.5) * M, 'walk');
         this.rejoin(p);
+      }
+    }
+  }
+
+  /**
+   * A train's carriage, just pulled in at a stop: a few get off it, onto the
+   * platform (on whichever side there's one), and walk off along it, out of
+   * the station.
+   */
+  private alight(b: Mover): void {
+    if (this.served.has(b.id)) return;
+    this.served.add(b.id);
+    const [ux, uy] = [Math.cos(b.angle), Math.sin(b.angle)];
+    for (const side of [1, -1]) {
+      const [px, py] = [b.x - uy * side * (b.width / 2 + 1.2 * M), b.y + ux * side * (b.width / 2 + 1.2 * M)];
+      if (!this.map.areas.some((a) => a.kind === 'platform' && pointInRing(px, py, a.rings[0]))) continue;
+      for (let k = Math.floor(this.rand() * 4); k > 0; k--) {
+        const along = (this.rand() - 0.5) * b.length * 0.7;
+        const p = this.make(px + ux * along, py + uy * along, 'join');
+        p.level = b.level ?? 0;
+        // Off along the platform, to the nearest way out of it (a path), then on their way.
+        const out = this.nearestWalk(p.x, p.y, 60 * M, true, p.level);
+        [p.tx, p.ty] = out ? [out[0], out[1]] : [p.x + ux * 20 * M * (this.rand() < 0.5 ? 1 : -1), p.y + uy * 20 * M];
+        p.timer = 0.1;
       }
     }
   }
@@ -2131,6 +2175,15 @@ export class People {
       (p) => p.mode === 'cross' || p.mode === 'flee' || p.mode === 'dive' || (p.mode === 'down' && this.inRoad(p.x, p.y, undefined, p.level)) || (p.mode === 'walk' && !!this.walks[p.line]?.cycle),
     );
   }
+}
+
+/** The door of a train's carriage nearest someone: on their side of it, along it as far as they are (but not at its ends), just outside it. */
+function trainDoor(b: Mover, x: number, y: number): [number, number] {
+  const [ux, uy] = [Math.cos(b.angle), Math.sin(b.angle)];
+  const [rx, ry] = [x - b.x, y - b.y];
+  const along = Math.max(-b.length / 3, Math.min(b.length / 3, rx * ux + ry * uy));
+  const side = -rx * uy + ry * ux >= 0 ? 1 : -1;
+  return [b.x + ux * along - uy * side * (b.width / 2 + 0.3 * M), b.y + uy * along + ux * side * (b.width / 2 + 0.3 * M)];
 }
 
 /** Where a bus's door is: at the front, on the kerb side (the left: with y down, (uy, -ux)), just outside it. */

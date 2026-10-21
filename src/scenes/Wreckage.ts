@@ -111,8 +111,8 @@ export class Wreckage {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private walls: [SegmentGrid, SegmentGrid],
-    private posts: [CircleGrid, CircleGrid],
+    private walls: [SegmentGrid, SegmentGrid, SegmentGrid],
+    private posts: [CircleGrid, CircleGrid, CircleGrid],
     private readonly effects: CarEffects,
     private readonly hooks: WreckageHooks,
     private readonly depth: number,
@@ -121,7 +121,7 @@ export class Wreckage {
   ) {}
 
   /** What's in the way in the next region of the map (see streamer.ts). */
-  use(walls: [SegmentGrid, SegmentGrid], posts: [CircleGrid, CircleGrid]): void {
+  use(walls: [SegmentGrid, SegmentGrid, SegmentGrid], posts: [CircleGrid, CircleGrid, CircleGrid]): void {
     this.walls = walls;
     this.posts = posts;
   }
