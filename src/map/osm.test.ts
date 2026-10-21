@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PX_PER_METRE, Projection, buildMap, clipLine, clipRing, joinRings, areaKind, cutSpans, roadKind, laneArrows, lanesAcross, metres, parseOsm, pavementSides, ringArea, roadLanes, roadWidth, sidewalkAlong } from './osm';
-import type { Road } from './osm';
+import { PX_PER_METRE, Projection, buildMap, gateways, pointInRing, clipLine, clipRing, joinRings, areaKind, cutSpans, roadKind, laneArrows, lanesAcross, metres, parseOsm, pavementSides, ringArea, roadLanes, roadWidth, sidewalkAlong } from './osm';
+import type { Building, Road } from './osm';
 
 /** A tiny map: a street with a junction, a building with a part on it, a pond, a park inside a multipolygon, a tree and a bench. */
 const XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -306,5 +306,33 @@ describe('bus routes', () => {
     // Along the first as it's drawn; against the way the second is.
     expect(route.legs).toEqual([first * 2, second * 2 + 1]);
     expect(route.stops.length).toBe(2);
+  });
+});
+
+describe('gateways', () => {
+  it("make a tower the road runs through an archway: a pier either side, a span over the road you drive under", () => {
+    const M = PX_PER_METRE;
+    // A 9 m road east-west along y = 0, through a tower 8 m deep and 11 m across (the Clifton Suspension Bridge's, as mapped).
+    const road = { kind: 'secondary', width: 9 * M, pts: [-200, 0, 200, 0] } as Road;
+    const tower: Building = { id: 379999559, name: 'Clifton Tower', rings: [[-32, -44, 32, -44, 32, 44, -32, 44]], top: 400, bottom: 0, kind: 'guardhouse', solid: true, drawn: true };
+    const buildings = [tower];
+    gateways(buildings, [road]);
+    expect(buildings).toHaveLength(3);
+    const piers = buildings.filter((b) => b.solid);
+    const span = buildings.find((b) => !b.solid)!;
+    expect(piers).toHaveLength(2);
+    // The road's clear between the piers (and a little more), on the ground.
+    for (const p of piers) {
+      expect(p.bottom).toBe(0);
+      for (let x = -150; x <= 150; x += 10) for (const y of [-4.5 * M, 0, 4.5 * M]) expect(pointInRing(x, y, p.rings[0])).toBe(false);
+    }
+    // One either side.
+    expect(piers.some((p) => pointInRing(0, -7 * M, p.rings[0]))).toBe(true);
+    expect(piers.some((p) => pointInRing(0, 7 * M, p.rings[0]))).toBe(true);
+    // The span over the road between them, well up, lower than the piers (26 m, as tall as the tower).
+    expect(pointInRing(0, 0, span.rings[0])).toBe(true);
+    expect(span.bottom).toBe(12 * M);
+    expect(span.top).toBe(17 * M);
+    for (const p of piers) expect(p.top).toBe(26 * M);
   });
 });

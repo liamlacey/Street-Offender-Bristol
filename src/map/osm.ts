@@ -8,7 +8,7 @@
  */
 
 import { type Berth, type FerryRoute, type MooringEdge, Water, ferryStop, findBerths, overlap } from './berths.ts';
-import { CORRECTIONS, LANDMARKS, STREETS } from './landmarks.ts';
+import { CORRECTIONS, GATEWAYS, LANDMARKS, STREETS } from './landmarks.ts';
 import { type Arm, type Controller, type LightPoint, type Signal, trafficLights } from './signals.ts';
 
 export type { Controller, Signal } from './signals.ts';
@@ -1283,6 +1283,68 @@ export interface BuildOptions {
 const round = (v: number) => Math.round(v);
 const roundPts = (pts: Pts) => pts.map(round);
 
+/**
+ * Each gateway's building (see GATEWAYS in landmarks.ts) made an archway over
+ * the road that runs through it (the widest, if more than one does): squared
+ * up to the road, a pier either side of it (solid, standing on the ground),
+ * and a span over the road between them, lower than they are (up off the
+ * ground: you drive under it), centred on the road where it runs through the
+ * building.
+ */
+export function gateways(buildings: Building[], roads: Road[]): void {
+  for (let i = buildings.length - 1; i >= 0; i--) {
+    const b = buildings[i];
+    const g = b.id === undefined ? undefined : GATEWAYS[b.id];
+    if (!g) continue;
+    const ring = b.rings[0];
+    let [cx, cy] = [0, 0];
+    for (let k = 0; k < ring.length; k += 2) [cx, cy] = [cx + ring[k], cy + ring[k + 1]];
+    [cx, cy] = [cx / (ring.length / 2), cy / (ring.length / 2)];
+    // The road through it: the nearest stretch of the widest of those with a point in it, or crossing it.
+    let best: { road: Road; x: number; y: number; ux: number; uy: number; d: number } | null = null;
+    for (const r of roads) {
+      if (!VEHICLE_ROADS.has(r.kind)) continue;
+      for (let k = 0; k + 3 < r.pts.length; k += 2) {
+        const [ax, ay, bx, by] = [r.pts[k], r.pts[k + 1], r.pts[k + 2], r.pts[k + 3]];
+        const len = Math.hypot(bx - ax, by - ay);
+        if (!len) continue;
+        const t = Math.max(0, Math.min(1, ((cx - ax) * (bx - ax) + (cy - ay) * (by - ay)) / (len * len)));
+        const [px, py] = [ax + (bx - ax) * t, ay + (by - ay) * t];
+        const d = Math.hypot(px - cx, py - cy);
+        if (d > 6 * PX_PER_METRE || (best && (r.width < best.road.width || (r.width === best.road.width && d >= best.d)))) continue;
+        best = { road: r, x: px, y: py, ux: (bx - ax) / len, uy: (by - ay) / len, d };
+      }
+    }
+    if (!best) continue;
+    const { x, y, ux, uy } = best;
+    const [nx, ny] = [-uy, ux];
+    // As deep along the road as the building is (or `deep`).
+    let [lo, hi] = [Infinity, -Infinity];
+    for (let k = 0; k < ring.length; k += 2) {
+      const along = (ring[k] - x) * ux + (ring[k + 1] - y) * uy;
+      [lo, hi] = [Math.min(lo, along), Math.max(hi, along)];
+    }
+    const half = Math.max(hi - lo, g.deep * PX_PER_METRE) / 2;
+    const mid = (lo + hi) / 2;
+    const open = best.road.width / 2 + 0.5 * PX_PER_METRE;
+    const out = open + g.pier * PX_PER_METRE;
+    /** A box along the road from `a` to `b` across it (+ to its left). */
+    const box = (a: number, c: number): Pts =>
+      [
+        [mid - half, a],
+        [mid + half, a],
+        [mid + half, c],
+        [mid - half, c],
+      ].flatMap(([s, t]) => [round(x + ux * s + nx * t), round(y + uy * s + ny * t)]);
+    const piece = (rings: Pts[], bottom: number, top: number, solid: boolean): Building => {
+      const { roofShape: _r, roofAcross: _a, ...rest } = b;
+      return { ...rest, rings, top: round(top * PX_PER_METRE), bottom: round(bottom * PX_PER_METRE), roofShape: 'flat', solid, drawn: true, heightFrom: 'tag' };
+    };
+    // (The span between the piers only, not over them.)
+    buildings.splice(i, 1, piece([box(open, out)], 0, g.height, true), piece([box(-out, -open)], 0, g.height, true), piece([box(-open, open)], g.opening, g.span, false));
+  }
+}
+
 export function buildMap(source: OsmData, { bounds, start }: BuildOptions): GameMap {
   // What's different on the ground from what OSM has (see landmarks.ts): its tags put over the element's own.
   const data: OsmData = { ...source, ways: new Map(source.ways) };
@@ -2424,6 +2486,9 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       }
     }
   }
+
+  // The gateways: their buildings made archways over the roads through them.
+  gateways(buildings, roads);
 
   // Draw small areas over big ones of the same kind.
   areas.sort((a, b) => AREA_ORDER[a.kind] - AREA_ORDER[b.kind] || Math.abs(ringArea(b.rings[0])) - Math.abs(ringArea(a.rings[0])));

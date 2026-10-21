@@ -25,6 +25,9 @@ export const LANDMARKS: Record<string, Look> = {
   'way/376275103': { wall: '#cdbf98', roof: '#6b6f73' }, // the Corn Exchange: Bath stone
   'way/123975995': { wall: '#cbbd9c' }, // the Commercial Rooms
   'way/127045365': { wall: '#c9b48c' }, // Lloyds' buildings on Canon's Marsh
+  // The Clifton Suspension Bridge's towers: Pennant sandstone, weathered pale (see GATEWAYS, below: archways).
+  'way/379999559': { wall: '#b9ad94', roof: '#a49983' },
+  'way/379999560': { wall: '#b9ad94', roof: '#a49983' },
 };
 
 /** Streets with a look of their own: walls and roofs to pick from. */
@@ -55,6 +58,29 @@ export interface Correction {
   bollards?: boolean;
   seating?: boolean;
 }
+
+/**
+ * Gateways: buildings (by their OSM way ids) a road runs through, made great
+ * rectangular archways (see `gateways` in osm.ts): a solid pier either side
+ * of the road, `pier` metres thick and `height` tall, and a span across
+ * between them from `opening` metres up to `span` (lower than the piers' tops,
+ * so from above it's plainly two piers with a way through), as long along the
+ * road as the building is (at least `deep` metres). You drive through under
+ * the span.
+ */
+export interface Gateway {
+  pier: number;
+  opening: number;
+  span: number;
+  height: number;
+  deep: number;
+}
+
+export const GATEWAYS: Record<number, Gateway> = {
+  // The Clifton Suspension Bridge's towers, at either end (the Clifton side and the Leigh Woods side): 26 m tall, the road through each.
+  379999559: { pier: 4.5, opening: 12, span: 17, height: 26, deep: 9 },
+  379999560: { pier: 4.5, opening: 12, span: 17, height: 26, deep: 9 },
+};
 
 export const CORRECTIONS: Record<string, Correction> = {
   // King Street: pedestrianised (OSM still has it as a one-way street), its whole width (the old carriageway and pavements) paved; bollards from the Prince Street junction.

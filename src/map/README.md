@@ -115,6 +115,24 @@ All in `osm.ts`, `enrich.ts`, `lidar.ts` and `osgb.ts` (pure, tested).
 **Projection.** Flat, about the map's north-west corner: metres east and south,
 **8 px to the metre** (`PX_PER_METRE`), north up. The car is 4.75 m long.
 
+**Gateways** (`GATEWAYS` in `landmarks.ts`, by OSM way id; `gateways` in `osm.ts`):
+a building a road runs through, made a great rectangular archway. It's squared up
+to the road through it (the widest, if more than one does) and centred on it. It's
+as deep along the road as the building is, and at least `deep` metres. It's made of:
+
+- a solid pier either side of the road, `pier` metres thick, standing on the ground
+  up to `height`, half a metre clear of the road's edges;
+- a span over the road between the piers, from `opening` metres up to `span`. It's
+  lower than the piers, so from above it's plainly two piers with a way through. It
+  isn't solid: you drive under it, and it's drawn see-through while you're under it.
+
+All three are given their heights as tagged, so the LIDAR doesn't change them. The
+**Clifton Suspension Bridge's towers** (`way/379999559` on the Clifton side,
+`way/379999560` on the Leigh Woods side) are gateways. OSM has each as a building
+only 11 m across the 9 m road, with no room for the road through it. Each is made
+4.5 m piers 26 m tall, and a span from 12 m to 17 m. They're coloured as weathered
+Pennant stone (`LANDMARKS`).
+
 **Corrections** (`CORRECTIONS` in `landmarks.ts`): where the street isn't (yet) as
 OSM has it, from the owner's own knowledge (never from Google Maps), tags put on an
 OSM element over its own before anything's made of it, each with a note of why.
