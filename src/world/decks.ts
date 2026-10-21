@@ -33,6 +33,19 @@ export const SHADOW_FADE = 8 * 8;
 /** The parapets stand this far out from the edge of the deck, px, and are this thick. */
 const PARAPET_OUT = 2;
 const PARAPET = 1.5;
+/**
+ * Decks alongside each other within this, px, at much the same height (within
+ * LEVEL): one bridge (a road, and its pavements mapped as bridges of their
+ * own a little way off): no parapet between them, the gap paved over.
+ */
+const JOIN = 2.5 * 8;
+const LEVEL = 1.5 * 8;
+
+/** One side of a deck: a parapet along it, or the gap to the deck beside it paved over (`gap` px wide, out along `nx`, `ny`). */
+export interface DeckEdges {
+  parapets: Segment[];
+  joins: { ax: number; ay: number; bx: number; by: number; nx: number; ny: number; gap: number }[];
+}
 
 export interface Deck {
   road: Road;
@@ -152,12 +165,19 @@ export class Decks {
 
   /** The deck over (x, y), if any (within its width), and where along it. */
   over(x: number, y: number): { deck: Deck; along: number } | null {
+    // (Or in the gap between two alongside each other, at much the same height: it's paved over. See JOIN.)
+    let near: { deck: Deck; along: number; out: number }[] = [];
     for (const deck of this.decks) {
-      if (x < deck.x0 || x > deck.x1 || y < deck.y0 || y > deck.y1) continue;
+      if (x < deck.x0 - JOIN || x > deck.x1 + JOIN || y < deck.y0 - JOIN || y > deck.y1 + JOIN) continue;
       const { along, distance } = nearestAlong(deck.road.pts, x, y);
       if (distance <= deck.half) return { deck, along };
+      if (distance <= deck.half + JOIN) near.push({ deck, along, out: distance - deck.half });
     }
-    return null;
+    if (near.length < 2) return null;
+    near = near.sort((a, b) => a.out - b.out);
+    const [a, b] = near;
+    if (a.out + b.out > JOIN + 2 || Math.abs(this.height(a.deck, a.along) - this.height(b.deck, b.along)) > LEVEL) return null;
+    return { deck: a.deck, along: a.along };
   }
 
   /** The deck's height `along` px along it, px. */
@@ -291,33 +311,89 @@ export class Decks {
     const walls: Segment[] = [];
     for (const d of this.decks) {
       yield;
-      const p = d.road.pts;
-      const out = d.half + PARAPET_OUT;
-      const raised = this.raised(d);
-      let run = 0;
-      for (let i = 0; i + 3 < p.length; i += 2) {
-        const [sx, sy, ex, ey] = [p[i], p[i + 1], p[i + 2], p[i + 3]];
-        const len = Math.hypot(ex - sx, ey - sy);
-        const start = run;
-        run += len;
-        if (!len) continue;
-        const nx = -(ey - sy) / len;
-        const ny = (ex - sx) / len;
-        // Each piece of this side that's up off the ground.
-        for (const [r0, r1] of raised) {
-          const [t0, t1] = [Math.max(0, (r0 - start) / len), Math.min(1, (r1 - start) / len)];
-          if (t1 <= t0) continue;
-          const [ax, ay, bx, by] = [sx + (ex - sx) * t0, sy + (ey - sy) * t0, sx + (ex - sx) * t1, sy + (ey - sy) * t1];
-          for (const side of [-1, 1]) {
-            const w = { ax: ax + nx * out * side, ay: ay + ny * out * side, bx: bx + nx * out * side, by: by + ny * out * side, r: PARAPET };
-            // Not where it'd stand on another deck alongside (a cycleway or a pavement mapped as a bridge of its own, beside or within a road's): there's no edge there.
-            const [mx, my] = [(w.ax + w.bx) / 2, (w.ay + w.by) / 2];
-            if (this.decks.some((o) => o !== d && mx >= o.x0 && mx <= o.x1 && my >= o.y0 && my <= o.y1 && nearestAlong(o.road.pts, mx, my).distance <= o.half + PARAPET_OUT)) continue;
-            walls.push(w);
+      walls.push(...this.edges(d).parapets);
+    }
+    return walls;
+  }
+
+  private readonly edgesOf = new Map<Deck, DeckEdges>();
+
+  /**
+   * A deck's sides: its parapets, where it's up off the ground (open at the
+   * ends); and, where another deck's alongside it (within JOIN, at much the
+   * same height: a pavement mapped as a bridge of its own beside a road's), no
+   * parapet: the gap between them paved over (and where it's on another deck,
+   * a cycleway or a pavement within a road's, nothing: there's no edge there).
+   */
+  edges(d: Deck): DeckEdges {
+    const had = this.edgesOf.get(d);
+    if (had) return had;
+    const edges: DeckEdges = { parapets: [], joins: [] };
+    const p = d.road.pts;
+    const out = d.half + PARAPET_OUT;
+    const raised = this.raised(d);
+    const others = this.decks.filter((o) => o !== d && o.x1 > d.x0 - JOIN && o.x0 < d.x1 + JOIN && o.y1 > d.y0 - JOIN && o.y0 < d.y1 + JOIN);
+    let run = 0;
+    for (let i = 0; i + 3 < p.length; i += 2) {
+      const [sx, sy, ex, ey] = [p[i], p[i + 1], p[i + 2], p[i + 3]];
+      const len = Math.hypot(ex - sx, ey - sy);
+      const start = run;
+      run += len;
+      if (!len) continue;
+      const [ux, uy] = [(ex - sx) / len, (ey - sy) / len];
+      const [nx, ny] = [-uy, ux];
+      // Each piece of this side that's up off the ground.
+      for (const [r0, r1] of raised) {
+        const [t0, t1] = [Math.max(0, (r0 - start) / len), Math.min(1, (r1 - start) / len)];
+        if (t1 <= t0) continue;
+        for (const side of [-1, 1]) {
+          const [ox, oy] = [nx * side, ny * side];
+          /** What's beside it at a point along it (t along the segment): nothing (a parapet), another deck it's on (nothing), or one a gap off (paved over, the gap's width). */
+          const beside = (t: number): number | 'wall' | 'on' => {
+            const [x, y] = [sx + (ex - sx) * t + ox * out, sy + (ey - sy) * t + oy * out];
+            const z = this.height(d, start + len * t);
+            let gap: number | 'wall' | 'on' = 'wall';
+            for (const o of others) {
+              if (x < o.x0 - JOIN || x > o.x1 + JOIN || y < o.y0 - JOIN || y > o.y1 + JOIN) continue;
+              const { along, distance } = nearestAlong(o.road.pts, x, y);
+              if (distance > o.half + JOIN || Math.abs(this.height(o, along) - z) > LEVEL) continue;
+              if (distance <= o.half + PARAPET_OUT) return 'on';
+              // (The gap's across to it: out from here, the way this side faces.)
+              const [qx, qy] = [x + ox * JOIN, y + oy * JOIN];
+              const far = nearestAlong(o.road.pts, qx, qy).distance;
+              if (far < distance) gap = Math.min(typeof gap === 'number' ? gap : Infinity, distance - o.half);
+            }
+            return gap;
+          };
+          // Along it every 4 px: runs of the same.
+          const n = Math.max(1, Math.ceil(((t1 - t0) * len) / 4));
+          let from = 0;
+          let what = beside(t0);
+          const gaps: number[] = typeof what === 'number' ? [what] : [];
+          const flush = (to: number) => {
+            const [a, b] = [t0 + ((t1 - t0) * from) / n, t0 + ((t1 - t0) * to) / n];
+            const seg = { ax: sx + (ex - sx) * a + ox * out, ay: sy + (ey - sy) * a + oy * out, bx: sx + (ex - sx) * b + ox * out, by: sy + (ey - sy) * b + oy * out };
+            if ((b - a) * len < 0.5) return;
+            if (what === 'wall') edges.parapets.push({ ...seg, r: PARAPET });
+            else if (what !== 'on') edges.joins.push({ ...seg, nx: ox, ny: oy, gap: Math.max(...gaps) + PARAPET_OUT });
+          };
+          for (let k = 1; k <= n; k++) {
+            const now = beside(t0 + ((t1 - t0) * k) / n);
+            const same = now === what || (typeof now === 'number' && typeof what === 'number');
+            if (same) {
+              if (typeof now === 'number') gaps.push(now);
+              continue;
+            }
+            flush(k);
+            [from, what] = [k, now];
+            gaps.length = 0;
+            if (typeof now === 'number') gaps.push(now);
           }
+          flush(n);
         }
       }
     }
-    return walls;
+    this.edgesOf.set(d, edges);
+    return edges;
   }
 }

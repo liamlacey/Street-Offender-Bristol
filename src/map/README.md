@@ -329,6 +329,13 @@ bridge, paving for the rest). The ground under a bridge isn't raised to meet it.
 A road bridge's pavements (worked out as for any road's: see Pavements) are decks of
 their own alongside it, 2.4 m wide and as high as it, paved; the parapets stand
 along their outsides (not between the road and its pavement).
+Where decks lie side by side, within 2.5 m of each other and within 1.5 m of the
+same height (a pavement or cycleway mapped as a bridge of its own beside the
+road's, as on Union Street, Victoria Street, Temple Way and St Philip's Causeway),
+they're joined: no parapet between them, the gap paved over (drawn, and a deck
+to drive or walk on), so the only parapets are along the outsides of the lot.
+Where one runs within another (a path mapped down a road's pavement), there's no
+edge between them at all.
 
 A bridge is often mapped running on past what it spans, over its abutments and
 on into a junction (Commercial Road's by the Louisiana). There it's on the

@@ -15,7 +15,7 @@ import { drawCarParks, drawHumps, drawLaneFills, drawLanes, drawPaint } from './
 import { newCanvas } from './canvas';
 import { Surface, surfacePaint } from './surface';
 import { type ChunkIndex, lineLength, offsetLine, pointAlong, shadowOffset, subPolyline } from './world';
-import { type Deck, Decks, waterOf } from './decks';
+import { type Deck, type DeckEdges, Decks, waterOf } from './decks';
 import { Terrain } from './terrain';
 
 type Ctx = CanvasRenderingContext2D;
@@ -219,23 +219,38 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
  * (tarmac and a centre line for a road, the path's paving or planks for a
  * footbridge or jetty), in map px.
  */
-export function drawDeck(ctx: Ctx, r: Road, palette: Palette, raised?: [number, number][]): void {
+export function drawDeck(ctx: Ctx, r: Road, palette: Palette, raised?: [number, number][], edges?: DeckEdges): void {
   ctx.lineJoin = 'round';
   ctx.lineCap = 'butt';
   const vehicle = VEHICLE_ROADS.has(r.kind) && r.kind !== 'track';
-  // Stone parapets, with a dark edge to show they stand up off the deck: along both sides, or (a road
-  // bridge with pavements, which are decks of their own) only where there's no pavement; a pavement's on its outside.
-  const sides = r.pavementOf ? [r.pavementOf.side] : ([1, -1] as const).filter((side) => !r.pavement || r.pavement === (side === 1 ? 'right' : 'left'));
-  for (const pts of raised ? raised.map(([a, b]) => subPolyline(r.pts, a, b)).filter((p) => p.length >= 4) : [r.pts]) {
-    if (sides.length === 2) {
-      stroke(ctx, pts, '#3f3a34', r.width + 10);
-      stroke(ctx, pts, '#b9ae99', r.width + 7);
-      stroke(ctx, pts, 'rgba(0,0,0,0.35)', r.width + 2);
-    } else {
-      for (const side of sides) {
-        stroke(ctx, offsetLine(pts, side * (r.width / 2 + 2.5)), '#3f3a34', 5);
-        stroke(ctx, offsetLine(pts, side * (r.width / 2 + 1.75)), '#b9ae99', 3.5);
-        stroke(ctx, offsetLine(pts, side * (r.width / 2 + 0.5)), 'rgba(0,0,0,0.35)', 1);
+  if (edges) {
+    // Its sides as the deck has them (see Decks.edges): the gap to the deck beside it paved, and its parapets where it has them.
+    ctx.lineCap = 'round';
+    for (const j of edges.joins) {
+      const h = j.gap / 2;
+      stroke(ctx, [j.ax + j.nx * (h - 1), j.ay + j.ny * (h - 1), j.bx + j.nx * (h - 1), j.by + j.ny * (h - 1)], palette.pavement, j.gap + 2);
+    }
+    for (const w of edges.parapets) {
+      const along = [w.ax, w.ay, w.bx, w.by];
+      stroke(ctx, along, '#3f3a34', 5);
+      stroke(ctx, along, '#b9ae99', 3.5);
+    }
+    ctx.lineCap = 'butt';
+  } else {
+    // Stone parapets, with a dark edge to show they stand up off the deck: along both sides, or (a road
+    // bridge with pavements, which are decks of their own) only where there's no pavement; a pavement's on its outside.
+    const sides = r.pavementOf ? [r.pavementOf.side] : ([1, -1] as const).filter((side) => !r.pavement || r.pavement === (side === 1 ? 'right' : 'left'));
+    for (const pts of raised ? raised.map(([a, b]) => subPolyline(r.pts, a, b)).filter((p) => p.length >= 4) : [r.pts]) {
+      if (sides.length === 2) {
+        stroke(ctx, pts, '#3f3a34', r.width + 10);
+        stroke(ctx, pts, '#b9ae99', r.width + 7);
+        stroke(ctx, pts, 'rgba(0,0,0,0.35)', r.width + 2);
+      } else {
+        for (const side of sides) {
+          stroke(ctx, offsetLine(pts, side * (r.width / 2 + 2.5)), '#3f3a34', 5);
+          stroke(ctx, offsetLine(pts, side * (r.width / 2 + 1.75)), '#b9ae99', 3.5);
+          stroke(ctx, offsetLine(pts, side * (r.width / 2 + 0.5)), 'rgba(0,0,0,0.35)', 1);
+        }
       }
     }
   }

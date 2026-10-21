@@ -293,6 +293,23 @@ describe('Decks', () => {
     expect(river.shadowAt(d, 70)).toBeLessThan(SHADOW_HEIGHT);
   });
 
+  it('joins a pavement mapped as a bridge of its own beside a road\'s: no parapets between them, the gap paved over', () => {
+    // A road 10 m wide along y = 0, a pavement 2 m wide 1.5 m off its side (its middle at y = 60).
+    const road: Road = { kind: 'primary', width: 80, pts: [0, 0, 800, 0], bridge: true };
+    const side: Road = { kind: 'footway', width: 16, pts: [0, 60, 800, 60], bridge: true };
+    /** The parapets' lines (y) across the middle. */
+    const lines = (d: Decks) => d.parapets().filter((w) => w.ax < 400 && w.bx > 400 || w.bx < 400 && w.ax > 400).map((w) => Math.round(w.ay));
+    const joined = new Decks([road, side], () => 0);
+    expect(lines(joined).sort((a, b) => a - b)).toEqual([-42, 70]);
+    expect(joined.edges(joined.decks[0]).joins.length).toBeGreaterThan(0);
+    // In the gap, it's on a deck.
+    expect(joined.over(400, 46)).not.toBeNull();
+    // The pavement 5 m higher: not joined, a parapet each side of both.
+    const high = new Decks([road, { ...side, deck: Array(51).fill(40) }], () => 0);
+    expect(lines(high)).toHaveLength(4);
+    expect(high.over(400, 46)).toBeNull();
+  });
+
   it('finds Park Street\'s bridge over Frogmore Street in Bristol', () => {
     const bristol = new Decks(map.roads, () => 0);
     expect(bristol.decks.some((d) => d.road.name === 'Park Street')).toBe(true);

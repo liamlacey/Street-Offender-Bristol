@@ -77,7 +77,7 @@ export class DeckLayer {
     const texture = this.scene.textures.createCanvas(key, w, h)!;
     const ctx = texture.context;
     ctx.translate(-px, -py);
-    drawDeck(ctx, deck.road, this.palette, this.decks.raised(deck));
+    drawDeck(ctx, deck.road, this.palette, this.decks.raised(deck), this.decks.edges(deck));
     texture.refresh();
     // Each corner at the deck's height where it is (beyond its ends, the end's height).
     const height = (x: number, y: number) => this.decks.height(deck, nearestAlong(deck.road.pts, x, y).along);
