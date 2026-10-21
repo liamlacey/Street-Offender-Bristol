@@ -35,25 +35,57 @@ describe('street life', () => {
     expect(world.loose.filter((l) => l.kind === 'foodcart').length).toBe(life.carts.length);
   });
 
+  it("puts the shops' A-boards out on the busy streets, in front of them, and the market stalls in rows in St Nicholas Market", () => {
+    expect(life.boards.length).toBeGreaterThan(10);
+    for (const b of life.boards) expect(map.buildings.some((o) => o.solid && !o.bottom && pointInRing(b.x, b.y, o.rings[0]))).toBe(false);
+    const nicks = (map.markets ?? []).find((m) => m.name === 'Saint Nicholas Market');
+    expect(nicks).toBeDefined();
+    const inNicks = life.stalls.filter((s) => pointInRing(s.x, s.y, nicks!.ring));
+    expect(inNicks.length).toBeGreaterThan(4);
+    for (const s of life.stalls) for (const o of life.stalls) if (o !== s) expect(Math.hypot(o.x - s.x, o.y - s.y)).toBeGreaterThanOrEqual(3 * M - 0.5);
+    const world = buildWorld(map);
+    expect(world.loose.filter((l) => l.kind === 'stall').length).toBe(life.stalls.length);
+    expect(world.loose.filter((l) => l.kind === 'aboard').length).toBe(life.boards.length);
+  });
+
+  it('has charity fundraisers in twos, and Big Issue sellers, catching passers-by one at a time', () => {
+    const world = buildWorld(map);
+    const people = new People(map, { rand: seeded(5), seats: world.loose as never });
+    for (const act of ['charity', 'bigissue'] as const) {
+      // (A pitch that's taken: four in five are.)
+      const pitch = life.pitches.find((p) => p.act === act && Math.abs(Math.round(p.x + p.y)) % 5 !== 0)!;
+      expect(pitch).toBeDefined();
+      const view = { x0: pitch.x + 100, y0: pitch.y - 140, x1: pitch.x + 700, y1: pitch.y + 140 };
+      people.populate({ x0: pitch.x + 900, y0: pitch.y + 900, x1: pitch.x + 1000, y1: pitch.y + 1000 }, true);
+      people.populate(view, true);
+      for (let t = 0; t < 60; t += 1 / 30) people.update(1 / 30, view, nowhere, [], () => 'red', () => true);
+      const workers = people.people.filter((p) => p.mode === 'perform' && p.act === act && Math.hypot(p.x - pitch.x, p.y - pitch.y) < 4 * M);
+      expect(workers.length).toBe(act === 'charity' ? 2 : 1);
+      expect(people.people.filter((p) => p.gather === workers[0].gather && p.mode !== 'perform').length).toBeLessThanOrEqual(1);
+    }
+  });
+
   it('has a performer with a crowd watching, a vendor at each cart with a queue, and people joining them; pigeons that fly off from a car', () => {
     const world = buildWorld(map);
     const people = new People(map, { rand: seeded(11), seats: world.loose as never });
-    const pitch = life.pitches[0];
+    const pitch = life.pitches.find((p) => p.act !== 'charity' && p.act !== 'bigissue' && Math.abs(Math.round(p.x + p.y)) % 5 !== 0)!;
     const cart = life.carts[0];
     const flock = life.flocks[0];
     const around = (x: number, y: number) => ({ x0: x - 300, y0: y - 140, x1: x + 300, y1: y + 140 });
     // Somewhere else first (out of sight of them all), then each comes into view.
-    for (const [x, y] of [[pitch.x, pitch.y], [cart.x, cart.y]]) {
+    const visit = (x: number, y: number) => {
       people.populate({ x0: x + 900, y0: y + 900, x1: x + 1000, y1: y + 1000 }, true);
       people.populate(around(x + 400, y), true);
       for (let t = 0; t < 30; t += 1 / 30) people.update(1 / 30, around(x + 400, y), nowhere, [], () => 'red', () => true);
-    }
-    const performer = people.people.find((p) => p.mode === 'perform');
+    };
+    visit(pitch.x, pitch.y);
+    const performer = people.people.find((p) => p.mode === 'perform' && Math.hypot(p.x - pitch.x, p.y - pitch.y) < 1);
     expect(performer).toBeDefined();
     const crowd = people.people.filter((p) => p.gather === performer!.gather && p !== performer);
     expect(crowd.length).toBeGreaterThanOrEqual(2);
     for (const p of crowd.filter((q) => q.mode === 'stand')) expect(Math.hypot(p.x - performer!.x, p.y - performer!.y)).toBeLessThan(4.5 * M);
-    expect(people.people.some((p) => p.mode === 'vend')).toBe(true);
+    visit(cart.x, cart.y);
+    expect(people.people.some((p) => p.mode === 'vend' && Math.hypot(p.x - cart.x, p.y - cart.y) < 2 * M)).toBe(true);
 
     // The pigeons: pecking about, till a car comes through fast.
     people.populate({ x0: flock.x + 900, y0: flock.y + 900, x1: flock.x + 1000, y1: flock.y + 1000 }, true);

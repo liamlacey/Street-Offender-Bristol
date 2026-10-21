@@ -60,6 +60,9 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
   trolley: { r: 2.5, length: 8, invMass: 9 },
   // A food cart: on wheels, but heavy (a stove, a fridge).
   foodcart: { r: 6, length: 13, invMass: 1.2 },
+  // A market stall (a canopy over a trestle table, and what's on it); and a shop's A-board, light.
+  stall: { r: 9, length: 24, invMass: 0.8 },
+  aboard: { r: 2, length: 5, invMass: 14 },
 };
 
 /** A tree trunk's radius, px. */
@@ -573,12 +576,16 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
       fixed.push({ ...p, level });
     }
   });
-  // The food carts on the busy pedestrian streets and squares (see streetLife.ts).
-  for (const c of (yield* streetLifeWork(map)).carts) {
-    const l = LOOSE.foodcart!;
-    const p = { kind: 'foodcart' as const, x: c.x, y: c.y };
-    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: c.angle, spin: 0, moved: false, level: 0, home: homeOf(p), variant: c.kind });
-  }
+  // The food carts on the busy pedestrian streets and squares, the market stalls (along their rows), and the A-boards (see streetLife.ts).
+  const life = yield* streetLifeWork(map);
+  const add = (kind: 'foodcart' | 'stall' | 'aboard', x: number, y: number, angle: number, variant?: number) => {
+    const l = LOOSE[kind]!;
+    const p = { kind, x, y };
+    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle, spin: 0, moved: false, level: 0, home: homeOf(p), ...(variant === undefined ? {} : { variant }) });
+  };
+  for (const c of life.carts) add('foodcart', c.x, c.y, c.angle, c.kind);
+  for (const s of life.stalls) add('stall', s.x, s.y, s.angle - Math.PI / 2, s.kind);
+  for (const b of life.boards) add('aboard', b.x, b.y, b.angle);
   // The trolleys in the big shops' car parks' shelters (more than half full, each its own way).
   for (const rows of trolleyRows(map)) {
     for (const [x, y, angle, count] of rows.slice(1)) {

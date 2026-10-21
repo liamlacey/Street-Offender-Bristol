@@ -389,6 +389,58 @@ export function createArt(scene: Phaser.Scene): void {
       circle(ctx, cx, cy, 0.8, '#3a3a3a');
     });
   });
+  // The market stalls' canopies, from above (3 m along x, 2.5 m deep along y, the front at the bottom): a peaked roof, its four faces shaded, a valance along the front.
+  const canopies: [string, string][] = [['#e8e4da', '#c9c3b4'], ['#2f6db0', '#e8eef5'], ['#c83a32', '#f2ece2'], ['#3f8a4a', '#eef2e8'], ['#e0a53a', '#f6efe0'], ['#7a4a8a', '#eee8f2']];
+  canopies.forEach(([main, stripe], k) => {
+    canvasTexture(scene, `${TEX.prop('stall')}-${k}`, 24, 20, (ctx) => {
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.fillRect(1.2, 1.2, 23, 19);
+      const face = (pts: number[], shade: number) => {
+        ctx.fillStyle = main;
+        ctx.beginPath();
+        ctx.moveTo(pts[0], pts[1]);
+        for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = `rgba(0,0,0,${shade})`;
+        ctx.fill();
+      };
+      face([0, 0, 24, 0, 16, 10, 8, 10], 0.12);
+      face([24, 0, 24, 20, 16, 10], 0.05);
+      face([0, 20, 24, 20, 16, 10, 8, 10], 0);
+      face([0, 0, 8, 10, 0, 20], 0.18);
+      ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+      ctx.lineWidth = 0.4;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(8, 10);
+      ctx.lineTo(0, 20);
+      ctx.moveTo(24, 0);
+      ctx.lineTo(16, 10);
+      ctx.lineTo(24, 20);
+      ctx.moveTo(8, 10);
+      ctx.lineTo(16, 10);
+      ctx.stroke();
+      // The valance along its front, scalloped and striped.
+      for (let x = 0; x < 24; x += 3) {
+        ctx.fillStyle = (x / 3) % 2 ? stripe : main;
+        ctx.fillRect(x, 18.4, 3, 1.6);
+      }
+    });
+  });
+  // A shop's A-board from above: its two boards tented over, chalked.
+  canvasTexture(scene, TEX.prop('aboard'), 5, 4, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(0.6, 0.6, 4.4, 3.4);
+    roundRect(ctx, 0, 0, 4.6, 3.4, 0.3, '#6b4a2e');
+    ctx.fillStyle = '#23282a';
+    ctx.fillRect(0.4, 0.3, 3.8, 1.2);
+    ctx.fillRect(0.4, 1.9, 3.8, 1.2);
+    ctx.fillStyle = '#e8e4d8';
+    ctx.fillRect(0.8, 0.6, 2.4, 0.3);
+    ctx.fillStyle = '#f2c94c';
+    ctx.fillRect(0.8, 2.3, 1.8, 0.3);
+  });
   // A dead traffic light: no lamp lit.
   canvasTexture(scene, TEX.light('off'), 12, 16, (ctx) => {
     circle(ctx, 6, 2.5, 2.2, '#2a2d31');

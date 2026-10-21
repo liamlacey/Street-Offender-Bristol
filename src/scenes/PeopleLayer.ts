@@ -138,6 +138,25 @@ export function performerTexture(scene: Phaser.Scene, look: number, act: Act, fr
     ctx.translate(1, 1);
     person(ctx, look, 'stand');
     ctx.restore();
+    if (act === 'charity' || act === 'bigissue') {
+      // A tabard over their top (a charity's bright colour; the Big Issue's red), and a clipboard or the magazine held out.
+      const tabard = act === 'bigissue' ? '#d71920' : ['#1e9be0', '#7ac143', '#e6007e', '#f39200'][look % 4];
+      ellipse(6, 6, 1.35, 2.5, tabard);
+      ellipse(6.2, 6, 1.2, 1.15, clothes(look).hair);
+      ellipse(7.15, 6, 0.4, 0.75, clothes(look).skin);
+      if (act === 'charity') {
+        ctx.fillStyle = '#5a4a3a';
+        ctx.fillRect(7.4, 6.6, 1.6, 2.1);
+        ctx.fillStyle = '#f4f4f0';
+        ctx.fillRect(7.6, 6.9, 1.2, 1.6);
+      } else {
+        ctx.fillStyle = '#d71920';
+        ctx.fillRect(7.5, 4.2, 1.5, 1.9);
+        ctx.fillStyle = '#f4f4f0';
+        ctx.fillRect(7.7, 4.4, 1.1, 0.5);
+      }
+      return;
+    }
     if (act === 'statue') {
       // Painted all over: silver.
       ctx.globalCompositeOperation = 'source-atop';
@@ -176,7 +195,7 @@ export function performerTexture(scene: Phaser.Scene, look: number, act: Act, fr
 }
 
 /** How many frames each act has. */
-export const ACT_FRAMES: Record<Act, number> = { guitar: 2, violin: 2, drums: 2, juggler: 3, statue: 1 };
+export const ACT_FRAMES: Record<Act, number> = { guitar: 2, violin: 2, drums: 2, juggler: 3, statue: 1, charity: 1, bigissue: 1 };
 
 /** What's on the ground in front of a performer: an open guitar case (with coins in it), or a hat. */
 function takings(scene: Phaser.Scene, act: Act): string {
@@ -310,7 +329,7 @@ export class PeopleLayer {
     // The performers' takings, on the ground in front of them.
     const out = new Set<Gather>();
     for (const g of this.people.pitches) {
-      if (!g.host || g.host.mode !== 'perform' || !g.act || g.x < view.left - pad || g.x > view.right + pad || g.y < view.top - pad || g.y > view.bottom + pad) continue;
+      if (!g.host || g.host.mode !== 'perform' || !g.act || g.act === 'charity' || g.act === 'bigissue' || g.x < view.left - pad || g.x > view.right + pad || g.y < view.top - pad || g.y > view.bottom + pad) continue;
       out.add(g);
       let t = this.pitches.get(g);
       if (!t) {
@@ -337,7 +356,8 @@ export class PeopleLayer {
         const key = pigeonTexture(this.scene, pose);
         let im = this.birds.get(b);
         if (!im) {
-          im = this.scene.add.image(0, 0, key).setScale(SIZE / ART_SCALE);
+          // (Bigger than life, as the people are, and more so: they're small.)
+          im = this.scene.add.image(0, 0, key).setScale((SIZE * 1.7) / ART_SCALE);
           this.birds.set(b, im);
         } else if (im.texture.key !== key) im.setTexture(key);
         const lift = perspective.lift(this.base(b.x, b.y, 0) + 0.2 * 8 + b.z);

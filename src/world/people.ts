@@ -132,8 +132,9 @@ export interface Gather {
   /** Which way the performer faces (the crowd's in front), or the cart's serving side. */
   angle: number;
   act?: Act;
-  /** The cart (the scene's loose thing). */
+  /** The cart, or the market stall (the scene's loose thing). */
   cart?: Trolley;
+  stall?: boolean;
   /** The performer or the vendor there, if there is one. */
   host: Person | null;
 }
@@ -407,8 +408,12 @@ export class People {
     // The food carts (the same carts as before, where they were: their vendors and queues with them).
     const old = this.carts;
     this.carts = (seats as (Seat & Partial<Trolley>)[])
-      .filter((t): t is Seat & Trolley => t.kind === 'foodcart' && !t.gone)
-      .map((cart) => old.find((g) => g.cart === cart) ?? { kind: 'cart', x: cart.x, y: cart.y, angle: cart.angle, cart, host: null });
+      .filter((t): t is Seat & Trolley => (t.kind === 'foodcart' || t.kind === 'stall') && !t.gone)
+      .map((cart) => {
+        const stall = cart.kind === 'stall';
+        // (A stall's along its row: it faces out of it.)
+        return old.find((g) => g.cart === cart) ?? { kind: 'cart' as const, x: cart.x, y: cart.y, angle: stall ? cart.angle + Math.PI / 2 : cart.angle, cart, host: null, ...(stall ? { stall } : {}) };
+      });
     for (const p of this.people) {
       const g = p.gather;
       if (g?.kind !== 'cart' || this.carts.includes(g)) continue;
@@ -1078,10 +1083,7 @@ export class People {
           this.shopping(p, dt);
           break;
         case 'perform':
-          // (Playing, juggling, or still as a statue.)
-          p.speed = 0;
-          if (p.act !== 'statue') p.step = (p.step + dt * (p.act === 'juggler' ? 1.6 : 2.2)) % 1;
-          if (p.gather) p.angle = p.gather.angle;
+          this.perform(p, dt);
           break;
         case 'vend':
           this.vend(p);
@@ -1619,9 +1621,14 @@ export class People {
     return [g.x + Math.cos(a) * d, g.y + Math.sin(a) * d];
   }
 
-  /** Where the `k`th in a cart's queue stands: out from its serving side, one behind another. */
+  /** Where the `k`th in a cart's queue stands: out from its serving side, one behind another (at a stall, side by side along its front). */
   private inQueue(g: Gather, k: number): [number, number] {
     const [x, y] = this.placeOf(g);
+    if (g.stall) {
+      const [ux, uy] = [Math.cos(g.angle), Math.sin(g.angle)];
+      const along = (k - 1) * 0.9 * M + (this.rand() - 0.5) * 0.3 * M;
+      return [x + ux * 1.8 * M - uy * along, y + uy * 1.8 * M + ux * along];
+    }
     const d = 1.5 * M + k * 0.8 * M;
     return [x + Math.cos(g.angle) * d + (this.rand() - 0.5) * 0.25 * M, y + Math.sin(g.angle) * d + (this.rand() - 0.5) * 0.25 * M];
   }
@@ -1643,6 +1650,17 @@ export class People {
         if (p.gone) continue;
         Object.assign(p, { act: g.act, gather: g, angle: g.angle });
         g.host = p;
+        // Charity fundraisers work in twos (a few metres apart); and they, and a Big Issue seller, draw no crowd.
+        if (g.act === 'charity') {
+          // (Either side, wherever's open paving: not a flowerbed, the grass, the water.)
+          const [ax, ay] = [-Math.sin(g.angle), Math.cos(g.angle)];
+          const at = [3, -3, 2, -2].map((d) => [g.x + ax * d * M, g.y + ay * d * M] as const).find(([x, y]) => this.paved(x, y));
+          if (at) {
+            const q = this.make(at[0], at[1], 'perform');
+            Object.assign(q, { act: 'charity', gather: g, angle: g.angle });
+          }
+        }
+        if (g.act === 'charity' || g.act === 'bigissue') continue;
         for (let k = (g.act === 'statue' ? 2 : 3) + Math.floor(this.rand() * 6); k > 0; k--) {
           const [x, y] = this.inCrowd(g);
           const q = this.make(x, y, 'stand');
@@ -1650,7 +1668,8 @@ export class People {
         }
       } else {
         const [ux, uy] = [Math.cos(g.angle), Math.sin(g.angle)];
-        const p = this.make(gx - ux * 1.3 * M, gy - uy * 1.3 * M, 'vend');
+        const back = (g.stall ? 1.8 : 1.3) * M;
+        const p = this.make(gx - ux * back, gy - uy * back, 'vend');
         if (p.gone) continue;
         Object.assign(p, { act: 'vendor', gather: g, angle: g.angle });
         g.host = p;
@@ -1670,12 +1689,17 @@ export class People {
       const [gx, gy] = this.placeOf(g);
       if (Math.abs(gx - p.x) > 7 * M || Math.abs(gy - p.y) > 7 * M || Math.hypot(gx - p.x, gy - p.y) > 7 * M) continue;
       const n = this.gathered(g).length;
-      if (g.kind === 'pitch' ? n >= 12 || this.rand() > 0.4 : n >= 4 || this.rand() > 0.25) continue;
-      [p.tx, p.ty] = g.kind === 'pitch' ? this.inCrowd(g) : this.inQueue(g, n);
+      // (Stopped by a charity fundraiser, or buying the Big Issue: one at a time, now and then, for a moment, close.)
+      const asked = g.act === 'charity' || g.act === 'bigissue';
+      if (asked ? n >= 1 || this.rand() > 0.12 : g.kind === 'pitch' ? n >= 12 || this.rand() > 0.4 : n >= (g.stall ? 3 : 4) || this.rand() > (g.stall ? 0.35 : 0.25)) continue;
+      if (asked) {
+        const host = g.host;
+        [p.tx, p.ty] = [host.x + Math.cos(host.angle) * 1.1 * M, host.y + Math.sin(host.angle) * 1.1 * M];
+      } else [p.tx, p.ty] = g.kind === 'pitch' ? this.inCrowd(g) : this.inQueue(g, n);
       if (!this.walkable(p.tx, p.ty, p.level)) continue;
       p.mode = 'join';
       p.gather = g;
-      p.timer = g.kind === 'pitch' ? 15 + this.rand() * 60 : 8 + this.rand() * 15 + n * 8;
+      p.timer = asked ? 6 + this.rand() * 10 : g.kind === 'pitch' ? 15 + this.rand() * 60 : g.stall ? 10 + this.rand() * 25 : 8 + this.rand() * 15 + n * 8;
       return;
     }
   }
@@ -1691,6 +1715,38 @@ export class People {
     let turn = Math.atan2(gy - p.y, gx - p.x) - p.angle;
     turn -= Math.round(turn / (Math.PI * 2)) * Math.PI * 2;
     p.angle += turn * 0.1;
+  }
+
+  /**
+   * Performing: playing, juggling, or still as a statue, facing the crowd;
+   * a charity fundraiser or a Big Issue seller turning to whoever's walking
+   * by, to catch them. With the one they work with gone, off too.
+   */
+  private perform(p: Person, dt: number): void {
+    p.speed = 0;
+    const g = p.gather;
+    if (!g || !g.host) {
+      p.mode = 'walk';
+      return this.rejoin(p);
+    }
+    if (p.act !== 'statue') p.step = (p.step + dt * (p.act === 'juggler' ? 1.6 : 2.2)) % 1;
+    let face = g.angle;
+    if (p.act === 'charity' || p.act === 'bigissue') {
+      let best = 5 * M;
+      for (const q of this.close.get(`${Math.floor(p.x / NEAR_CELL)},${Math.floor(p.y / NEAR_CELL)}`) ?? []) {
+        const d = Math.hypot(q.x - p.x, q.y - p.y);
+        if (q !== p && q.act !== p.act && d < best && (q.mode === 'walk' || q.gather === g)) [best, face] = [d, Math.atan2(q.y - p.y, q.x - p.x)];
+      }
+    }
+    let turn = face - p.angle;
+    turn -= Math.round(turn / (Math.PI * 2)) * Math.PI * 2;
+    p.angle += turn * Math.min(1, dt * 4);
+  }
+
+  /** Whether somewhere's open paving to stand on: not in a flowerbed, on the grass, in the water, a building or on a road. */
+  private paved(x: number, y: number): boolean {
+    if (!this.walkable(x, y, 0) || this.inRoad(x, y, 0.5 * M)) return false;
+    return !this.map.areas.some((a) => (a.kind === 'flowerbed' || a.kind === 'grass' || a.kind === 'water' || a.kind === 'park') && pointInRing(x, y, a.rings[0]));
   }
 
   /** Selling from their cart; knocked about (or smashed), they're off. */

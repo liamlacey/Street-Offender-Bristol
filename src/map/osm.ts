@@ -425,7 +425,9 @@ export type PropKind =
   | 'mooring'
   | 'pump'
   | 'trolley'
-  | 'foodcart';
+  | 'foodcart'
+  | 'stall'
+  | 'aboard';
 
 export interface Prop {
   kind: PropKind;
@@ -509,6 +511,13 @@ export interface GameMap {
   ferries?: FerryRoute[];
   /** The big shops with car parks, where people push trolleys (see stores.ts). */
   stores?: Store[];
+  /** The open-air markets (`amenity=marketplace`, not in a building): their outlines (a point's, 24 m square). Their stalls: see src/world/streetLife.ts. */
+  markets?: Market[];
+}
+
+export interface Market {
+  name?: string;
+  ring: Pts;
 }
 
 /**
@@ -2498,6 +2507,26 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
   // The gateways: their buildings made archways over the roads through them.
   gateways(buildings, roads);
 
+  // The open-air markets: outlines, or round a point.
+  const markets: Market[] = [];
+  const addMarket = (t: Tags, ring: Pts | null) => {
+    if (!ring || ring.length < 6 || !ring.some((v, i) => i % 2 === 0 && inside(v, ring[i + 1]))) return;
+    markets.push({ ...(t.name ? { name: t.name } : {}), ring: roundPts(ring) });
+  };
+  const marketplace = (t: Tags) => t.amenity === 'marketplace' && (!t.building || t.building === 'no');
+  for (const way of data.ways.values()) if (marketplace(way.tags)) addMarket(way.tags, ringOf(way.nodes));
+  for (const rel of data.relations.values()) {
+    if (rel.tags.type !== 'multipolygon' || !marketplace(rel.tags)) continue;
+    const outer = rel.members.filter((m) => m.type === 'way' && m.role !== 'inner').map((m) => data.ways.get(m.ref)?.nodes).filter((w): w is number[] => !!w);
+    for (const r of joinRings(outer)) addMarket(rel.tags, pointsOf(r.slice(0, -1)));
+  }
+  for (const n of data.nodes.values()) {
+    if (!marketplace(n.tags)) continue;
+    const [x, y] = [proj.x(n.lon), proj.y(n.lat)];
+    const h = 12 * PX_PER_METRE;
+    addMarket(n.tags, [x - h, y - h, x + h, y - h, x + h, y + h, x - h, y + h]);
+  }
+
   // The big shops with car parks (see stores.ts), and their trolleys, in their bays.
   const stores = storesOf(data, proj, buildings, buildingTags, areas, roads).filter((s) => inside(s.door[0], s.door[1]));
   for (const s of stores) {
@@ -2539,6 +2568,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     ...(ferries.length ? { ferries } : {}),
     ...(venues.length ? { venues } : {}),
     ...(stores.length ? { stores } : {}),
+    ...(markets.length ? { markets } : {}),
   };
 }
 
