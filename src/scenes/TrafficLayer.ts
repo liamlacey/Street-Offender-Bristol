@@ -17,6 +17,8 @@ export interface TrafficDepths {
   /** You on a bridge: those on the ground below it, and those on it with you. */
   below: number;
   beside: number;
+  /** On a deck under a higher one (you on the ground): under that one. */
+  deckUnder: number;
 }
 
 /**
@@ -37,6 +39,8 @@ export class TrafficLayer {
     /** Whether a point's at the end of a bridge, where its deck meets the road (within `reach` px). */
     private readonly atDeckEnd: (x: number, y: number, reach: number) => boolean,
     private readonly depths: TrafficDepths,
+    /** Whether something on a deck at (x, y) is under a higher deck there (drawn under it). */
+    private readonly covered: (x: number, y: number) => boolean = () => false,
   ) {
     this.lamps = [scene.add.graphics(), scene.add.graphics()];
   }
@@ -78,7 +82,7 @@ export class TrafficLayer {
         const lift = perspective.lift(this.base(v.x, v.y, v.level));
         const [x, y] = [perspective.x(v.x, lift), perspective.y(v.y, lift)];
         const onDeck = up(v);
-        const d = depthOf(onDeck);
+        const d = v.level === 1 && this.covered(v.x, v.y) ? (level === 0 ? this.depths.deckUnder : this.depths.below) : depthOf(onDeck);
         // (A cyclist drawn as big as the people are, a little bigger than life, to be made out on a phone.)
         const big = v.kind === 'bike' ? BIKE_SIZE : 1;
         s.body.setPosition(x, y).setRotation(v.angle).setDepth(d).setScale(big / ART_SCALE);

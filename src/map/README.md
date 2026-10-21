@@ -522,7 +522,11 @@ tunnel doesn't.
 
 **Bridges**: a railway bridge (`bridge=*`) is a deck like a road's (see Levels): the
 LIDAR measures it, it has parapets where it's up off the ground, you drive onto it
-only at its ends, and under it from the road below.
+only at its ends, and under it from the road below. Each track's mapped as a bridge
+of its own: those side by side, within 4.5 m of each other (not a road's 2.5 m), are
+one deck, the ballast laid between them (Temple Meads' bridges over the Feeder). A
+deck's drawn over any lower one beneath it, and whoever's on that one (the Harbour
+Walkway under the railway's bridge) under it.
 
 **Tunnels**: level 2, under everything (`Decks` with `tunnels`, `src/world/decks.ts`).
 In and out only at its ends (its portals, where it meets the track in the open: an end

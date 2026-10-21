@@ -39,6 +39,10 @@ const PARAPET = 1.5;
  * own a little way off): no parapet between them, the gap paved over.
  */
 const JOIN = 2.5 * 8;
+/** Railway tracks side by side on a bridge are on one deck (its tracks further apart than a road and its pavement), px. */
+const JOIN_RAIL = 4.5 * 8;
+/** How far apart two decks side by side can be and be joined. */
+const joinOf = (a: Deck, b: Deck) => (a.road.kind === 'rail' && b.road.kind === 'rail' ? JOIN_RAIL : JOIN);
 const LEVEL = 1.5 * 8;
 
 /** One side of a deck: a parapet along it, or the gap to the deck beside it paved over (`gap` px wide, out along `nx`, `ny`). */
@@ -181,16 +185,31 @@ export class Decks {
     // (Or in the gap between two alongside each other, at much the same height: it's paved over. See JOIN.)
     let near: { deck: Deck; along: number; out: number }[] = [];
     for (const deck of this.decks) {
-      if (x < deck.x0 - JOIN || x > deck.x1 + JOIN || y < deck.y0 - JOIN || y > deck.y1 + JOIN) continue;
+      if (x < deck.x0 - JOIN_RAIL || x > deck.x1 + JOIN_RAIL || y < deck.y0 - JOIN_RAIL || y > deck.y1 + JOIN_RAIL) continue;
       const { along, distance } = nearestAlong(deck.road.pts, x, y);
       if (distance <= deck.half) return { deck, along };
-      if (distance <= deck.half + JOIN) near.push({ deck, along, out: distance - deck.half });
+      if (distance <= deck.half + JOIN_RAIL) near.push({ deck, along, out: distance - deck.half });
     }
     if (near.length < 2) return null;
     near = near.sort((a, b) => a.out - b.out);
     const [a, b] = near;
-    if (a.out + b.out > JOIN + 2 || Math.abs(this.height(a.deck, a.along) - this.height(b.deck, b.along)) > LEVEL) return null;
+    if (a.out + b.out > joinOf(a.deck, b.deck) + 2 || Math.abs(this.height(a.deck, a.along) - this.height(b.deck, b.along)) > LEVEL) return null;
     return { deck: a.deck, along: a.along };
+  }
+
+  /**
+   * Whether something on a deck at (x, y) is under another deck there, well
+   * above it (a path along the river under the railway's bridge): the lowest
+   * deck there's taken to be the one it's on.
+   */
+  covered(x: number, y: number): boolean {
+    const heights: number[] = [];
+    for (const deck of this.decks) {
+      if (x < deck.x0 || x > deck.x1 || y < deck.y0 || y > deck.y1) continue;
+      const { along, distance } = nearestAlong(deck.road.pts, x, y);
+      if (distance <= deck.half + 2) heights.push(this.height(deck, along));
+    }
+    return heights.length > 1 && Math.max(...heights) - Math.min(...heights) > 3 * 8;
   }
 
   /** The deck's height `along` px along it, px. */
@@ -347,7 +366,7 @@ export class Decks {
     const p = d.road.pts;
     const out = d.half + PARAPET_OUT;
     const raised = this.raised(d);
-    const others = this.decks.filter((o) => o !== d && o.x1 > d.x0 - JOIN && o.x0 < d.x1 + JOIN && o.y1 > d.y0 - JOIN && o.y0 < d.y1 + JOIN);
+    const others = this.decks.filter((o) => o !== d && o.x1 > d.x0 - JOIN_RAIL && o.x0 < d.x1 + JOIN_RAIL && o.y1 > d.y0 - JOIN_RAIL && o.y0 < d.y1 + JOIN_RAIL);
     let run = 0;
     for (let i = 0; i + 3 < p.length; i += 2) {
       const [sx, sy, ex, ey] = [p[i], p[i + 1], p[i + 2], p[i + 3]];
@@ -369,12 +388,13 @@ export class Decks {
             const z = this.height(d, start + len * t);
             let gap: number | 'wall' | 'on' = 'wall';
             for (const o of others) {
-              if (x < o.x0 - JOIN || x > o.x1 + JOIN || y < o.y0 - JOIN || y > o.y1 + JOIN) continue;
+              const join = joinOf(d, o);
+              if (x < o.x0 - join || x > o.x1 + join || y < o.y0 - join || y > o.y1 + join) continue;
               const { along, distance } = nearestAlong(o.road.pts, x, y);
-              if (distance > o.half + JOIN || Math.abs(this.height(o, along) - z) > LEVEL) continue;
+              if (distance > o.half + join || Math.abs(this.height(o, along) - z) > LEVEL) continue;
               if (distance <= o.half + PARAPET_OUT) return 'on';
               // (The gap's across to it: out from here, the way this side faces.)
-              const [qx, qy] = [x + ox * JOIN, y + oy * JOIN];
+              const [qx, qy] = [x + ox * join, y + oy * join];
               const far = nearestAlong(o.road.pts, qx, qy).distance;
               if (far < distance) gap = Math.min(typeof gap === 'number' ? gap : Infinity, distance - o.half);
             }

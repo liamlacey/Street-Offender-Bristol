@@ -274,9 +274,15 @@ export class PeopleLayer {
     private people: People,
     /** The height of what's underfoot at a point on a level (the ground, a bridge's deck), px. */
     private readonly base: (x: number, y: number, level: number) => number,
-    /** Drawn on the ground (under the bridges), and up on the decks. */
-    private readonly depths: { ground: number; deck: number },
+    /** Drawn on the ground (under the bridges), and up on the decks (a function: at (x, y), under a higher deck there, or not). */
+    private readonly depths: { ground: number; deck: number | ((x: number, y: number) => number) },
   ) {}
+
+  /** How deep someone on a deck at (x, y) is drawn. */
+  private deckDepth(x: number, y: number): number {
+    const d = this.depths.deck;
+    return typeof d === 'number' ? d : d(x, y);
+  }
 
   /** The next region's people (see streamer.ts): those carried over keep their pictures. */
   use(people: People): void {
@@ -301,7 +307,7 @@ export class PeopleLayer {
       const lift = perspective.lift(this.base(p.x, p.y, p.level) + (p.mode === 'down' ? 0.2 : p.mode === 'sit' ? 0.8 : 1.2) * 8);
       s.setPosition(perspective.x(p.x, lift), perspective.y(p.y, lift))
         .setRotation(p.angle)
-        .setDepth(p.level === 1 ? this.depths.deck : this.depths.ground);
+        .setDepth(p.level === 1 ? this.deckDepth(p.x, p.y) : this.depths.ground);
     }
     for (const [p, s] of this.sprites) {
       if (seen.has(p)) continue;
@@ -363,7 +369,7 @@ export class PeopleLayer {
         const lift = perspective.lift(this.base(b.x, b.y, 0) + 0.2 * 8 + b.z);
         im.setPosition(perspective.x(b.x, lift), perspective.y(b.y, lift))
           .setRotation(b.angle)
-          .setDepth(b.flying ? this.depths.deck + 1 : this.depths.ground);
+          .setDepth(b.flying ? this.deckDepth(b.x, b.y) + 1 : this.depths.ground);
       }
     }
     for (const [b, im] of this.birds) {

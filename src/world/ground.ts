@@ -241,7 +241,8 @@ export function drawDeck(ctx: Ctx, r: Road, palette: Palette, raised?: [number, 
     ctx.lineCap = 'round';
     for (const j of edges.joins) {
       const h = j.gap / 2;
-      stroke(ctx, [j.ax + j.nx * (h - 1), j.ay + j.ny * (h - 1), j.bx + j.nx * (h - 1), j.by + j.ny * (h - 1)], palette.pavement, j.gap + 2);
+      // (Between railway tracks, the ballast.)
+      stroke(ctx, [j.ax + j.nx * (h - 1), j.ay + j.ny * (h - 1), j.bx + j.nx * (h - 1), j.by + j.ny * (h - 1)], r.kind === 'rail' ? palette.ballast : palette.pavement, j.gap + 2);
     }
     for (const w of edges.parapets) {
       const along = [w.ax, w.ay, w.bx, w.by];

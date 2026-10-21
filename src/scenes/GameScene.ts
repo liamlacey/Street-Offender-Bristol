@@ -370,7 +370,11 @@ export class GameScene extends Phaser.Scene {
         if (kind === 'parapet') this.deckLayer.breakParapet(from, to);
       },
     }, DEPTH.props - 0.1, DEPTH.trees);
-    this.peopleLayer = new PeopleLayer(this, this.people, (x, y, level) => this.surfaceHeight(x, y, level), { ground: DEPTH.props + 0.05, deck: DEPTH.onDeck });
+    this.peopleLayer = new PeopleLayer(this, this.people, (x, y, level) => this.surfaceHeight(x, y, level), {
+      ground: DEPTH.props + 0.05,
+      // (On a path under a higher bridge, under it.)
+      deck: (x, y) => (this.decks.covered(x, y) ? (this.level === 1 ? DEPTH.deckBelow : DEPTH.deckAbove) - 0.01 : DEPTH.onDeck),
+    });
     this.ripples = new WaterRipples(this, this.surfaces, (x, y) => this.groundAt(x, y), DEPTH.ripples);
     this.boatLayer = new BoatLayer(this, this.boats, (x, y) => this.groundAt(x, y), DEPTH.boats);
     // The trains: on the ground just under the car, on a bridge over it, down in a tunnel only seen while you're down there.
@@ -382,7 +386,8 @@ export class GameScene extends Phaser.Scene {
       onDeck: DEPTH.onDeck,
       below: DEPTH.deckBelow - 0.05,
       beside: DEPTH.car - 0.05,
-    });
+      deckUnder: DEPTH.deckAbove - 0.01,
+    }, (x, y) => this.decks.covered(x, y));
     this.enter(region, false);
 
     // Your armoured truck.
@@ -745,9 +750,12 @@ export class GameScene extends Phaser.Scene {
     this.skids.update(view, this.perspective);
     // A bridge is drawn over the car when it's underneath, and under it when it's on top.
     // (And under it at the end of a bridge you're driving onto or off, where the deck meets the road.)
-    this.deckLayer.update(view, this.perspective, (i) =>
-      this.level === 1 || this.decks.atEnd(this.car.x, this.car.y, this.carLength() / 2 + 4, this.decks.decks[i]) ? DEPTH.deckBelow : DEPTH.deckAbove,
-    );
+    // (A deck over another, higher, over it: a path along the river under the railway's bridge is under it.)
+    this.deckLayer.update(view, this.perspective, (i) => {
+      const deck = this.decks.decks[i];
+      const over = this.decks.height(deck, deck.length / 2) / 100_000;
+      return (this.level === 1 || this.decks.atEnd(this.car.x, this.car.y, this.carLength() / 2 + 4, deck) ? DEPTH.deckBelow : DEPTH.deckAbove) + over;
+    });
     // Down in a tunnel: everything above in the dark; the tunnel, and you, over it.
     const under = this.level === 2;
     this.dark.setVisible(under);
@@ -1307,9 +1315,9 @@ export class GameScene extends Phaser.Scene {
     this.people.hits.length = 0;
     // Those out in the road, for the traffic to stop for.
     this.traffic.pedestrians = this.people.inTheRoad().map((p) => ({ id: -100 - p.id, x: p.x, y: p.y, angle: p.angle, r: 0.4 * 8, length: 0.8 * 8, vx: 0, vy: 0, level: p.level }));
-    // (And the trains: the traffic waits for one going over a level crossing.)
+    // (And the trains: the traffic waits for one going over a level crossing. Not one of its own: an id below 0, as people's.)
     for (const c of this.trains.carriages()) {
-      if (Math.abs(c.x - car.x) < view.width + 400 && Math.abs(c.y - car.y) < view.height + 400) this.traffic.pedestrians.push({ id: c.id, x: c.x, y: c.y, angle: c.angle, r: c.r, length: c.length, vx: c.vx, vy: c.vy, level: c.level });
+      if (Math.abs(c.x - car.x) < view.width + 400 && Math.abs(c.y - car.y) < view.height + 400) this.traffic.pedestrians.push({ id: -10_000_000 - c.id, x: c.x, y: c.y, angle: c.angle, r: c.r, length: c.length, vx: c.vx, vy: c.vy, level: c.level });
     }
   }
 
