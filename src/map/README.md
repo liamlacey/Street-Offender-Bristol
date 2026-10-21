@@ -386,10 +386,25 @@ under a building's front, open along its side. The building's walls are taken ou
 wherever they're within 2 m of the path's edge (along it, not just where it crosses
 them), and the building's drawn see-through while the car's under it.
 
-**Archways** (`tunnel=building_passage`: roads, lanes and footpaths through
-buildings). The building's walls are cut open where the road passes through,
-as wide as the road (at least 3.4 m, so a car fits), and the building is drawn
-see-through while the car is under it.
+**Ways into buildings** (`buildingWalls` in `src/world/world.ts`, as each region's
+world is made). Wherever a road or path goes into a solid building, you can go
+along it there. That covers going straight through under an archway, a canopy or
+an overhang, and a building's corner over the edge of the way. OSM often can't
+tell these apart, so they're all treated the same:
+
+- **Openings.** The building's walls are cut away across the way, as wide as it
+  is less 0.4 m. A building only just over a way's edge is left as it is. Archways
+  (`tunnel=building_passage`) are at least 3.4 m wide, so a car fits.
+- **Inside.** Walls along the way's edges keep you to it, not out into the rest of
+  the building. Where ways meet inside, each is open to the others.
+- **Dead ends.** A way that ends inside the building (not where it meets another)
+  is closed off at its end.
+- **Doors.** A way that only comes up to a building, or less than 3 m into it,
+  and stops there (a path to a door, a drive to a garage) leaves it shut.
+- **Bridges.** On the ground, it's the roads and paths. Up on a bridge's deck,
+  it's the bridges too.
+- **Looks.** The walls inside aren't drawn. The building's drawn as it is, and
+  see-through while you're under it.
 
 **Lining up the LIDAR.** OSM is in latitude and longitude (WGS84); the LIDAR is
 on the Ordnance Survey's National Grid. `osgb.ts` converts (Helmert transform to

@@ -230,6 +230,205 @@ export function openings(ax: number, ay: number, bx: number, by: number, passage
   return out;
 }
 
+/** How long the buildings' walls are worked out for between pauses, ms (see worldWork). */
+const BUILDING_STEP = 6;
+
+/** How far in from a way's edge its opening through a building stops, px (a building only just over a way's edge is left as it is). */
+const SLACK = 0.4 * 8;
+
+/** How far either side of its line a way's open through a building, px; an arcade's, its walk under the building's front. */
+function openReach(r: Road): number {
+  return r.arcade ? r.width / 2 + ARCADE_OPEN : Math.max(r.width, r.passage ? ARCHWAY : 0) / 2 - SLACK;
+}
+
+/** A way that goes no further into a building than this, px, and stops there, doesn't open it. */
+const STOPS_SHORT = 3 * 8;
+
+/** Whether a way ends at a building (on its walls, or inside it, not where it meets another way) having gone less than STOPS_SHORT into it. */
+function stopsAt(r: Road, rings: Pts[], joined: Set<string>): boolean {
+  const p = r.pts;
+  const reach = Math.max(openReach(r), 1);
+  const ends = [[p[0], p[1]], [p[p.length - 2], p[p.length - 1]]].filter(([x, y]) => !joined.has(`${x},${y}`) && (insideRings(x, y, rings) || ringsDistance(x, y, rings) < reach));
+  if (!ends.length) return false;
+  // How far of its line is inside (looked at every 2 px, where it's over the building).
+  const [x0, y0, x1, y1] = bounds(rings[0]);
+  let inside = 0;
+  for (let i = 0; i + 3 < p.length; i += 2) {
+    if (Math.max(p[i], p[i + 2]) < x0 || Math.min(p[i], p[i + 2]) > x1 || Math.max(p[i + 1], p[i + 3]) < y0 || Math.min(p[i + 1], p[i + 3]) > y1) continue;
+    const len = Math.hypot(p[i + 2] - p[i], p[i + 3] - p[i + 1]);
+    const n = Math.max(1, Math.ceil(len / 2));
+    for (let k = 0; k < n; k++) if (insideRings(p[i] + ((p[i + 2] - p[i]) * (k + 0.5)) / n, p[i + 1] + ((p[i + 3] - p[i + 1]) * (k + 0.5)) / n, rings)) inside += len / n;
+  }
+  return inside < STOPS_SHORT;
+}
+
+/** How far a point is from a building's walls, px. */
+function ringsDistance(x: number, y: number, rings: Pts[]): number {
+  let best = Infinity;
+  for (const ring of rings) {
+    for (let i = 0; i < ring.length; i += 2) {
+      const j = (i + 2) % ring.length;
+      const [ax, ay, bx, by] = [ring[i], ring[i + 1], ring[j], ring[j + 1]];
+      const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
+      const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2)) : 0;
+      best = Math.min(best, Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y));
+    }
+  }
+  return best;
+}
+
+/** How far a point is from a way's line, if it's within `max` px (Infinity if not). */
+function wayDistance(x: number, y: number, r: Road, max: number): number {
+  let best = Infinity;
+  const p = r.pts;
+  for (let i = 0; i + 3 < p.length; i += 2) {
+    const [ax, ay, bx, by] = [p[i], p[i + 1], p[i + 2], p[i + 3]];
+    if (x < Math.min(ax, bx) - max || x > Math.max(ax, bx) + max || y < Math.min(ay, by) - max || y > Math.max(ay, by) + max) continue;
+    const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
+    const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2)) : 0;
+    best = Math.min(best, Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y));
+  }
+  return best;
+}
+
+/** Whether a point's inside a building (its rings, even-odd: in a courtyard isn't). */
+function insideRings(x: number, y: number, rings: Pts[]): boolean {
+  let inside = false;
+  for (const ring of rings) {
+    for (let i = 0, n = ring.length, j = n - 2; i < n; j = i, i += 2) {
+      const [xi, yi, xj, yj] = [ring[i], ring[i + 1], ring[j], ring[j + 1]];
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/** The stretches of a line from (ax, ay) to (bx, by) where `keep` holds (looked at every `step` px), as segments. */
+function runs(ax: number, ay: number, bx: number, by: number, keep: (x: number, y: number) => boolean, step = 2): Segment[] {
+  const len = Math.hypot(bx - ax, by - ay);
+  const n = Math.max(1, Math.ceil(len / step));
+  const out: Segment[] = [];
+  let start = -1;
+  for (let k = 0; k <= n; k++) {
+    const t = k / n;
+    const kept = keep(ax + (bx - ax) * t, ay + (by - ay) * t);
+    if (kept && start < 0) start = t;
+    if ((!kept || k === n) && start >= 0) {
+      const end = kept ? 1 : (k - 1) / n;
+      if ((end - start) * len > 0.5) out.push({ ax: ax + (bx - ax) * start, ay: ay + (by - ay) * start, bx: ax + (bx - ax) * end, by: ay + (by - ay) * end, r: 0 });
+      start = -1;
+    }
+  }
+  return out;
+}
+
+/**
+ * A building's walls, open wherever a road or path (of `all`, those near it)
+ * goes into it: through it under an archway, a canopy or an overhang, or only
+ * across a corner of it (as mapped, there's often no telling which: it's gone
+ * through, wherever the way is). Not one that only comes up to it (or barely
+ * into it) and stops there, a path to its door (see `stopsAt`). Its walls are
+ * cut away across the way (as wide as it is, less SLACK); inside, walls along
+ * its edges keep you to it (not into the rest of the building), and a way that
+ * ends inside it (`joined` says which points are where ways meet: not those)
+ * is closed off there. An arcade's open along the building's front, as it was.
+ * The walls along the ways inside aren't drawn: the building's drawn as it is
+ * (and see-through while you're under it: see Buildings.ts).
+ */
+export function buildingWalls(rings: Pts[], all: Road[], level: number, joined: Set<string> = new Set()): Wall[] {
+  const out: Wall[] = [];
+  // (Most buildings have no way reaching into them at all: their walls as they are, looked at no further.)
+  const [x0, y0, x1, y1] = bounds(rings[0]);
+  const reaching = all.filter((r) => {
+    const reach = openReach(r);
+    if (reach <= 0) return false;
+    const p = r.pts;
+    for (let i = 0; i + 3 < p.length; i += 2) {
+      if (Math.max(p[i], p[i + 2]) < x0 - reach || Math.min(p[i], p[i + 2]) > x1 + reach || Math.max(p[i + 1], p[i + 3]) < y0 - reach || Math.min(p[i + 1], p[i + 3]) > y1 + reach) continue;
+      return true;
+    }
+    return false;
+  });
+  if (!reaching.length) {
+    for (const ring of rings) for (let i = 0; i < ring.length; i += 2) out.push({ ax: ring[i], ay: ring[i + 1], bx: ring[(i + 2) % ring.length], by: ring[(i + 3) % ring.length], r: 0, level });
+    return out;
+  }
+  // (Not a way that only comes up to it, or barely into it, and stops: a path to its door, a drive to its garage. It stays shut.)
+  const ways = reaching.filter((r) => !stopsAt(r, rings, joined));
+  // (Only the bits of each way near the building are looked at: a road's often far longer than a building's wide.)
+  const local: { of: Road; piece: Road }[] = [];
+  for (const r of ways) {
+    const pad = openReach(r) * 2 + 4;
+    const p = r.pts;
+    let run: number[] | null = null;
+    for (let i = 0; i + 3 < p.length; i += 2) {
+      const over = !(Math.max(p[i], p[i + 2]) < x0 - pad || Math.min(p[i], p[i + 2]) > x1 + pad || Math.max(p[i + 1], p[i + 3]) < y0 - pad || Math.min(p[i + 1], p[i + 3]) > y1 + pad);
+      if (over) (run ??= [p[i], p[i + 1]]).push(p[i + 2], p[i + 3]);
+      else if (run) {
+        local.push({ of: r, piece: { ...r, pts: run } });
+        run = null;
+      }
+    }
+    if (run) local.push({ of: r, piece: { ...r, pts: run } });
+  }
+  const opened = new Set<Road>();
+  const near = (x: number, y: number, except?: Road) => {
+    for (const { of, piece } of local) {
+      if (of === except) continue;
+      const reach = openReach(piece);
+      if (wayDistance(x, y, piece, reach) < reach) return of;
+    }
+    return undefined;
+  };
+  for (const ring of rings) {
+    for (let i = 0; i < ring.length; i += 2) {
+      const j = (i + 2) % ring.length;
+      const [ax, ay, bx, by] = [ring[i], ring[i + 1], ring[j], ring[j + 1]];
+      // (Most walls are nowhere near a way: those are kept whole, without looking along them.)
+      const len = Math.hypot(bx - ax, by - ay);
+      const close = local.filter(({ piece }) => {
+        const reach = openReach(piece) + len / 2;
+        return wayDistance((ax + bx) / 2, (ay + by) / 2, piece, reach) < reach;
+      });
+      if (!close.length) {
+        out.push({ ax, ay, bx, by, r: 0, level });
+        continue;
+      }
+      for (const piece of runs(ax, ay, bx, by, (x, y) => {
+        for (const c of close) {
+          const reach = openReach(c.piece);
+          if (wayDistance(x, y, c.piece, reach) < reach) {
+            opened.add(c.of);
+            return false;
+          }
+        }
+        return true;
+      })) out.push({ ...piece, level });
+    }
+  }
+  // Inside: along the edges of each way that goes in (not an arcade's: it's open along the front), and across its end if it ends there.
+  for (const r of opened) {
+    if (r.arcade) continue;
+    const h = openReach(r);
+    const keep = (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1 && insideRings(x, y, rings) && !near(x, y, r);
+    for (const { piece } of local.filter((l) => l.of === r)) {
+      for (const side of [1, -1]) {
+        const edge = offsetLine(piece.pts, side * h);
+        // (Every 4 px: they're only kept to, never seen.)
+        for (let k = 0; k + 3 < edge.length; k += 2) for (const bit of runs(edge[k], edge[k + 1], edge[k + 2], edge[k + 3], keep, 4)) out.push({ ...bit, level });
+      }
+    }
+    const p = r.pts;
+    for (const [x, y, px, py] of [[p[0], p[1], p[2], p[3]], [p[p.length - 2], p[p.length - 1], p[p.length - 4], p[p.length - 3]]]) {
+      if (joined.has(`${x},${y}`) || !insideRings(x, y, rings)) continue;
+      const len = Math.hypot(x - px, y - py) || 1;
+      const [nx, ny] = [-(y - py) / len, (x - px) / len];
+      for (const piece of runs(x + nx * h, y + ny * h, x - nx * h, y - ny * h, keep)) out.push({ ...piece, level });
+    }
+  }
+  return out;
+}
+
 /** A wall with the archways cut out of it: what's left of it. */
 export function cutWall(s: Segment, passages: Road[]): Segment[] {
   const gaps = openings(s.ax, s.ay, s.bx, s.by, passages).sort((a, b) => a[0] - b[0]);
@@ -260,46 +459,65 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   const terrain = shared ?? new Terrain(map.terrain, map.pxPerMetre, map.ledges);
   const decks = new Decks(map.roads, (x, y) => terrain.at(x, y) * terrain.px, waterOf(map));
   const onDeck = (x: number, y: number) => decks.over(x, y) !== null;
-  const passages = map.roads.filter((r) => r.passage);
-  // (The passages by where they are, in squares: each wall looks only at those near it.)
+  // (The roads and paths by where they are, in squares, each in those its line goes through: each building looks only at those near it.)
   const CELL = 256;
-  const passageGrid = new Map<string, Road[]>();
-  for (const r of passages) {
-    const [x0, y0, x1, y1] = boxOf(r);
-    const pad = Math.max(r.width, ARCHWAY) * 3 + ARCADE_OPEN;
-    for (let cx = Math.floor((x0 - pad) / CELL); cx <= Math.floor((x1 + pad) / CELL); cx++) {
-      for (let cy = Math.floor((y0 - pad) / CELL); cy <= Math.floor((y1 + pad) / CELL); cy++) {
-        const k = `${cx},${cy}`;
-        const list = passageGrid.get(k);
-        if (list) list.push(r);
-        else passageGrid.set(k, [r]);
+  const wayGrid = new Map<string, Set<Road>>();
+  for (const r of map.roads) {
+    const pad = Math.max(0, openReach(r)) + 4;
+    for (let k = 0; k + 3 < r.pts.length; k += 2) {
+      const [ax, ay, bx, by] = [r.pts[k], r.pts[k + 1], r.pts[k + 2], r.pts[k + 3]];
+      for (let cx = Math.floor((Math.min(ax, bx) - pad) / CELL); cx <= Math.floor((Math.max(ax, bx) + pad) / CELL); cx++) {
+        for (let cy = Math.floor((Math.min(ay, by) - pad) / CELL); cy <= Math.floor((Math.max(ay, by) + pad) / CELL); cy++) {
+          const key = `${cx},${cy}`;
+          const set = wayGrid.get(key);
+          if (set) set.add(r);
+          else wayGrid.set(key, new Set([r]));
+        }
       }
     }
   }
-  const passagesNear = (w: Segment): Road[] => {
+  const waysNear = (w: Segment): Road[] => {
     const out = new Set<Road>();
     for (let cx = Math.floor(Math.min(w.ax, w.bx) / CELL); cx <= Math.floor(Math.max(w.ax, w.bx) / CELL); cx++) {
-      for (let cy = Math.floor(Math.min(w.ay, w.by) / CELL); cy <= Math.floor(Math.max(w.ay, w.by) / CELL); cy++) for (const r of passageGrid.get(`${cx},${cy}`) ?? []) out.add(r);
+      for (let cy = Math.floor(Math.min(w.ay, w.by) / CELL); cy <= Math.floor(Math.max(w.ay, w.by) / CELL); cy++) for (const r of wayGrid.get(`${cx},${cy}`) ?? []) out.add(r);
     }
     return [...out];
   };
+  yield;
 
   const ground: Wall[] = [];
   const deck: Wall[] = [];
-  const addRing = (to: Wall[], ring: Pts, r: number, closed: boolean, level: number, kind?: WallKind, cut = false, height?: number) => {
+  const addRing = (to: Wall[], ring: Pts, r: number, closed: boolean, level: number, kind?: WallKind, height?: number) => {
     const n = ring.length;
     for (let i = 0; i + (closed ? 1 : 3) < n; i += 2) {
       const j = (i + 2) % n;
-      const s: Wall = { ax: ring[i], ay: ring[i + 1], bx: ring[j], by: ring[j + 1], r, level, ...(kind ? { kind } : {}), ...(height ? { height } : {}) };
-      const near = cut ? passagesNear(s) : [];
-      to.push(...(near.length ? cutWall(s, near).map((piece) => ({ ...piece, level })) : [s]));
+      to.push({ ax: ring[i], ay: ring[i + 1], bx: ring[j], by: ring[j + 1], r, level, ...(kind ? { kind } : {}), ...(height ? { height } : {}) });
     }
   };
-  // Buildings, with their archways open, stand in the way on both levels.
+  // Buildings stand in the way on both levels, open wherever a way goes into them (see buildingWalls): on the ground, the roads and
+  // paths; up on a bridge, the bridges too.
+  const joined = new Set<string>();
+  {
+    const uses = new Map<string, number>();
+    for (const r of map.roads) for (let k = 0; k + 1 < r.pts.length; k += 2) uses.set(`${r.pts[k]},${r.pts[k + 1]}`, (uses.get(`${r.pts[k]},${r.pts[k + 1]}`) ?? 0) + 1);
+    for (const [k, n] of uses) if (n > 1) joined.add(k);
+  }
   const buildings: Wall[] = [];
+  const buildingsUp: Wall[] = [];
+  // (A pause every so often: some take far longer than others, where a lot of ways go into them.)
+  let since = performance.now();
   for (const b of map.buildings) {
-    if (b.solid) for (const ring of b.rings) addRing(buildings, ring, 0, true, 0, undefined, true);
-    if (pause()) yield;
+    if (performance.now() - since > BUILDING_STEP) {
+      yield;
+      since = performance.now();
+    }
+    if (!b.solid) continue;
+    const [x0, y0, x1, y1] = bounds(b.rings[0]);
+    const near = waysNear({ ax: x0, ay: y0, bx: x1, by: y1, r: 0 });
+    const onGround = near.filter((r) => !r.bridge);
+    const walls = buildingWalls(b.rings, onGround, 0, joined);
+    buildings.push(...walls);
+    buildingsUp.push(...(onGround.length === near.length ? walls : buildingWalls(b.rings, near, 1, joined)));
   }
   // Garden walls, fences and railings: on a bridge if they run along one (its handrails), otherwise on the ground.
   for (const line of map.lines) {
@@ -307,7 +525,7 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
     if (r === undefined) continue;
     const mid = Math.floor(line.pts.length / 4) * 2;
     const level = onDeck(line.pts[mid], line.pts[mid + 1]) ? 1 : 0;
-    addRing(level ? deck : ground, line.pts, r, false, level, line.kind as WallKind, false, line.height);
+    addRing(level ? deck : ground, line.pts, r, false, level, line.kind as WallKind, line.height);
     if (pause()) yield;
   }
   // The edge of the map.
@@ -315,7 +533,7 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   addRing(edge, [0, 0, map.width, 0, map.width, map.height, 0, map.height], 0, true, 0);
   const walls: [Wall[], Wall[]] = [
     [...buildings, ...ground, ...edge],
-    [...buildings, ...deck, ...(yield* decks.parapetsWork()).map((p) => ({ ...p, level: 1, kind: 'parapet' as const })), ...edge],
+    [...buildingsUp, ...deck, ...(yield* decks.parapetsWork()).map((p) => ({ ...p, level: 1, kind: 'parapet' as const })), ...edge],
   ];
 
   // Trees grow on the ground; anything else standing on a bridge is on the bridge.
@@ -408,7 +626,10 @@ function* indexChunks(map: GameMap): Work<Map<string, ChunkIndex>> {
     if (pause()) yield;
   }
   const banks = map.banks ?? [];
-  for (let i = 0; i < banks.length; i += 3) add('banks', i / 3, banks[i] - 8, banks[i + 1] - 8, banks[i] + 8, banks[i + 1] + 8);
+  for (let i = 0; i < banks.length; i += 3) {
+    add('banks', i / 3, banks[i] - 8, banks[i + 1] - 8, banks[i] + 8, banks[i + 1] + 8);
+    if (pause()) yield;
+  }
   return chunks;
 }
 

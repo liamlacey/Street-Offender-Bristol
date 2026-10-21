@@ -3,7 +3,7 @@ import type { GameMap, Road } from '../map/osm';
 import bristol from '../map/bristol.json';
 import { buildingLook, clipHalfPlane, hatch, parseColour } from './buildingLook';
 import { Surface, SurfaceGrid, surfacePaint } from './surface';
-import { CHUNK, buildWorld, chunkKey, cutWall, lineLength, pointAlong, shadowOffset, subPolyline } from './world';
+import { CHUNK, buildWorld, buildingWalls, chunkKey, cutWall, lineLength, pointAlong, shadowOffset, subPolyline } from './world';
 import { DECK_END, Decks, SHADOW_HEIGHT } from './decks';
 import { nearestOnSegment } from '../physics/collisions';
 
@@ -312,5 +312,56 @@ describe('arcades and roofs', () => {
     const lines = hatch([[0, 0, 40, 0, 40, 20, 0, 20]], 1, 0, 5);
     expect(lines.length / 4).toBe(4);
     for (let i = 0; i < lines.length; i += 4) expect([lines[i], lines[i + 2]]).toEqual([0, 40]);
+  });
+});
+
+describe('buildings a way goes into', () => {
+  // A building 25 m square (0 to 200 px).
+  const square = [[0, 0, 200, 0, 200, 200, 0, 200]];
+  const way = (pts: number[], width = 56, kind: Road['kind'] = 'service'): Road => ({ kind, width, pts });
+  /** Whether a straight line crosses any of the walls. */
+  const blocked = (walls: { ax: number; ay: number; bx: number; by: number }[], ax: number, ay: number, bx: number, by: number) =>
+    walls.some((w) => {
+      const d = (bx - ax) * (w.by - w.ay) - (by - ay) * (w.bx - w.ax);
+      if (Math.abs(d) < 1e-9) return false;
+      const t = ((w.ax - ax) * (w.by - w.ay) - (w.ay - ay) * (w.bx - w.ax)) / d;
+      const u = ((w.ax - ax) * (by - ay) - (w.ay - ay) * (bx - ax)) / d;
+      return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+    });
+  const length = (walls: { ax: number; ay: number; bx: number; by: number }[]) => walls.reduce((n, w) => n + Math.hypot(w.bx - w.ax, w.by - w.ay), 0);
+
+  it('through it: open where the way is, and walled along its sides inside (not into the rest of the building)', () => {
+    const walls = buildingWalls(square, [way([-100, 100, 300, 100])], 0);
+    // Along the way, and along beside its middle: nothing in the way.
+    for (const y of [100, 80, 120]) expect(blocked(walls, -50, y, 250, y)).toBe(false);
+    // Off it, into the building: walled off (by its side, inside).
+    expect(blocked(walls, 100, 100, 100, 40)).toBe(true);
+    expect(blocked(walls, 100, 100, 100, 160)).toBe(true);
+    // The rest of the building's walls stand.
+    expect(blocked(walls, -20, 30, 60, 30)).toBe(true);
+  });
+
+  it('a path to its door (it stops at the wall): the building stays shut', () => {
+    const walls = buildingWalls(square, [way([-100, 100, 0, 100], 16, 'footway')], 0);
+    expect(length(walls)).toBeCloseTo(800, 0);
+    expect(blocked(walls, -20, 100, 20, 100)).toBe(true);
+  });
+
+  it('a way that goes in and ends inside: in as far as it goes, closed off at its end', () => {
+    const walls = buildingWalls(square, [way([-100, 100, 80, 100])], 0);
+    expect(blocked(walls, -50, 100, 70, 100)).toBe(false);
+    expect(blocked(walls, 70, 100, 150, 100)).toBe(true);
+  });
+
+  it('across a corner of it (it overlaps the way): passable where the way is, walled at its edge', () => {
+    // A road 10 m wide along y = -20: its far half's over the building's edge.
+    const walls = buildingWalls(square, [way([-100, -20, 300, -20], 80)], 0);
+    expect(blocked(walls, -50, 10, 250, 10)).toBe(false);
+    expect(blocked(walls, 100, 10, 100, 60)).toBe(true);
+  });
+
+  it("only just over a way's edge (less than half a metre): left as it is", () => {
+    const walls = buildingWalls(square, [way([-100, -26, 300, -26])], 0);
+    expect(length(walls)).toBeCloseTo(800, 0);
   });
 });
