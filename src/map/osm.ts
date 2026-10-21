@@ -8,6 +8,7 @@
  */
 
 import { type Berth, type FerryRoute, type MooringEdge, Water, ferryStop, findBerths, overlap } from './berths.ts';
+import { type Store, type StoreCandidate, TROLLEY_GAP, findStores, trolleyShop } from './stores.ts';
 import { CORRECTIONS, GATEWAYS, LANDMARKS, STREETS } from './landmarks.ts';
 import { type Arm, type Controller, type LightPoint, type Signal, trafficLights } from './signals.ts';
 
@@ -422,7 +423,8 @@ export type PropKind =
   | 'crane'
   | 'ladder'
   | 'mooring'
-  | 'pump';
+  | 'pump'
+  | 'trolley';
 
 export interface Prop {
   kind: PropKind;
@@ -504,6 +506,8 @@ export interface GameMap {
   /** Where people go: x, y, what (0 a shop, café, bar or the like; 1 a sight: a museum, gallery, monument, statue, viewpoint), ... */
   venues?: number[];
   ferries?: FerryRoute[];
+  /** The big shops with car parks, where people push trolleys (see stores.ts). */
+  stores?: Store[];
 }
 
 /**
@@ -606,7 +610,7 @@ export interface TerrainData {
 
 // --- Reading the XML ---
 
-type Tags = Record<string, string>;
+export type Tags = Record<string, string>;
 
 export interface OsmNode {
   id: number;
@@ -1393,6 +1397,8 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     areas.push({ kind, rings: clipped.map(roundPts), ...(surface ? { surface } : {}) });
   };
 
+  /** Each building's own tags (not its parts'), for what's in it (see stores.ts). */
+  const buildingTags = new Map<Building, Tags>();
   /** Buildings tagged as a petrol station (its canopy, or its shop). */
   const fuelBuildings = new Set<Building>();
   const addBuilding = (type: 'way' | 'relation', id: number, tags: Tags, rings: Pts[], part: boolean) => {
@@ -1422,6 +1428,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       ...(tagged ? { heightFrom: 'tag' as const } : {}),
     });
     if (tags.amenity === 'fuel') fuelBuildings.add(buildings[buildings.length - 1]);
+    if (!part) buildingTags.set(buildings[buildings.length - 1], tags);
   };
 
   /** Ways that are members of multipolygons: their own tags (if any) are ignored when the relation's tags say what they are. */
@@ -2490,6 +2497,15 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
   // The gateways: their buildings made archways over the roads through them.
   gateways(buildings, roads);
 
+  // The big shops with car parks (see stores.ts), and their trolleys, in their bays.
+  const stores = storesOf(data, proj, buildings, buildingTags, areas, roads).filter((s) => inside(s.door[0], s.door[1]));
+  for (const s of stores) {
+    const [bx, by, angle, count] = s.bay;
+    // (Some out with the shoppers. Each faces back along the row, pushed into the one before.)
+    const facing = +(angle + Math.PI).toFixed(3);
+    for (let k = 0; k < Math.ceil(count * 0.7); k++) props.push({ kind: 'trolley', x: round(bx + Math.cos(angle) * k * TROLLEY_GAP * PX_PER_METRE), y: round(by + Math.sin(angle) * k * TROLLEY_GAP * PX_PER_METRE), angle: facing });
+  }
+
   // Draw small areas over big ones of the same kind.
   areas.sort((a, b) => AREA_ORDER[a.kind] - AREA_ORDER[b.kind] || Math.abs(ringArea(b.rings[0])) - Math.abs(ringArea(a.rings[0])));
   // Taller buildings drawn last.
@@ -2521,6 +2537,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     ...(berths.length ? { berths } : {}),
     ...(ferries.length ? { ferries } : {}),
     ...(venues.length ? { venues } : {}),
+    ...(stores.length ? { stores } : {}),
   };
 }
 
@@ -2639,4 +2656,50 @@ function distanceToLine(x: number, y: number, pts: Pts): number {
     best = Math.min(best, Math.hypot(x - ax - (bx - ax) * t, y - ay - (by - ay) * t));
   }
   return best;
+}
+
+/**
+ * The big shops next to car parks (see stores.ts): the buildings tagged as
+ * one, or with one mapped as a point in them; and on a retail park
+ * (`landuse=retail` with a car park in it), any shop.
+ */
+function storesOf(data: OsmData, proj: Projection, buildings: Building[], tagsOf: Map<Building, Tags>, areas: Area[], roads: Road[]): Store[] {
+  const xy = (n: { lon: number; lat: number }): [number, number] => [proj.x(n.lon), proj.y(n.lat)];
+  const parks = areas.filter((a) => a.kind === 'parking').map((a) => a.rings[0]);
+  const retail: Pts[] = [];
+  for (const way of data.ways.values()) {
+    if (way.tags.landuse !== 'retail' || way.nodes[0] !== way.nodes[way.nodes.length - 1]) continue;
+    const ring = way.nodes.slice(0, -1).map((id) => data.nodes.get(id)).filter((n) => !!n).flatMap((n) => xy(n!));
+    if (ring.length >= 6 && parks.some((p) => pointInRing(p[0], p[1], ring))) retail.push(ring);
+  }
+  const shopPoints: [number, number, Tags][] = [];
+  for (const n of data.nodes.values()) if (n.tags.shop) shopPoints.push([...xy(n), n.tags]);
+  const candidates: StoreCandidate[] = [];
+  for (const b of buildings) {
+    const t = tagsOf.get(b);
+    if (!t || !b.solid) continue;
+    const ring = b.rings[0];
+    const onPark = retail.some((r) => pointInRing(ring[0], ring[1], r));
+    let kind = trolleyShop(t, onPark);
+    let name = t.name;
+    if (!kind) {
+      let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+      for (let k = 0; k + 1 < ring.length; k += 2) [x0, y0, x1, y1] = [Math.min(x0, ring[k]), Math.min(y0, ring[k + 1]), Math.max(x1, ring[k]), Math.max(y1, ring[k + 1])];
+      const point = shopPoints.find(([x, y, pt]) => x >= x0 && x <= x1 && y >= y0 && y <= y1 && trolleyShop(pt, onPark) && pointInRing(x, y, ring));
+      if (point) [kind, name] = [trolleyShop(point[2], onPark), point[2].name ?? name];
+    }
+    if (kind) candidates.push({ kind, ...(name ? { name } : {}), ring });
+  }
+  // (Each with its bounds, to look only at those it might be in.)
+  const bounded = (pts: Pts, pad: number) => {
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let k = 0; k + 1 < pts.length; k += 2) [x0, y0, x1, y1] = [Math.min(x0, pts[k]), Math.min(y0, pts[k + 1]), Math.max(x1, pts[k]), Math.max(y1, pts[k + 1])];
+    return { pts, x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
+  };
+  const solid = buildings.filter((b) => b.solid).map((b) => bounded(b.rings[0], 0));
+  const ways = roads.filter((r) => VEHICLE_ROADS.has(r.kind)).map((r) => ({ ...bounded(r.pts, r.width / 2 + PX_PER_METRE), half: r.width / 2 }));
+  const within = (x: number, y: number, b: { x0: number; y0: number; x1: number; y1: number }) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
+  const clear = (x: number, y: number) =>
+    !solid.some((b) => within(x, y, b) && pointInRing(x, y, b.pts)) && !ways.some((r) => within(x, y, r) && distanceToLine(x, y, r.pts) < r.half + 0.5 * PX_PER_METRE);
+  return findStores(candidates, parks, clear, PX_PER_METRE);
 }

@@ -840,7 +840,36 @@ but the water and the buildings.
   3 m/s), up and on their way if it's moved or broken.
 - **Picnics**: at about a third of the park, garden and lawn spots (not under a tree), 2 to 5
   sit in a ring on a blanket, facing in, for one to four minutes, then pack up and go.
+- **Shoppers and trolleys** at the big shops with car parks (below): up to 6 at each shop near
+  the view at once, one coming about every 1 to 2 s till there are. Half come out of the
+  door pushing a trolley full of shopping (one taken into the shop earlier; or at first, while
+  the bay's out of sight, the one on the end of its row), out 3 m, then to their car: one
+  parked in the car park (not yours), standing 1.8 m off its nearer clear end. There they
+  load it (5 to 10 s, the trolley emptied), then push the trolley back to the bay, along
+  the row and in on its end, nested (now and then, about 1 in 8, they leave it by the car),
+  walk back to the car's door and are gone (driven off). The other half get out of a car
+  (out of sight), take the trolley on the end of the bay's row and push it into the shop
+  (the trolley goes in with them, and comes out with someone else). Pushing, they go round
+  the cars standing in the way (trolley and all), a little slower than they walk. A
+  trolley's loose (it's knocked about, rolls, and smashes, as a bench does: hit hard, into
+  bits of wire and handle); knocked out of someone's hands, they go on without it.
 
+
+**Big shops with car parks** (worked out when the map's built: `stores.ts`, kept as
+`stores`): the buildings tagged as a supermarket, DIY or hardware shop, builders' merchant,
+garden centre, department store, wholesaler, discount store, homeware, frozen food,
+furnishings, pet shop, furniture, beds, baby goods, catalogue, general store or toy shop
+(`shop=supermarket/doityourself/hardware/trade/garden_centre/department_store/wholesale/
+variety_store/houseware/frozen_food/interior_decoration/pet/furniture/bed/baby_goods/
+catalogue/general/toys`, or `building=supermarket`), or with one mapped as a point in
+them; and on a retail park (`landuse=retail` with a car park in it), any shop. At least
+400 m² of floor, with a car park (a surface one, `amenity=parking`, at least 300 m²) on
+a side at least 8 m long that faces it, within 25 m. Its door is in the middle of the
+longest such side, 1 m out. Its trolley bay is along that wall, 1.3 m out, from 2 m in
+from one end of that side towards the door (stopping 3 m short of it), a trolley every
+0.4 m (nested, each facing back along the row), 4 to 12 of them, wherever they're clear
+of the buildings and 0.5 m clear of the roads (and the car park's aisles); 70% of them
+are there to start with (the rest out with the shoppers).
 
 **Ships moored for good, mapped as buildings** (`building=ship` or `boat`: the Thekla, the
 Balmoral, Under the Stars) stay buildings (their outline and measured height), with a deck
@@ -1073,6 +1102,8 @@ first, with the loading screen up.
 - `osm.ts`: reads OSM's XML and makes the map (`buildMap`): projection, roads,
   ground, lines, buildings, trees, props, crossings, surfaces. Tested in `osm.test.ts`.
 - `berths.ts`: where boats moor, and the ferry routes and stops.
+- `stores.ts`: the big shops with car parks, their doors and trolley bays. Tested (and the
+  shoppers pushing the trolleys) in `src/world/shoppers.test.ts`.
 - `landmarks.ts`: landmarks' colours (and heights, roof shapes), and streets' looks;
   and the corrections (`CORRECTIONS`: King Street pedestrianised).
 - `enrich.ts`, `lidar.ts`, `osgb.ts`: the LIDAR and the terrain. Tested in `lidar.test.ts`.

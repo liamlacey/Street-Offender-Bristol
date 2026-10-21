@@ -54,6 +54,8 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
   // Heavy: shoved, not sent flying.
   planter: { r: 6, invMass: 0.8 },
   block: { r: 5, invMass: 0.4 },
+  // A shopping trolley: on wheels, it rolls a long way.
+  trolley: { r: 2.5, length: 8, invMass: 9 },
 };
 
 /** A tree trunk's radius, px. */
@@ -105,6 +107,9 @@ export interface LooseProp extends Body {
   born?: number;
   /** Where it stood on the map (see `homeOf`), if it's one of the map's (not a piece of something). */
   home?: string;
+  /** A trolley: taken into the shop (not there), or full of shopping (see people.ts). */
+  inside?: boolean;
+  full?: boolean;
 }
 
 /** A loose thing's place on the map: what it is and where it stood (the same in each region of the map it's in). */

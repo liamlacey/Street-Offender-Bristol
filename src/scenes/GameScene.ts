@@ -233,6 +233,7 @@ export class GameScene extends Phaser.Scene {
   private shownProps = new Set<number>();
   private shownRaised = new Set<number>();
   private shownLoose = new Set<number>();
+  private looseFrames = 0;
   private looseByChunk = new Map<string, number[]>();
   private effects!: CarEffects;
   private skids!: SkidMarks;
@@ -988,7 +989,7 @@ export class GameScene extends Phaser.Scene {
     if (high && this.level === 0 && high - this.groundAt(car.x, car.y) > 0.5 * 8) return this.fall(high - this.groundAt(car.x, car.y));
     for (const i of this.nearbyLoose(car.x, car.y)) {
       const { body, image } = this.loose[i];
-      if (body.level !== this.level || body.gone) continue;
+      if (body.level !== this.level || body.gone || body.inside) continue;
       // Hit hard enough, a bench smashes to pieces, and what's already broken breaks up further.
       if (this.wreckage.smash(body, car, impactSpeed(car, body.x, body.y, body.r + (body.length ?? 0) / 2, body.vx, body.vy))) {
         image?.destroy();
@@ -1185,7 +1186,7 @@ export class GameScene extends Phaser.Scene {
         blocks.push({ x: v.x, y: v.y, angle: v.angle, length: v.length, r: v.r, level: v.level });
       }
     }
-    if (!this.onFoot && Math.hypot(car.vx, car.vy) < 4) blocks.push({ x: car.x, y: car.y, angle: car.heading, length: this.carLength(), r: this.carWidth() / 2, level: this.level });
+    if (!this.onFoot && Math.hypot(car.vx, car.vy) < 4) blocks.push({ x: car.x, y: car.y, angle: car.heading, length: this.carLength(), r: this.carWidth() / 2, level: this.level, you: true });
     this.people.blocks = blocks;
     try {
       this.people.update(dt, { x0: view.left, y0: view.top, x1: view.right, y1: view.bottom }, player, movers, light, walkable, (level, x, y) => this.decks.stepAt(level, x, y, this.groundAt(x, y)));
@@ -1410,7 +1411,7 @@ export class GameScene extends Phaser.Scene {
     }
     for (const i of this.nearbyLoose(car.x, car.y)) {
       const { body } = this.loose[i];
-      if (body.level !== this.level || body.gone) continue;
+      if (body.level !== this.level || body.gone || body.inside) continue;
       if (collideCarWithBody(car, body) > 0) body.moved = true;
     }
     this.stride += Math.hypot(car.x - px, car.y - py);
@@ -1519,6 +1520,8 @@ export class GameScene extends Phaser.Scene {
   /** Moves whatever's been knocked, until it settles. */
   private updateLoose(): void {
     const dt = 1 / 60;
+    // The trolleys being pushed about: kept where they are in the index (now and then).
+    if (++this.looseFrames % 15 === 0 && this.people.pushing()) this.reindexLoose();
     for (const { body } of this.loose) {
       if (!body.moved || body.gone) continue;
       stepBody(body, dt, 3);
@@ -1859,6 +1862,12 @@ export class GameScene extends Phaser.Scene {
       const l = this.loose[i];
       const { body } = l;
       if (body.gone) continue;
+      // (A trolley in the shop isn't there.)
+      if (body.inside) {
+        l.image?.destroy();
+        l.image = null;
+        continue;
+      }
       const show = body.x > view.left - pad && body.x < view.right + pad && body.y > view.top - pad && body.y < view.bottom + pad;
       // Its picture made as it comes into view, and let go once it's out of it.
       if (!show) {
@@ -1870,6 +1879,11 @@ export class GameScene extends Phaser.Scene {
           .setScale(1 / ART_SCALE)
           .setDepth(body.level === 1 ? DEPTH.onDeck : DEPTH.props);
       const image = l.image;
+      // A trolley, full of shopping or not.
+      if (image && body.kind === 'trolley') {
+        const look = body.full ? `${TEX.prop('trolley')}-full` : TEX.prop('trolley');
+        if (image.texture.key !== look) image.setTexture(look);
+      }
       if (!show && !body.moved) continue;
       this.shownLoose.add(i);
       if (!show || !image) continue;

@@ -45,8 +45,8 @@ describe('buildWorld', () => {
     expect(world.walls[0].filter((w) => !w.kind).length).toBeGreaterThan(1000);
   });
 
-  it('makes benches, bins, picnic tables, grit bins, planters and blocks loose, and lamp posts and trees fixed', () => {
-    expect(world.loose.every((l) => ['bench', 'bin', 'picnic', 'gritbin', 'planter', 'block'].includes(l.kind))).toBe(true);
+  it('makes benches, bins, picnic tables, grit bins, planters, blocks and trolleys loose, and lamp posts and trees fixed', () => {
+    expect(world.loose.every((l) => ['bench', 'bin', 'picnic', 'gritbin', 'planter', 'block', 'trolley'].includes(l.kind))).toBe(true);
     // The heavy ones are hard to shift.
     expect(world.loose.find((l) => l.kind === 'block')!.invMass).toBeLessThan(1);
     expect(world.loose.length).toBeGreaterThan(100);

@@ -341,6 +341,27 @@ export function createArt(scene: Phaser.Scene): void {
     circle(ctx, 4, 4, 2.8, '#33473a');
     circle(ctx, 4, 4, 1.5, '#111');
   });
+  // A shopping trolley, from above (facing along x, its handle at the back): a wire basket; and full of shopping.
+  for (const full of [false, true]) {
+    canvasTexture(scene, full ? `${TEX.prop('trolley')}-full` : TEX.prop('trolley'), 8, 5, (ctx) => {
+      ctx.fillStyle = 'rgba(205,212,218,0.35)';
+      ctx.fillRect(1.6, 0.5, 6, 4);
+      ctx.strokeStyle = '#a7afb6';
+      ctx.lineWidth = 0.35;
+      for (let x = 2.8; x < 7.6; x += 1.2) ctx.strokeRect(x, 0.5, 0, 4);
+      for (const y of [1.8, 3.2]) ctx.strokeRect(1.6, y, 6, 0);
+      ctx.lineWidth = 0.5;
+      ctx.strokeStyle = '#c3c9ce';
+      ctx.strokeRect(1.6, 0.5, 6, 4);
+      if (full) {
+        roundRect(ctx, 2, 0.8, 2.4, 1.8, 0.4, '#e9e4d6');
+        roundRect(ctx, 4.6, 0.9, 2.6, 1.6, 0.3, '#d9822b');
+        roundRect(ctx, 2.2, 2.7, 2, 1.5, 0.5, '#3f8f4a');
+        roundRect(ctx, 4.4, 2.6, 2.8, 1.6, 0.3, '#3b6fb0');
+      }
+      roundRect(ctx, 0.2, 0, 1, 5, 0.5, '#d2372b');
+    });
+  }
   // A dead traffic light: no lamp lit.
   canvasTexture(scene, TEX.light('off'), 12, 16, (ctx) => {
     circle(ctx, 6, 2.5, 2.2, '#2a2d31');
