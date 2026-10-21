@@ -15,6 +15,7 @@
 
 import { type GameMap, type Pts, VEHICLE_ROADS, pointInRing } from '../map/osm';
 import { type Store, TROLLEY_GAP } from '../map/stores';
+import { type TrolleyRow, trolleyRows } from './parking';
 import type { Light } from './lights';
 import { offsetLine } from './world';
 import { type Work, drain, every } from './work.ts';
@@ -65,7 +66,7 @@ const SCARED: [number, number] = [4, 7];
 /** A person's size: their radius, px, for hits. */
 const R = 0.3 * M;
 /** Shoppers at a shop at once, at most; and how far ahead of them their trolley is, px. */
-const SHOPPERS = 6;
+const SHOPPERS = 16;
 const HOLD = 0.85 * M;
 
 export type Mode = 'walk' | 'stand' | 'wander' | 'kerb' | 'cross' | 'queue' | 'board' | 'flee' | 'dive' | 'down' | 'sit' | 'shop';
@@ -106,6 +107,8 @@ export interface Trolley {
  */
 export interface Trip {
   store: number;
+  /** The row of trolleys they're taking one from, or putting theirs back in (see trolleyRows): its index in the store's. */
+  row: number;
   /** What they're doing: for a trolley; into the shop; out to the car; loading it; the trolley back; back to the car. */
   leg: 'fetch' | 'in' | 'out' | 'load' | 'return' | 'home';
   /** The trolley they're pushing, or null. */
@@ -311,6 +314,10 @@ export class People {
   /** The shopping trolleys (the scene's loose things too), and the big shops with car parks. */
   private trolleys: Trolley[] = [];
   private readonly stores: Store[];
+  /** Each store's rows of trolleys: its bay, then its car park's shelters' (worked out as it's set up). */
+  private rows: TrolleyRow[][] = [];
+  /** Just put about the view (see `populate`): the car parks to be filled once the parked cars are known. */
+  private fresh = false;
 
   constructor(
     private readonly map: GameMap,
@@ -336,6 +343,8 @@ export class People {
 
   /** Sets them up, a little at a time (see work.ts): the walks, the spots people stand about at, the crossings. */
   *setup(): Work {
+    this.rows = trolleyRows(this.map);
+    yield;
     yield* this.buildWalks();
     yield* this.buildSpots();
     yield* this.buildCrossings();
@@ -742,7 +751,11 @@ export class People {
         }
       }
     }
-    this.shoppers(x0, y0, x1, y1, seen);
+    // (Coming into a region, the car parks busy already: once the cars parked about are known.)
+    if (all) this.fresh = true;
+    const burst = this.fresh && this.blocks.some((b) => !b.you);
+    if (burst) this.fresh = false;
+    for (let k = burst ? 10 : 1; k > 0; k--) this.shoppers(x0, y0, x1, y1, burst ? () => false : seen, burst);
     // Waiting at the bus stops near the view.
     for (const [i, [sx, sy]] of this.stops.entries()) {
       if (sx < x0 || sx > x1 || sy < y0 || sy > y1 || seen(sx, sy)) continue;
@@ -1485,40 +1498,61 @@ export class People {
     return this.people.some((p) => !!p.trip?.trolley);
   }
 
-  /** The trolleys standing in a shop's bay, in its row, from its first on. */
-  private inBay(st: Store): Trolley[] {
-    const [bx, by, a, count] = st.bay;
+  /** The trolleys standing in a row (a shop's bay, or one of its shelters'), from its first on. */
+  private inRow(row: TrolleyRow): Trolley[] {
+    const [bx, by, a, count] = row;
     const [ux, uy] = [Math.cos(a), Math.sin(a)];
     const held = new Set(this.people.map((p) => p.trip?.trolley));
-    const row: [number, Trolley][] = [];
+    const standing: [number, Trolley][] = [];
     for (const t of this.trolleys) {
       if (t.gone || t.inside || t.moved || held.has(t)) continue;
       const [rx, ry] = [t.x - bx, t.y - by];
       const along = rx * ux + ry * uy;
       if (Math.abs(-rx * uy + ry * ux) > 0.4 * M || along < -0.5 * M || along > (count + 3) * TROLLEY_GAP * M) continue;
-      row.push([along, t]);
+      standing.push([along, t]);
     }
-    return row.sort((p, q) => p[0] - q[0]).map(([, t]) => t);
+    return standing.sort((p, q) => p[0] - q[0]).map(([, t]) => t);
   }
 
   /** Shoppers at the big shops near the view (as many as there's room for): out of the shop to their car, or from their car to the shop. */
-  private shoppers(x0: number, y0: number, x1: number, y1: number, seen: (x: number, y: number) => boolean): void {
+  private shoppers(x0: number, y0: number, x1: number, y1: number, seen: (x: number, y: number) => boolean, now = false): void {
     this.stores.forEach((st, k) => {
       const [dx, dy, out] = st.door;
-      if (dx < x0 || dx > x1 || dy < y0 || dy > y1 || this.rand() > 0.015) return;
+      if (dx < x0 || dx > x1 || dy < y0 || dy > y1 || (!now && this.rand() > 0.04)) return;
       if (this.people.filter((p) => p.trip?.store === k).length >= SHOPPERS) return;
       // Their car: one parked in the car park (not yours).
       const cars = this.blocks.filter((b) => !b.you && b.level === 0 && pointInRing(b.x, b.y, st.park));
       if (!cars.length) return;
       const b = cars[Math.floor(this.rand() * cars.length)];
       const car: Trip['car'] = [b.x, b.y, b.angle, b.length, b.r];
-      if (this.rand() < 0.5) {
+      if (now && this.rand() < 0.5) {
+        // (Coming into a region: some at their cars already, loading their shopping, a trolley from a row.)
+        const p = this.make(0, 0, 'shop');
+        p.pace *= 0.85;
+        p.trip = { store: k, row: 0, leg: 'load', trolley: null, car, route: [] };
+        [p.x, p.y] = this.byCar(p.trip, dx, dy);
+        p.angle = Math.atan2(b.y - p.y, b.x - p.x);
+        p.timer = 1 + this.rand() * 8;
+        // (Not where there's no room.)
+        const [hx, hy] = [p.x + Math.cos(p.angle) * HOLD, p.y + Math.sin(p.angle) * HOLD];
+        if (this.blocks.some((o) => bodyDist(o, p.x, p.y) < o.r + 0.3 * M || bodyDist(o, hx, hy) < o.r)) p.gone = true;
+        else {
+          const row = this.rows[k]?.[this.nearestRow(p.trip, true)];
+          const t = row ? (this.inRow(row).pop() ?? null) : null;
+          if (t) Object.assign(t, { full: true });
+          p.trip.trolley = t;
+          this.hold(p);
+        }
+      } else if (this.rand() < 0.5) {
         // Out of the shop, with a trolley full of shopping (one taken in; or, at first, out of sight, one from the bay).
         let t = this.trolleys.find((o) => o.inside && !o.gone && Math.hypot(o.x - dx, o.y - dy) < 2 * M) ?? null;
-        if (!t && !seen(st.bay[0], st.bay[1])) t = this.inBay(st).pop() ?? null;
+        if (!t) {
+          const row = this.rows[k]?.find((r) => !seen(r[0], r[1]) && this.inRow(r).length);
+          t = row ? (this.inRow(row).pop() ?? null) : null;
+        }
         const p = this.make(dx, dy, 'shop');
         Object.assign(p, { angle: out, pace: p.pace * 0.85 });
-        p.trip = { store: k, leg: 'out', trolley: t, car, route: [] };
+        p.trip = { store: k, row: 0, leg: 'out', trolley: t, car, route: [] };
         if (t) Object.assign(t, { inside: false, full: true });
         this.hold(p);
         p.trip.route = [...this.outside(st, 3), ...this.byCar(p.trip, dx, dy)];
@@ -1528,7 +1562,7 @@ export class People {
         if (seen(cx, cy)) return;
         const p = this.make(cx, cy, 'shop');
         p.pace *= 0.85;
-        p.trip = { store: k, leg: 'fetch', trolley: null, car, route: [] };
+        p.trip = { store: k, row: 0, leg: 'fetch', trolley: null, car, route: [] };
         this.toBay(p, st);
       }
     });
@@ -1559,23 +1593,39 @@ export class People {
   /** Off to the trolley bay, for the trolley at the end of the row (behind it, to take it); or, none there, into the shop without. */
   private toBay(p: Person, st: Store): void {
     const trip = p.trip!;
-    const last = this.inBay(st).pop();
-    if (!last) {
+    // (The row with trolleys in it nearest their car.)
+    trip.row = this.nearestRow(trip, true);
+    const row = this.rows[trip.store]?.[trip.row];
+    const last = row && this.inRow(row).pop();
+    if (!row || !last) {
       trip.leg = 'in';
       trip.route = [...this.outside(st, 3), st.door[0], st.door[1]];
       return;
     }
-    const [ux, uy] = [Math.cos(st.bay[2]), Math.sin(st.bay[2])];
+    const [ux, uy] = [Math.cos(row[2]), Math.sin(row[2])];
     const [gx, gy] = [last.x + ux * HOLD, last.y + uy * HOLD];
     trip.leg = 'fetch';
     trip.route = [gx + ux * 2 * M, gy + uy * 2 * M, gx, gy];
   }
 
-  /** Where the next trolley goes in a shop's bay: on the end of the row (or at its start). */
-  private nextSlot(st: Store): [number, number] {
-    const [bx, by, a] = st.bay;
+  /** Of a trip's store's rows of trolleys, the nearest their car (with trolleys in it, if `full`; else with room). */
+  private nearestRow(trip: Trip, full: boolean): number {
+    const rows = this.rows[trip.store] ?? [];
+    let [best, near] = [0, Infinity];
+    rows.forEach((r, i) => {
+      const n = this.inRow(r).length;
+      if (full ? n === 0 : n >= r[3] + 2) return;
+      const d = Math.hypot(r[0] - trip.car[0], r[1] - trip.car[1]);
+      if (d < near) [best, near] = [i, d];
+    });
+    return best;
+  }
+
+  /** Where the next trolley goes in a row: on its end (or at its start). */
+  private nextSlot(row: TrolleyRow): [number, number] {
+    const [bx, by, a] = row;
     const [ux, uy] = [Math.cos(a), Math.sin(a)];
-    const last = this.inBay(st).pop();
+    const last = this.inRow(row).pop();
     const along = last ? (last.x - bx) * ux + (last.y - by) * uy + TROLLEY_GAP * M : 0;
     return [bx + ux * along, by + uy * along];
   }
@@ -1612,8 +1662,10 @@ export class People {
       if (p.timer > 0) return;
       if (trip.trolley && this.rand() < 0.88) {
         // The trolley back to the bay: along the row, and pushed in on the end.
-        const [ux, uy] = [Math.cos(st.bay[2]), Math.sin(st.bay[2])];
-        const [sx, sy] = this.nextSlot(st);
+        trip.row = this.nearestRow(trip, false);
+        const row = this.rows[trip.store][trip.row];
+        const [ux, uy] = [Math.cos(row[2]), Math.sin(row[2])];
+        const [sx, sy] = this.nextSlot(row);
         trip.leg = 'return';
         trip.route = [sx + ux * (HOLD + 2.5 * M), sy + uy * (HOLD + 2.5 * M), sx + ux * HOLD, sy + uy * HOLD];
       } else {
@@ -1630,10 +1682,11 @@ export class People {
     switch (trip.leg) {
       case 'fetch': {
         // Taking the trolley on the end of the row (if it's still there), and into the shop with it.
-        const last = this.inBay(st).pop();
-        if (last && Math.hypot(last.x - p.x + Math.cos(st.bay[2]) * HOLD, last.y - p.y + Math.sin(st.bay[2]) * HOLD) < 1.2 * M) {
+        const row = this.rows[trip.store][trip.row];
+        const last = this.inRow(row).pop();
+        if (last && Math.hypot(last.x - p.x + Math.cos(row[2]) * HOLD, last.y - p.y + Math.sin(row[2]) * HOLD) < 1.2 * M) {
           trip.trolley = last;
-          p.angle = st.bay[2] + Math.PI;
+          p.angle = row[2] + Math.PI;
           this.hold(p);
         }
         trip.leg = 'in';
@@ -1653,8 +1706,9 @@ export class People {
         // Pushed into the end of the row.
         const tr = trip.trolley;
         if (tr) {
-          const [sx, sy] = this.nextSlot(st);
-          Object.assign(tr, { x: sx, y: sy, angle: st.bay[2] + Math.PI });
+          const row = this.rows[trip.store][trip.row];
+          const [sx, sy] = this.nextSlot(row);
+          Object.assign(tr, { x: sx, y: sy, angle: row[2] + Math.PI });
         }
         trip.trolley = null;
         trip.leg = 'home';
@@ -1680,8 +1734,24 @@ export class People {
     // (Close to where they're going, straight there.)
     if (d > reach + 0.5 * M) {
       const near = this.blocks.filter((b) => b.level === p.level && Math.abs(b.x - p.x) < b.length + reach && Math.abs(b.y - p.y) < b.length + reach);
-      const blocked = (h: number) => near.some((b) => bodyDist(b, p.x + Math.cos(h) * reach, p.y + Math.sin(h) * reach) < b.r + 0.35 * M);
-      if (blocked(a)) a += [0.5, -0.5, 1, -1, 1.5, -1.5].find((k) => !blocked(a + k)) ?? 0;
+      // (Anywhere along the way they'd go, out to their trolley's front.)
+      const blocked = (h: number) => {
+        for (let r = 0.5 * M; r <= reach + 0.01; r += 0.5 * M) if (near.some((b) => bodyDist(b, p.x + Math.cos(h) * r, p.y + Math.sin(h) * r) < b.r + 0.4 * M)) return true;
+        return false;
+      };
+      // Round it, keeping to the side they've been going round it by (so they get round a row of cars, not back and forth).
+      if (blocked(a)) {
+        const side = p.avoid < 0 ? -1 : 1;
+        let turn = 0;
+        for (let k = 0.4; k <= 3.2 && !turn; k += 0.4) turn = !blocked(a + side * k) ? side * k : !blocked(a - side * k) ? -side * k : 0;
+        p.avoid = Math.sign(turn) || p.avoid;
+        // (Hemmed in: they wait.)
+        if (!turn) {
+          p.speed = 0;
+          return false;
+        }
+        a += turn;
+      } else p.avoid = 0;
     }
     const step = Math.min(d, 2 * M);
     this.goTo(p, p.x + Math.cos(a) * step, p.y + Math.sin(a) * step, speed, dt, 0);

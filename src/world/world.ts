@@ -9,6 +9,7 @@
 import type { Body, Circle, Segment } from '../physics/collisions';
 import type { Building, GameMap, LineKind, Prop, PropKind, Pts, Road } from '../map/osm';
 import { Decks, waterOf } from './decks';
+import { trolleyRows } from './parking';
 import { Terrain } from './terrain';
 import type { DebrisKind, ThingKind, WallKind } from './damage';
 import { type Work, drain, every } from './work.ts';
@@ -567,6 +568,17 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
       fixed.push({ ...p, level });
     }
   });
+  // The trolleys in the big shops' car parks' shelters (more than half full, each its own way).
+  for (const rows of trolleyRows(map)) {
+    for (const [x, y, angle, count] of rows.slice(1)) {
+      const l = LOOSE.trolley!;
+      const n = Math.round(count * (0.5 + (Math.abs(Math.round(x * 7 + y * 13)) % 5) / 10));
+      for (let k = 0; k < n; k++) {
+        const p = { kind: 'trolley' as const, x: Math.round((x + Math.cos(angle) * k * 0.4 * 8) * 10) / 10, y: Math.round((y + Math.sin(angle) * k * 0.4 * 8) * 10) / 10 };
+        loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: angle + Math.PI, spin: 0, moved: false, level: 0, home: homeOf(p) });
+      }
+    }
+  }
 
   yield;
   return { map, walls, posts, loose, fixed, chunks: yield* indexChunks(map) };

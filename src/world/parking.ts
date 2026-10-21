@@ -177,6 +177,70 @@ export function atBusStop(map: GameMap, x: number, y: number): boolean {
   return (map.paint ?? []).some((m) => m.kind === 'busstop' && Math.hypot(m.x - x, m.y - y) < m.width / 2 + 2 * 8);
 }
 
+/** A big shop's car park (see stores.ts): its index in the map's stores, or -1. */
+export function storeOf(map: GameMap, a: Area): number {
+  const ring = a.rings[0];
+  return (map.stores ?? []).findIndex((st) => st.park.length === ring.length && Math.abs(st.park[0] - ring[0]) < 0.5 && Math.abs(st.park[1] - ring[1]) < 0.5);
+}
+
+/** A big shop's car park: one bay given over to a trolley shelter for every 25 or so (2 to 8), spread out over it, not by the door. */
+const SPACES_PER_SHELTER = 25;
+const SHELTERS_MOST = 8;
+
+/** Which of a big shop's car park's bays are trolley shelters (no one parks in them), spread as far from each other and the door as they'll go. */
+export function shelterSpaces(map: GameMap, store: number, spaces: Space[]): Space[] {
+  const st = map.stores?.[store];
+  if (!st || !spaces.length) return [];
+  const want = Math.max(2, Math.min(SHELTERS_MOST, Math.round(spaces.length / SPACES_PER_SHELTER)));
+  const taken: [number, number][] = [[st.door[0], st.door[1]]];
+  const out: Space[] = [];
+  while (out.length < want) {
+    let best: Space | null = null;
+    let far = 12 * 8;
+    for (const s of spaces) {
+      if (out.includes(s)) continue;
+      const d = Math.min(...taken.map(([x, y]) => Math.hypot(s.x - x, s.y - y)));
+      if (d > far) [best, far] = [s, d];
+    }
+    if (!best) break;
+    out.push(best);
+    taken.push([best.x, best.y]);
+  }
+  return out;
+}
+
+/** A row of trolleys: where the first stands, which way the row runs (each faces back along it, nested), how many it holds. */
+export type TrolleyRow = [number, number, number, number];
+
+/**
+ * Each big shop's trolley rows: its bay by the door (see stores.ts), then
+ * its shelters' (two rows in each, along the bay, filling towards its open
+ * end, the aisle).
+ */
+export function trolleyRows(map: GameMap): TrolleyRow[][] {
+  const rows: TrolleyRow[][] = (map.stores ?? []).map((st) => [st.bay]);
+  for (const a of map.areas) {
+    if (a.kind !== 'parking') continue;
+    const k = storeOf(map, a);
+    if (k < 0) continue;
+    const { spaces } = carParkBays(map, a);
+    for (const s of shelterSpaces(map, k, spaces)) {
+      const [ux, uy] = [Math.cos(s.angle), Math.sin(s.angle)];
+      // Its open end: the one with no bay beyond it.
+      const beyond = (e: number) => spaces.filter((o) => Math.hypot(o.x - s.x - ux * e * s.length, o.y - s.y - uy * e * s.length) < BAY_WIDTH).length;
+      const g = beyond(-1) <= beyond(1) ? -1 : 1;
+      const [gx, gy] = [ux * g, uy * g];
+      const start = s.length / 2 - 0.6 * 8;
+      const count = Math.floor((s.length - 1.2 * 8) / (0.4 * 8)) + 1;
+      for (const side of [-1, 1]) {
+        const [ox, oy] = [-gy * side * 0.45 * 8, gx * side * 0.45 * 8];
+        rows[k].push([Math.round((s.x - gx * start + ox) * 10) / 10, Math.round((s.y - gy * start + oy) * 10) / 10, +Math.atan2(gy, gx).toFixed(3), count]);
+      }
+    }
+  }
+  return rows;
+}
+
 /** Every bay on the map. */
 export function parkingSpaces(map: GameMap): Space[] {
   return drain(parkingWork(map));
@@ -187,7 +251,11 @@ export function* parkingWork(map: GameMap): Work<Space[]> {
   const out: Space[] = [];
   for (const a of map.areas) {
     if (a.kind !== 'parking') continue;
-    out.push(...carParkBays(map, a).spaces);
+    const { spaces } = carParkBays(map, a);
+    // (Not the trolley shelters.)
+    const store = storeOf(map, a);
+    const shelters = store < 0 ? [] : shelterSpaces(map, store, spaces);
+    out.push(...spaces.filter((s) => !shelters.includes(s)));
     yield;
   }
   for (const r of map.roads) {

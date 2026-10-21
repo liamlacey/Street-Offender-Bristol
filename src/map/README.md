@@ -701,7 +701,7 @@ front and back) or fire engines (red, a ladder on top).
 - Its siren's heard up to 260 m away (the nearest one): a police car's wail, an
   ambulance's or a fire engine's two tones. You can take any of them and drive it.
 
-**Parked cars:** in the car parks' bays (65% of them taken) and in the parking lanes'
+**Parked cars:** in the car parks' bays (65% of them taken; not the big shops' trolley shelters) and in the parking lanes'
 bays (55%, plus 1.2% per point of the street's activity, at most 92%; loading bays
 25%), not at bus stops (the bays aren't painted there either). Parallel bays face the
 way the traffic on that side goes; end-on ones either way round. No lorries.
@@ -840,19 +840,28 @@ but the water and the buildings.
   3 m/s), up and on their way if it's moved or broken.
 - **Picnics**: at about a third of the park, garden and lawn spots (not under a tree), 2 to 5
   sit in a ring on a blanket, facing in, for one to four minutes, then pack up and go.
-- **Shoppers and trolleys** at the big shops with car parks (below): up to 6 at each shop near
-  the view at once, one coming about every 1 to 2 s till there are. Half come out of the
-  door pushing a trolley full of shopping (one taken into the shop earlier; or at first, while
-  the bay's out of sight, the one on the end of its row), out 3 m, then to their car: one
-  parked in the car park (not yours), standing 1.8 m off its nearer clear end. There they
-  load it (5 to 10 s, the trolley emptied), then push the trolley back to the bay, along
-  the row and in on its end, nested (now and then, about 1 in 8, they leave it by the car),
-  walk back to the car's door and are gone (driven off). The other half get out of a car
-  (out of sight), take the trolley on the end of the bay's row and push it into the shop
-  (the trolley goes in with them, and comes out with someone else). Pushing, they go round
-  the cars standing in the way (trolley and all), a little slower than they walk. A
-  trolley's loose (it's knocked about, rolls, and smashes, as a bench does: hit hard, into
-  bits of wire and handle); knocked out of someone's hands, they go on without it.
+- **Shoppers and trolleys** at the big shops with car parks (below): up to 16 at each shop near
+  the view at once, one coming about every half second till there are (coming into a
+  region, ten at once: some at their cars already, loading them). Half come out of the
+  door pushing a trolley full of shopping (one taken into the shop earlier; or, out of
+  sight, the one on the end of a row), out 3 m, then to their car: one parked in the car
+  park (not yours), standing 1.8 m off its nearer clear end. There they load it (5 to 10 s,
+  the trolley emptied), then push the trolley back to the row nearest their car with room
+  (the bay by the door, or a shelter's), along the row and in on its end, nested (now and
+  then, about 1 in 8, they leave it by the car), walk back to the car's door and are gone
+  (driven off). The other half get out of a car (out of sight), take the trolley on the
+  end of the row nearest it with any in, and push it into the shop (it goes in with them,
+  and comes out with someone else). Pushing, they go round the cars standing in the way
+  (trolley and all; round a row of them, keeping to the side they started round it by;
+  hemmed in, they wait), a little slower than they walk. A trolley's loose (it's knocked
+  about, rolls, and smashes, as a bench does: hit hard, into bits of wire and handle);
+  knocked out of someone's hands, they go on without it.
+- **Trolley shelters** (`trolleyRows` in `src/world/parking.ts`): in a big shop's car park,
+  one bay in every 25 or so (2 to 8 of them) is a trolley shelter, no one parking in it:
+  the bays as far from each other and the door as they'll go (at least 12 m from the
+  door). In each, two rows of nested trolleys along the bay, 0.9 m apart, filling from its
+  closed end towards its open end (the aisle), 10 to a row, half to nine tenths full to
+  start with.
 
 
 **Big shops with car parks** (worked out when the map's built: `stores.ts`, kept as
