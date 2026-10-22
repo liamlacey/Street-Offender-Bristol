@@ -13,6 +13,7 @@ import { trolleyRows } from './parking';
 import { streetLifeWork } from './streetLife';
 import { parkLifeWork } from './parkLife';
 import { playgroundsWork } from './playgrounds';
+import { CRANE_HEIGHT, siteLifeWork } from './sites';
 import { Terrain } from './terrain';
 import type { DebrisKind, ThingKind, WallKind } from './damage';
 import { type Work, drain, every } from './work.ts';
@@ -73,6 +74,20 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
   sandpit: { r: 16, invMass: 0.3 },
   seesaw: { r: 3, length: 38, invMass: 1.5 },
   springy: { r: 4.5, invMass: 3 },
+  // On the building sites (see sites.ts): a Portakabin, a portaloo, a skip (heavy), pallets of bricks, a stack of pipes; a digger and a dumper (heavier than your truck).
+  cabin: { r: 10, length: 48, invMass: 0.3 },
+  portaloo: { r: 5, invMass: 2 },
+  skip: { r: 7, length: 29, invMass: 0.35 },
+  pallet: { r: 4.5, invMass: 1 },
+  pipes: { r: 6, length: 24, invMass: 0.9 },
+  digger: { r: 10, length: 40, invMass: 0.15 },
+  dumper: { r: 8, length: 29, invMass: 0.4 },
+  // Dumped on the brownfield: light, and sent flying.
+  mattress: { r: 5.5, length: 15, invMass: 5 },
+  sofa: { r: 3.6, length: 16, invMass: 2.5 },
+  tyres: { r: 3, invMass: 6 },
+  binbags: { r: 3, invMass: 10 },
+  fridge: { r: 2.8, invMass: 2 },
 };
 
 /** Which of the food carts sells ice cream (see CARTS). */
@@ -560,6 +575,8 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
     addRing(level ? deck : ground, line.pts, r, false, level, line.kind as WallKind, line.height);
     if (pause()) yield;
   }
+  // The building sites' fences (Heras panels: see sites.ts).
+  for (const run of (yield* siteLifeWork(map)).fences) addRing(ground, run, 0.6, false, 0, 'heras');
   // The edge of the map.
   const edge: Wall[] = [];
   addRing(edge, [0, 0, map.width, 0, map.width, map.height, 0, map.height], 0, true, 0);
@@ -610,6 +627,17 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   for (const b of life.boards) add('aboard', b.x, b.y, b.angle);
   // The ice-cream carts in the parks (see parkLife.ts).
   for (const c of (yield* parkLifeWork(map)).carts) add('foodcart', c.x, c.y, c.angle, ICE_CREAM);
+  // On the building sites and the brownfield (see sites.ts): its things; its fences (Heras panels); its tower cranes.
+  const sites = yield* siteLifeWork(map);
+  for (const t of [...sites.things, ...sites.tips]) {
+    const l = LOOSE[t.kind]!;
+    const p = { kind: t.kind, x: t.x, y: t.y };
+    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: t.angle, spin: 0, moved: false, level: 0, home: homeOf(p) });
+  }
+  for (const c of sites.cranes) {
+    posts[0].push({ x: c.x, y: c.y, r: POST_RADIUS.crane!, thing: 'crane', index: fixed.length });
+    fixed.push({ kind: 'crane', x: c.x, y: c.y, angle: c.angle, height: CRANE_HEIGHT, tower: true, level: 0 });
+  }
   // What's in the playgrounds (see playgrounds.ts).
   for (const t of yield* playgroundsWork(map)) {
     const l = LOOSE[t.kind]!;

@@ -251,7 +251,9 @@ the same every time), before it's laid on the road (`src/world/ground.ts`).
 **The ground** (`natural`, `landuse`, `leisure`, `amenity`, `area:highway`, …,
 closed ways and multipolygons): grass, parks, gardens, woods, pitches, play areas,
 flowerbeds, squares and plazas, bus stations' yards (`area:highway=service`:
-surfaced like the roads, slabbed), car parks, building sites, water (the harbour:
+surfaced like the roads, slabbed), car parks, building sites (`landuse=construction`),
+brownfield land (`landuse=brownfield`: cleared or derelict, kept apart from the building
+sites), water (the harbour:
 too deep to drive in), pools and fountains (shallow), piers (decking) and traffic
 islands. Everything else is paving: it's a city centre.
 
@@ -957,6 +959,26 @@ but the water and the buildings.
     anything on its level coming at it (its path, the next 1.3 s of it, within 1.2 m of
     its side) and it darts off to that side at 7 m/s, the lead let go of; and whatever
     else, it's kept 0.4 m clear of every vehicle.
+- **Building sites and brownfield** (`src/world/sites.ts`; drawn bare earth, and
+  rough ground: patchy rank grass and weeds over earth, gravel and bits of rubble):
+  - A building site (150 m² or more) is fenced all round with Heras panels (2 m steel
+    mesh, see-through, knocked down a panel at a time), not across a road or building
+    or in the water, its 7 m gate left open where its edge comes nearest a road (within
+    20 m). Inside its edge: a Portakabin and a portaloo by the gate, a skip, pallets of
+    bricks, a stack of drainage pipes (more of them on a bigger site; a second cabin on
+    one of 4,000 m² or more), square to the site. Out in the middle: a digger (500 m² or
+    more) and a dumper (1,500 m² or more), each trundling (1.6 m/s, turning 0.7 rad/s)
+    to somewhere within 14 m of where it started, stopping there 4 to 14 s (the digger
+    digging, its arm swinging), then on; knocked by anything, stopped for good. A tower
+    crane on one of 4,000 m² or more, near its middle: its mast 40 m up, its 45 m jib
+    turning slowly round (0.05 to 0.09 rad/s). Its workers, one spot per 400 m² (at most
+    8), in hi-vis vests and white hard hats, standing about or going about the site.
+  - Brownfield (100 m² or more) has fly-tipped rubbish on it: a pile for every 600 m² (1
+    to 6), each two to five of mattresses, sofas, tyres, bin bags and fridges, within 10 m
+    of its edge on the side nearest a road, 12 m apart.
+  - All of it loose things: knocked about, and smashed (a cabin into panels, glass and
+    plastic; a pallet into bricks; a mattress, a sofa, bin bags into bits), the skips,
+    diggers and dumpers only by the hardest hits.
 - **Busy pedestrian streets** (`src/world/streetLife.ts`): how busy each pedestrian street
   is, by the shops, cafés and the like within 25 m of it per 100 m (Broadmead, East Street,
   Corn Street, Cotham Hill: 15 to 50). Along each, 2.5 people per 10 m, plus 0.15 for each

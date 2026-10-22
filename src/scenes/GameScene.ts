@@ -62,6 +62,7 @@ import { GRAVITY, Ledges } from '../world/ledges';
 import { LedgeLayer } from '../world/LedgeLayer';
 import { type Block, type Mover, People } from '../world/people';
 import { PLAY_KINDS, PLAY_SCALE } from '../world/playgrounds';
+import { CRANE_JIB, MACHINES, SiteMachines, siteLife } from '../world/sites';
 import { type Pose, PeopleLayer, SIZE as PERSON_SIZE, personTexture } from './PeopleLayer';
 import { type Shape, STIFFNESS, type Wreck, hit as dentAt, newWreck, toBody, toWorld } from '../car/dents';
 import { paintWreck } from './dentArt';
@@ -150,7 +151,7 @@ export class GameScene extends Phaser.Scene {
   /** The street furniture that never moves, and the height of the ground under each, px. */
   private props: Shown[] = [];
   /** What's up high on the fixed things: the cranes' jibs. */
-  private raised: (Shown & { prop: number })[] = [];
+  private raised: (Shown & { prop: number; mast?: number; turn?: [number, number] })[] = [];
   /** What you hit on each level: the ground's, and the bridges' decks'. */
   private walls!: [SegmentGrid, SegmentGrid, SegmentGrid];
   private posts!: [CircleGrid, CircleGrid, CircleGrid];
@@ -250,6 +251,9 @@ export class GameScene extends Phaser.Scene {
   private shownRaised = new Set<number>();
   private shownLoose = new Set<number>();
   private looseFrames = 0;
+  /** The building sites' diggers and dumpers at work (see sites.ts). */
+  private machines: SiteMachines | null = null;
+  private machineBodies: LooseProp[] = [];
   private looseByChunk = new Map<string, number[]>();
   private effects!: CarEffects;
   private skids!: SkidMarks;
@@ -548,7 +552,7 @@ export class GameScene extends Phaser.Scene {
       // (A bike rack with the bikes locked to it.)
       const make = () => {
         const image = this.add
-          .image(p.x, p.y, p.kind === 'bikes' ? `${TEX.prop('bikes')}-${racked(p.x, p.y)}` : TEX.prop(p.kind))
+          .image(p.x, p.y, p.kind === 'bikes' ? `${TEX.prop('bikes')}-${racked(p.x, p.y)}` : p.tower ? `${TEX.prop('crane')}-tower` : TEX.prop(p.kind))
           .setScale(1 / ART_SCALE)
           .setRotation(p.angle ?? 0)
           .setDepth(deck ? DEPTH.onDeck : DEPTH.props);
@@ -557,7 +561,15 @@ export class GameScene extends Phaser.Scene {
         return image;
       };
       this.props.push({ x: p.x, y: p.y, z, image: null, make });
-      if (p.kind === 'crane' && p.height) {
+      if (p.kind === 'crane' && p.height && p.tower) {
+        // A tower crane on a building site: its mast up from its foot, and its jib at the top, turning slowly round.
+        const height = p.height;
+        const prop = this.props.length - 1;
+        const mast = () => this.add.image(p.x, p.y, TEX.mast).setOrigin(0, 0.5).setDepth(DEPTH.buildings + 0.4);
+        this.raised.push({ x: p.x, y: p.y, z, image: null, make: mast, prop, mast: z + height });
+        const jib = () => this.add.image(p.x, p.y, TEX.towerJib).setOrigin(0.2, 0.5).setDisplaySize(CRANE_JIB * 1.25, 1.6 * 8).setDepth(DEPTH.buildings + 0.5);
+        this.raised.push({ x: p.x, y: p.y, z: z + height, image: null, make: jib, prop, turn: [p.angle ?? 0, 0.05 + (Math.abs(Math.round(p.x + p.y)) % 5) / 100] });
+      } else if (p.kind === 'crane' && p.height) {
         const height = p.height;
         // Its jib, up high, reaching out over the water from where it's pinned.
         const jib = () => {
@@ -611,6 +623,9 @@ export class GameScene extends Phaser.Scene {
     }
     for (const body of r.world.loose) if (!body.home || !taken.has(body.home)) loose.push({ body, image: null });
     this.loose = loose;
+    // The building sites' machines, going about their work (the same jobs as before, for those carried over).
+    this.machines = new SiteMachines(siteLife(r.map).sites, Math.random, this.machines);
+    this.machineBodies = loose.map((l) => l.body).filter((b) => MACHINES.has(b.kind));
     this.away = away;
     this.shownLoose.clear();
     this.reindexLoose();
@@ -740,6 +755,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.interpolate(this.accumulator / PHYSICS_DT);
     this.updateSinking(dt);
+    this.machines?.update(dt, this.machineBodies);
     this.updateLoose();
     this.updateTraffic(dt);
     this.hopLeft = Math.max(0, this.hopLeft - dt);
@@ -1976,6 +1992,15 @@ export class GameScene extends Phaser.Scene {
         now.add(i);
         const s = p.lift(t.z);
         t.image.setPosition(p.x(t.x, s), p.y(t.y, s));
+        // A tower crane's mast, up from its foot to its top; its jib turning.
+        const r = t as GameScene['raised'][number];
+        if (r.mast !== undefined) {
+          const top = p.lift(r.mast);
+          const [tx, ty] = [p.x(t.x, top), p.y(t.y, top)];
+          const [fx, fy] = [p.x(t.x, s), p.y(t.y, s)];
+          t.image.setRotation(Math.atan2(ty - fy, tx - fx)).setDisplaySize(Math.max(1, Math.hypot(tx - fx, ty - fy)), 2.2 * 8);
+        }
+        if (r.turn) t.image.setRotation(r.turn[0] + (this.time.now / 1000) * r.turn[1]);
       }
       shown.clear();
       for (const i of now) shown.add(i);
@@ -2023,6 +2048,14 @@ export class GameScene extends Phaser.Scene {
       if (!show || !image) continue;
       const s = p.lift(this.surfaceHeight(body.x, body.y, body.level));
       image.setPosition(p.x(body.x, s), p.y(body.y, s)).setRotation(body.angle + (body.kind === 'roundabout' ? (body.motion?.[0] ?? 0) : 0));
+      // A digger's arm, out from the front of its house (swinging as it digs).
+      if (body.kind === 'digger') {
+        l.parts ??= [this.add.image(0, 0, `${TEX.prop('digger')}-arm`).setScale(1 / ART_SCALE).setOrigin(0.06, 0.5).setDepth(DEPTH.props + 0.01)];
+        const up = p.lift(this.surfaceHeight(body.x, body.y, body.level) + 1 * 8);
+        const a = body.angle + (body.motion?.[0] ?? 0);
+        const [px, py] = [body.x + Math.cos(body.angle) * 9, body.y + Math.sin(body.angle) * 9];
+        l.parts[0].setPosition(p.x(px, up), p.y(py, up)).setRotation(a);
+      }
       // A swings' seats, swinging (a little up off the ground).
       if (body.kind === 'swings') {
         l.parts ??= [0, 1].map(() => this.add.image(0, 0, `${TEX.prop('swings')}-seat`).setScale(PLAY_SCALE / ART_SCALE).setDepth(DEPTH.props + 0.01));

@@ -5,7 +5,7 @@ import type { Perspective } from './perspective';
 import type { Wall } from './world';
 
 /** How tall each kind of wall stands, px, and its colours: its side, and its top. */
-const LOOK: Record<WallKind, { height: number; side: number; top: number; width: number; open?: boolean; square?: boolean; hidden?: boolean }> = {
+const LOOK: Record<WallKind, { height: number; side: number; top: number; width: number; open?: boolean; square?: boolean; hidden?: boolean; mesh?: boolean }> = {
   wall: { height: 1.6 * 8, side: 0x857a6b, top: 0xb3a690, width: 4 },
   hedge: { height: 1.8 * 8, side: 0x2c5323, top: 0x417c31, width: 9 },
   fence: { height: 1.5 * 8, side: 0x5b4630, top: 0x86694a, width: 2 },
@@ -18,6 +18,8 @@ const LOOK: Record<WallKind, { height: number; side: number; top: number; width:
   shelter: { height: 2.5 * 8, side: 0x9cb6c2, top: 0x3d434a, width: 12, square: true },
   // A bridge's parapets are drawn with its deck.
   parapet: { height: 1 * 8, side: 0x857a6b, top: 0xb9ae99, width: 3, hidden: true },
+  // A building site's Heras fencing: galvanised mesh, its top rail.
+  heras: { height: 2 * 8, side: 0xaeb5ba, top: 0xd4d9dc, width: 0.9, mesh: true },
 };
 
 /**
@@ -62,9 +64,15 @@ export class WallLayer {
           g.lineBetween(a0x, a0y, a1x, a1y);
           g.lineBetween(b0x, b0y, b1x, b1y);
         } else {
-          g.fillStyle(look.side, 1);
+          // (Mesh: see-through, and its posts at its ends.)
+          g.fillStyle(look.side, look.mesh ? 0.3 : 1);
           g.fillTriangle(a0x, a0y, b0x, b0y, b1x, b1y);
           g.fillTriangle(a0x, a0y, b1x, b1y, a1x, a1y);
+          if (look.mesh) {
+            g.lineStyle(0.6 * s1, look.side, 1);
+            g.lineBetween(a0x, a0y, a1x, a1y);
+            g.lineBetween(b0x, b0y, b1x, b1y);
+          }
         }
         // Its top: a flat rectangle, edged, for a shelter's roof.
         if (look.square) {

@@ -307,11 +307,32 @@ function ballTexture(scene: Phaser.Scene, kind: Kickabout['kind']): string {
   return key;
 }
 
-export function personTexture(scene: Phaser.Scene, look: number, pose: Pose): string {
-  const key = `person-${look % LOOKS}-${pose}`;
-  if (pose === 'down') canvasTexture(scene, key, 16, 8, (ctx) => person(ctx, look, pose));
-  else canvasTexture(scene, key, 10, 10, (ctx) => person(ctx, look, pose));
+export function personTexture(scene: Phaser.Scene, look: number, pose: Pose, hivis = false): string {
+  const key = `person-${look % LOOKS}-${pose}${hivis ? '-hivis' : ''}`;
+  const draw = (ctx: Ctx) => {
+    person(ctx, look, pose);
+    if (hivis) hiVis(ctx, pose);
+  };
+  if (pose === 'down') canvasTexture(scene, key, 16, 8, draw);
+  else canvasTexture(scene, key, 10, 10, draw);
   return key;
+}
+
+/** A building site worker's hi-vis vest (orange, a silver band) over their top, and a white hard hat. */
+function hiVis(ctx: Ctx, pose: Pose): void {
+  const ellipse = (x: number, y: number, rx: number, ry: number, fill: string) => {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  // (Where the shoulders and head are: lying down, or on their feet.)
+  const [cx, cy, hx] = pose === 'down' ? [9, 4, 12.8] : [5, 5, 5.2];
+  ellipse(cx, cy, 1.4, 2.6, '#f28a1a');
+  ctx.fillStyle = '#d8dde0';
+  ctx.fillRect(cx - 0.3, cy - 2.4, 0.6, 4.8);
+  ellipse(hx, cy, 1.35, 1.3, '#f4f4f0');
+  ellipse(hx + 0.3, cy, 0.5, 1, '#dcdcd6');
 }
 
 /**
@@ -355,7 +376,7 @@ export class PeopleLayer {
       seen.add(p);
       const pose: Pose = p.mode === 'down' ? 'down' : p.mode === 'sit' ? 'sit' : p.speed < 2 ? 'stand' : p.step < 0.5 ? 'step0' : 'step1';
       const act = p.mode === 'perform' && p.act && p.act !== 'vendor' ? p.act : null;
-      const key = act ? performerTexture(this.scene, p.look, act, Math.floor(p.step * ACT_FRAMES[act]) % ACT_FRAMES[act]) : personTexture(this.scene, p.look, pose);
+      const key = act ? performerTexture(this.scene, p.look, act, Math.floor(p.step * ACT_FRAMES[act]) % ACT_FRAMES[act]) : personTexture(this.scene, p.look, pose, p.hivis);
       let s = this.sprites.get(p);
       if (!s) {
         s = this.scene.add.image(0, 0, key).setScale(SIZE / ART_SCALE);

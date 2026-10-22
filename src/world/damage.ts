@@ -19,7 +19,7 @@ export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'moo
 /** What doesn't topple like the street furniture: a tree (it splits and falls its own way), and what's left of one (low enough to drive over). */
 export type Structure = 'tree' | 'stump';
 /** Walls, by what OSM calls them (and a bridge's parapets). */
-export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing' | 'gate' | 'liftgate' | 'chain' | 'shelter' | 'parapet';
+export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing' | 'gate' | 'liftgate' | 'chain' | 'shelter' | 'parapet' | 'heras';
 
 export interface Toughness {
   material: Material;
@@ -70,6 +70,8 @@ export const WALLS: Record<WallKind, Toughness & { /** How much of it a hit at i
   shelter: { material: 'glass', strength: 140, absorb: 0.25, gap: 20 * 8 },
   // A bridge's stone parapet: knocked through, and there's nothing between you and the drop.
   parapet: { material: 'stone', strength: 260, absorb: 0.45, gap: 2.5 * 8 },
+  // A building site's fencing: steel mesh panels on concrete feet, knocked over a panel or two at a time.
+  heras: { material: 'metal', strength: 60, absorb: 0.1, gap: 3.5 * 8 },
 };
 
 /** A bench smashes if hit this hard; slower, it's just shoved. */
@@ -277,7 +279,7 @@ export function fallen(kind: Exclude<ThingKind, Structure>, x: number, y: number
  * ground) and smaller, the smaller the easier, down to bits too small to break.
  * What each piece is, how strong (as `Toughness`), and what it breaks into.
  */
-export const BREAKUP: Partial<Record<DebrisKind | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block' | 'trolley' | 'foodcart' | 'stall' | 'aboard' | 'swings' | 'slide' | 'roundabout' | 'climbframe' | 'sandpit' | 'seesaw' | 'springy', Toughness & { into: [DebrisKind, number][] }>> = {
+export const BREAKUP: Partial<Record<DebrisKind | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block' | 'trolley' | 'foodcart' | 'stall' | 'aboard' | 'swings' | 'slide' | 'roundabout' | 'climbframe' | 'sandpit' | 'seesaw' | 'springy' | 'cabin' | 'portaloo' | 'skip' | 'pallet' | 'pipes' | 'digger' | 'dumper' | 'mattress' | 'sofa' | 'tyres' | 'binbags' | 'fridge', Toughness & { into: [DebrisKind, number][] }>> = {
   // A shopping trolley, hit hard: mangled, its basket's wires and its handle in bits.
   trolley: { material: 'metal', strength: 170, absorb: 0.06, into: [['rail', 3], ['plastic', 2]] },
   // A food cart: its panels and its parasol in bits.
@@ -293,6 +295,21 @@ export const BREAKUP: Partial<Record<DebrisKind | 'bench' | 'picnic' | 'gritbin'
   sandpit: { material: 'timber', strength: 130, absorb: 0.25, into: [['plank', 6]] },
   seesaw: { material: 'timber', strength: 120, absorb: 0.1, into: [['plank', 2], ['shortpole', 1]] },
   springy: { material: 'plastic', strength: 90, absorb: 0.05, into: [['plastic', 3]] },
+  // The building sites': a Portakabin torn open (its panels, its windows); a portaloo split; a skip barely dented, it takes so much;
+  // a pallet of bricks, the bricks everywhere; pipes scattered; a digger and a dumper, steel, only wrecked by the biggest hit.
+  cabin: { material: 'metal', strength: 230, absorb: 0.35, into: [['plank', 5], ['glass', 4], ['plastic', 3]] },
+  portaloo: { material: 'plastic', strength: 90, absorb: 0.08, into: [['plastic', 6]] },
+  skip: { material: 'metal', strength: 330, absorb: 0.5, into: [['rail', 3], ['rubble', 4]] },
+  pallet: { material: 'stone', strength: 120, absorb: 0.15, into: [['brick', 7], ['splinter', 2]] },
+  pipes: { material: 'plastic', strength: 100, absorb: 0.1, into: [['plastic', 5]] },
+  digger: { material: 'metal', strength: 380, absorb: 0.6, into: [['rail', 3], ['glass', 3], ['shortpole', 2]] },
+  dumper: { material: 'metal', strength: 300, absorb: 0.5, into: [['rail', 3], ['glass', 2], ['rubble', 3]] },
+  // The fly-tipped rubbish: a mattress and a sofa ripped apart, tyres bounced off, bin bags burst, a fridge's door off.
+  mattress: { material: 'plastic', strength: 70, absorb: 0.05, into: [['plastic', 4]] },
+  sofa: { material: 'timber', strength: 80, absorb: 0.1, into: [['splinter', 3], ['plastic', 3]] },
+  tyres: { material: 'plastic', strength: 140, absorb: 0.05, into: [['plastic', 2]] },
+  binbags: { material: 'plastic', strength: 25, absorb: 0.02, into: [['plastic', 5]] },
+  fridge: { material: 'metal', strength: 110, absorb: 0.1, into: [['plastic', 2], ['glass', 1], ['rail', 1]] },
   // A bench and a picnic table, standing loose: smashed to planks.
   bench: { material: 'timber', strength: BENCH_SMASH, absorb: 0.12, into: [['plank', 5]] },
   picnic: { material: 'timber', strength: BENCH_SMASH, absorb: 0.15, into: [['plank', 7]] },

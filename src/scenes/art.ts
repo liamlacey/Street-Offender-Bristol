@@ -26,6 +26,9 @@ export const TEX = {
   bole: 'bole',
   pole: 'pole',
   jib: 'crane-jib',
+  /** A tower crane's: its jib (and counter-jib), and its mast. */
+  towerJib: 'crane-towerjib',
+  mast: 'crane-mast',
 } as const;
 
 export const TREE_KINDS = 4;
@@ -577,6 +580,196 @@ export function createArt(scene: Phaser.Scene): void {
     ctx.fillStyle = '#e07a2a';
     ctx.fillRect(7.4, 3.6, 0.6, 0.8);
     circle(ctx, 6.6, 3.4, 0.3, '#1d1d1f');
+  });
+  // The building sites' things, from above (along x).
+  const shade = (ctx: Ctx, w: number, h: number) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(1.2, 1.2, w - 1, h - 1);
+  };
+  // A Portakabin: its flat roof, ribbed, a blue rim; an air-conditioning box.
+  canvasTexture(scene, TEX.prop('cabin'), 49, 21, (ctx) => {
+    shade(ctx, 49, 21);
+    roundRect(ctx, 0, 0, 48, 20, 0.8, '#2f5e94');
+    roundRect(ctx, 1, 1, 46, 18, 0.5, '#c9ccc8');
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    for (let x = 4; x < 46; x += 4) ctx.fillRect(x, 1, 0.5, 18);
+    roundRect(ctx, 36, 6, 6, 8, 0.5, '#9a9ea2');
+  });
+  // A portaloo: its blue roof and vent.
+  canvasTexture(scene, TEX.prop('portaloo'), 11, 11, (ctx) => {
+    shade(ctx, 11, 11);
+    roundRect(ctx, 0, 0, 10, 10, 1.6, '#2f6fc0');
+    circle(ctx, 5, 5, 3.2, '#3b80d6');
+    circle(ctx, 7, 3, 0.9, '#e8ecef');
+  });
+  // A skip: yellow, its sloping ends, rubble in it.
+  canvasTexture(scene, TEX.prop('skip'), 30, 16, (ctx) => {
+    shade(ctx, 30, 16);
+    ctx.fillStyle = '#e2b41c';
+    ctx.beginPath();
+    ctx.moveTo(0, 1);
+    ctx.lineTo(29, 1);
+    ctx.lineTo(29, 14);
+    ctx.lineTo(0, 14);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#7b6a55';
+    ctx.fillRect(3.5, 3, 22, 9);
+    const rand = seeded(5);
+    for (let i = 0; i < 30; i++) {
+      ctx.fillStyle = ['#9a5a42', '#b4b0a6', '#5b4630', '#8a8478'][i % 4];
+      ctx.fillRect(4 + rand() * 20, 3.5 + rand() * 7.5, 1 + rand() * 2.5, 0.8 + rand() * 1.5);
+    }
+  });
+  // A pallet of bricks, shrink-wrapped.
+  canvasTexture(scene, TEX.prop('pallet'), 10, 10, (ctx) => {
+    shade(ctx, 10, 10);
+    roundRect(ctx, 0, 0, 9.6, 8.8, 0.3, '#8a5a32');
+    roundRect(ctx, 0.6, 0.6, 8.4, 7.6, 0.3, '#a5503a');
+    ctx.fillStyle = 'rgba(60,20,10,0.35)';
+    for (let y = 1.6; y < 8; y += 1.5) ctx.fillRect(0.6, y, 8.4, 0.3);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(0.6, 3.8, 8.4, 0.6);
+  });
+  // Drainage pipes, stacked: orange plastic.
+  canvasTexture(scene, TEX.prop('pipes'), 25, 13, (ctx) => {
+    shade(ctx, 25, 13);
+    for (let k = 0; k < 4; k++) {
+      roundRect(ctx, 0, k * 3, 24, 2.8, 1.4, '#c86a2a');
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillRect(1, k * 3 + 0.5, 22, 0.5);
+    }
+  });
+  // A digger: its tracks, its house (the engine, the cab's glass); its arm's drawn on its own (it swings).
+  canvasTexture(scene, TEX.prop('digger'), 41, 22, (ctx) => {
+    shade(ctx, 41, 22);
+    for (const y of [0, 15.5]) {
+      roundRect(ctx, 2, y, 30, 5.5, 2.5, '#2b2b2c');
+      ctx.fillStyle = '#4a4a4c';
+      for (let x = 4; x < 31; x += 2.2) ctx.fillRect(x, y + 0.5, 0.8, 4.5);
+    }
+    roundRect(ctx, 5, 3.5, 24, 14, 2, '#e2a919');
+    roundRect(ctx, 5, 4.5, 8, 12, 1.5, '#c69212');
+    roundRect(ctx, 20, 4.5, 7, 6, 1, '#27353d');
+    ctx.fillStyle = 'rgba(200,230,240,0.4)';
+    ctx.fillRect(21, 5.2, 5, 1.2);
+    circle(ctx, 29, 10.5, 2, '#9b7a10');
+  });
+  // Its arm: boom and dipper out from where it's pinned, the bucket on the end.
+  canvasTexture(scene, `${TEX.prop('digger')}-arm`, 26, 8, (ctx) => {
+    roundRect(ctx, 0, 2.5, 22, 3, 1.4, '#d39d14');
+    ctx.fillStyle = '#9b7a10';
+    ctx.fillRect(10, 3.4, 8, 1.2);
+    roundRect(ctx, 20, 0.5, 5.5, 7, 1, '#4a4a4c');
+    ctx.fillStyle = '#2b2b2c';
+    for (let y = 1.2; y < 7; y += 1.4) ctx.fillRect(24.6, y, 0.9, 0.6);
+  });
+  // A site dumper: its hopper up front, its engine behind, its wheels.
+  canvasTexture(scene, TEX.prop('dumper'), 30, 17, (ctx) => {
+    shade(ctx, 30, 17);
+    for (const [x, y] of [[4, 0], [4, 13], [21, 0], [21, 13]]) roundRect(ctx, x, y, 6, 3.5, 1.4, '#2b2b2c');
+    roundRect(ctx, 1, 2.5, 13, 11, 1, '#e2a919');
+    roundRect(ctx, 16, 3.5, 13, 9, 1.5, '#d39d14');
+    ctx.fillStyle = '#7b6a55';
+    ctx.fillRect(15, 4.5, 12, 7);
+    ctx.fillStyle = '#8a8478';
+    ctx.fillRect(17, 5.5, 8, 5);
+    roundRect(ctx, 3, 5, 6, 6, 1, '#3a3a3c');
+  });
+  // The fly-tipped rubbish: a stained mattress, an old sofa, a stack of tyres, burst bin bags, a fridge.
+  canvasTexture(scene, TEX.prop('mattress'), 16, 12, (ctx) => {
+    shade(ctx, 16, 12);
+    roundRect(ctx, 0, 0, 15.2, 11.2, 1.2, '#e6e0cf');
+    ctx.strokeStyle = 'rgba(120,110,90,0.35)';
+    ctx.lineWidth = 0.3;
+    for (let x = 2.5; x < 15; x += 2.5) for (let y = 2.5; y < 11; y += 2.5) ctx.strokeRect(x - 0.4, y - 0.4, 0.8, 0.8);
+    ctx.fillStyle = 'rgba(150,120,60,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(9, 6.5, 3.5, 2.2, 0.4, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  canvasTexture(scene, TEX.prop('sofa'), 17, 8, (ctx) => {
+    shade(ctx, 17, 8);
+    roundRect(ctx, 0, 0, 16, 7.4, 1.2, '#6e3a35');
+    roundRect(ctx, 1.6, 2.4, 6.2, 4.2, 0.8, '#84473f');
+    roundRect(ctx, 8.2, 2.4, 6.2, 4.2, 0.8, '#84473f');
+    ctx.fillStyle = 'rgba(255,240,210,0.6)';
+    ctx.fillRect(10, 3.6, 2, 1.4);
+  });
+  canvasTexture(scene, TEX.prop('tyres'), 7, 7, (ctx) => {
+    circle(ctx, 3.8, 3.8, 3, 'rgba(0,0,0,0.22)');
+    circle(ctx, 3.2, 3.2, 3, '#1c1c1d');
+    circle(ctx, 3.2, 3.2, 1.6, '#4a4f53');
+    ctx.strokeStyle = '#333436';
+    ctx.lineWidth = 0.4;
+    ctx.beginPath();
+    ctx.arc(3.2, 3.2, 2.4, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+  canvasTexture(scene, TEX.prop('binbags'), 7, 7, (ctx) => {
+    for (const [x, y, r] of [[2.4, 2.6, 2], [4.6, 3.6, 2.1], [2.8, 4.8, 1.6]]) {
+      circle(ctx, x + 0.5, y + 0.5, r, 'rgba(0,0,0,0.2)');
+      circle(ctx, x, y, r, '#1b1d20');
+      circle(ctx, x - 0.6, y - 0.6, r * 0.35, 'rgba(255,255,255,0.18)');
+    }
+    ctx.fillStyle = '#d9d2c0';
+    ctx.fillRect(4.6, 5.2, 0.9, 0.6);
+  });
+  canvasTexture(scene, TEX.prop('fridge'), 7, 7, (ctx) => {
+    shade(ctx, 7, 7);
+    roundRect(ctx, 0, 0, 6, 6, 0.6, '#e8ebec');
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(0, 3.6, 6, 0.3);
+    ctx.fillStyle = 'rgba(160,110,60,0.4)';
+    ctx.fillRect(3.5, 0.8, 1.6, 1.4);
+  });
+  // A tower crane's foot: its concrete base, the mast's corner legs.
+  canvasTexture(scene, `${TEX.prop('crane')}-tower`, 32, 32, (ctx) => {
+    roundRect(ctx, 4, 4, 24, 24, 1, '#9e9a91');
+    roundRect(ctx, 11, 11, 10, 10, 0.5, '#d9a41a');
+    ctx.strokeStyle = '#8f6d0d';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(11, 11);
+    ctx.lineTo(21, 21);
+    ctx.moveTo(21, 11);
+    ctx.lineTo(11, 21);
+    ctx.stroke();
+  });
+  // Its jib (along x from the mast at a fifth of the way along) and counter-jib behind, its counterweight; the hook's trolley out along it.
+  canvasTexture(scene, TEX.towerJib, 80, 8, (ctx) => {
+    ctx.strokeStyle = '#d9a41a';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, 2);
+    ctx.lineTo(80, 3);
+    ctx.moveTo(0, 6);
+    ctx.lineTo(80, 5);
+    ctx.stroke();
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    for (let x = 0; x < 78; x += 3) {
+      ctx.moveTo(x, 2 + x / 80);
+      ctx.lineTo(x + 3, 6 - (x + 3) / 80);
+    }
+    ctx.stroke();
+    roundRect(ctx, 0, 1, 6, 6, 0.5, '#7c7a74');
+    roundRect(ctx, 14, 1.5, 4, 5, 0.6, '#2f3a40');
+    roundRect(ctx, 52, 2.6, 3, 2.8, 0.4, '#3a3e43');
+  });
+  canvasTexture(scene, TEX.mast, 64, 4, (ctx) => {
+    ctx.strokeStyle = '#d9a41a';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(0, 0.5);
+    ctx.lineTo(64, 0.5);
+    ctx.moveTo(0, 3.5);
+    ctx.lineTo(64, 3.5);
+    for (let x = 0; x < 64; x += 3) {
+      ctx.moveTo(x, 0.5);
+      ctx.lineTo(x + 3, 3.5);
+    }
+    ctx.stroke();
   });
   // A dead traffic light: no lamp lit.
   canvasTexture(scene, TEX.light('off'), 12, 16, (ctx) => {

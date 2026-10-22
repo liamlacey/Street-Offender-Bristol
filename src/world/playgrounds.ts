@@ -158,7 +158,7 @@ function distanceTo(x: number, y: number, pts: Pts): number {
 }
 
 /** Whether two rectangles (x, y, angle, half along, half across) overlap (by their separating axes). */
-function rectsOverlap(a: [number, number, number, number, number], b: [number, number, number, number, number]): boolean {
+export function rectsOverlap(a: [number, number, number, number, number], b: [number, number, number, number, number]): boolean {
   const axes = (r: typeof a) => [[Math.cos(r[2]), Math.sin(r[2])], [-Math.sin(r[2]), Math.cos(r[2])]];
   const reach = (r: typeof a, [ax, ay]: number[]) => {
     const [u, v] = axes(r);

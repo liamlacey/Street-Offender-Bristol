@@ -18,6 +18,7 @@ import { type Store, TROLLEY_GAP } from '../map/stores';
 import { type TrolleyRow, trolleyRows } from './parking';
 import { PLAY_KINDS, PLAY_SCALE, type PlayKind } from './playgrounds';
 import { type Game, parkLifeWork } from './parkLife';
+import { siteLifeWork } from './sites';
 import { type Act, pedestrianBusy, streetLifeWork } from './streetLife';
 import type { Light } from './lights';
 import { offsetLine } from './world';
@@ -283,6 +284,8 @@ export interface Person {
   dog: Dog | null;
   /** Out for a run (in the park). */
   jog?: boolean;
+  /** At work on a building site: a hi-vis vest and a hard hat. */
+  hivis?: boolean;
 }
 
 /** A vehicle as the people see it: where, which way, how big, how fast; a bus's stop. */
@@ -344,6 +347,8 @@ interface Spot {
   group: boolean;
   /** On the grass: a picnic, perhaps. */
   grass?: boolean;
+  /** On a building site: its workers, in hi-vis. */
+  hivis?: boolean;
 }
 
 /** Where a crossing's kerbs are (either side of the road, on the pavement), and how it works. */
@@ -659,6 +664,10 @@ export class People {
         k++;
       }
     }
+    // The building sites' workers, in hi-vis, standing about in twos and threes or going about the site.
+    const sites = yield* siteLifeWork(map);
+    for (const ring of sites.sites) this.areas.push(ring);
+    for (const w of sites.workers) this.addSpot({ x: w.x, y: w.y, angle: this.rand() * Math.PI * 2, weight: 1.2, group: this.rand() < 0.4, hivis: true });
     // Outside the shops, cafés and bars, on the pavement; at the sights, in groups.
     const v = map.venues ?? [];
     for (let i = 0; i + 2 < v.length; i += 3) {
@@ -1114,6 +1123,7 @@ export class People {
     const area = this.areas.findIndex((ring) => pointInRing(s.x, s.y, ring));
     if (area >= 0 && !s.group && this.rand() < 0.6) {
       const p = this.make(s.x, s.y, 'wander');
+      if (s.hivis) p.hivis = true;
       p.area = area;
       [p.tx, p.ty] = [s.x, s.y];
       return;
@@ -1123,6 +1133,7 @@ export class People {
     for (let k = 0; k < n; k++) {
       const a = (k / n) * Math.PI * 2 + this.rand() * 0.4;
       const p = this.make(s.x + Math.cos(a) * r, s.y + Math.sin(a) * r, 'stand');
+      if (s.hivis) p.hivis = true;
       // A group faces in, to each other; on their own, the way the spot faces.
       p.angle = n > 1 ? a + Math.PI : s.angle + (this.rand() - 0.5) * 0.6;
       p.timer = 30 + this.rand() * 120;
