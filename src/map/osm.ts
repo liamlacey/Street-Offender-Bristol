@@ -434,7 +434,14 @@ export type PropKind =
   | 'trolley'
   | 'foodcart'
   | 'stall'
-  | 'aboard';
+  | 'aboard'
+  | 'swings'
+  | 'slide'
+  | 'roundabout'
+  | 'climbframe'
+  | 'sandpit'
+  | 'seesaw'
+  | 'springy';
 
 export interface Prop {
   kind: PropKind;

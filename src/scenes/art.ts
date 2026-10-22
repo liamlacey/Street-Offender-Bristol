@@ -441,6 +441,143 @@ export function createArt(scene: Phaser.Scene): void {
     ctx.fillStyle = '#f2c94c';
     ctx.fillRect(0.8, 2.3, 1.8, 0.3);
   });
+  // The playgrounds' things, from above (along x), in the bright paint they come in.
+  // The swings: a steel A-frame at each end, the bar between (their seats drawn on their own, swinging).
+  canvasTexture(scene, TEX.prop('swings'), 30, 16, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(1.5, 7.8, 29, 1.6);
+    ctx.strokeStyle = '#2f6b45';
+    ctx.lineWidth = 1;
+    ctx.lineCap = 'round';
+    for (const x of [1.2, 28.8]) {
+      ctx.beginPath();
+      ctx.moveTo(x, 1);
+      ctx.lineTo(x, 15);
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = '#37804f';
+    ctx.beginPath();
+    ctx.moveTo(1.2, 8);
+    ctx.lineTo(28.8, 8);
+    ctx.stroke();
+    // Worn patches under each swing.
+    ctx.fillStyle = 'rgba(110,86,58,0.35)';
+    for (const x of [8.6, 21.4]) {
+      ctx.beginPath();
+      ctx.ellipse(x, 8, 2.4, 6.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+  canvasTexture(scene, `${TEX.prop('swings')}-seat`, 4, 2.4, (ctx) => {
+    roundRect(ctx, 0.2, 0.2, 3.6, 2, 0.6, '#1d1d1f');
+    ctx.fillStyle = '#9aa1a6';
+    ctx.fillRect(0, 0.9, 0.4, 0.6);
+    ctx.fillRect(3.6, 0.9, 0.4, 0.6);
+  });
+  // The slide: its ladder, the platform at the top, and the chute down.
+  canvasTexture(scene, TEX.prop('slide'), 32, 8, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(2, 2.5, 30, 5);
+    ctx.strokeStyle = '#8e969c';
+    ctx.lineWidth = 0.6;
+    ctx.strokeRect(0.5, 1.6, 6, 4.8);
+    for (let x = 1.7; x < 6.5; x += 1.2) ctx.strokeRect(x, 1.6, 0, 4.8);
+    roundRect(ctx, 6, 1, 4.6, 6, 0.6, '#d8452e');
+    roundRect(ctx, 10.2, 1.6, 21.4, 4.8, 1.4, '#c9ced2');
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillRect(11, 3.4, 19.6, 1.1);
+    ctx.fillStyle = '#e8b730';
+    ctx.fillRect(10.2, 1.6, 21.4, 0.7);
+    ctx.fillRect(10.2, 5.7, 21.4, 0.7);
+  });
+  // The roundabout: a steel disc, in coloured quarters, its grab rails and the post in the middle.
+  canvasTexture(scene, TEX.prop('roundabout'), 20, 20, (ctx) => {
+    circle(ctx, 10.8, 10.8, 9.4, 'rgba(0,0,0,0.22)');
+    ['#d8452e', '#e8b730', '#2f74c0', '#3f9a52'].forEach((c, i) => {
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.moveTo(10, 10);
+      ctx.arc(10, 10, 9.2, (i * Math.PI) / 2, ((i + 1) * Math.PI) / 2);
+      ctx.closePath();
+      ctx.fill();
+    });
+    ctx.strokeStyle = '#d6dadd';
+    ctx.lineWidth = 0.7;
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI) / 2;
+      ctx.beginPath();
+      ctx.moveTo(10 + Math.cos(a) * 2, 10 + Math.sin(a) * 2);
+      ctx.lineTo(10 + Math.cos(a) * 8.6, 10 + Math.sin(a) * 8.6);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(10, 10, 9.2, 0, Math.PI * 2);
+    ctx.stroke();
+    circle(ctx, 10, 10, 2, '#9aa1a6');
+  });
+  // The climbing frame: a lattice of bars, a deck in the middle, a bit of netting.
+  canvasTexture(scene, TEX.prop('climbframe'), 22, 22, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(2.5, 2.5, 19, 19);
+    roundRect(ctx, 7, 7, 8, 8, 0.5, '#8a5a32');
+    ctx.strokeStyle = '#2f74c0';
+    ctx.lineWidth = 0.9;
+    for (let k = 1; k <= 21; k += 5) {
+      ctx.beginPath();
+      ctx.moveTo(k, 1);
+      ctx.lineTo(k, 21);
+      ctx.moveTo(1, k);
+      ctx.lineTo(21, k);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#e8b730';
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(1, 1, 20, 20);
+    ctx.strokeStyle = 'rgba(230,220,190,0.8)';
+    ctx.lineWidth = 0.35;
+    for (let k = 0; k < 5; k++) {
+      ctx.beginPath();
+      ctx.moveTo(16 + k, 16);
+      ctx.lineTo(16, 21 - k);
+      ctx.stroke();
+    }
+  });
+  // The sandpit: its timber edging, and the sand, raked about and dug.
+  canvasTexture(scene, TEX.prop('sandpit'), 26, 26, (ctx) => {
+    roundRect(ctx, 0, 0, 26, 26, 1, '#7a5230');
+    roundRect(ctx, 1.6, 1.6, 22.8, 22.8, 0.6, '#e2cf98');
+    ctx.fillStyle = 'rgba(160,130,80,0.35)';
+    for (const [x, y, r] of [[8, 9, 2.4], [17, 15, 3], [11, 19, 1.6], [19, 6, 1.4]]) {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    circle(ctx, 18.5, 18.5, 1.2, '#d8452e');
+    circle(ctx, 6, 18, 0.9, '#2f74c0');
+  });
+  // The seesaw: its plank, the pivot in the middle, a handle at each seat.
+  canvasTexture(scene, TEX.prop('seesaw'), 30, 6, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(1.4, 2.4, 29, 3);
+    roundRect(ctx, 0.5, 1.6, 29, 2.8, 1, '#3f9a52');
+    roundRect(ctx, 13, 0.5, 4, 5, 0.8, '#5c6368');
+    ctx.fillStyle = '#e8b730';
+    ctx.fillRect(4.5, 0.4, 0.8, 5.2);
+    ctx.fillRect(24.7, 0.4, 0.8, 5.2);
+  });
+  // A spring rider: a yellow duck on its spring.
+  canvasTexture(scene, TEX.prop('springy'), 8, 8, (ctx) => {
+    circle(ctx, 4.5, 4.5, 3.2, 'rgba(0,0,0,0.22)');
+    ctx.fillStyle = '#efc53a';
+    ctx.beginPath();
+    ctx.ellipse(3.6, 4, 3, 2.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    circle(ctx, 6.4, 4, 1.4, '#efc53a');
+    ctx.fillStyle = '#e07a2a';
+    ctx.fillRect(7.4, 3.6, 0.6, 0.8);
+    circle(ctx, 6.6, 3.4, 0.3, '#1d1d1f');
+  });
   // A dead traffic light: no lamp lit.
   canvasTexture(scene, TEX.light('off'), 12, 16, (ctx) => {
     circle(ctx, 6, 2.5, 2.2, '#2a2d31');

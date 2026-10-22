@@ -905,6 +905,21 @@ but the water and the buildings.
   3 m/s), up and on their way if it's moved or broken.
 - **Picnics**: at about a third of the park, garden and lawn spots (not under a tree), 2 to 5
   sit in a ring on a blanket, facing in, for one to four minutes, then pack up and go.
+- **Playgrounds** (`leisure=playground`; `src/world/playgrounds.ts`): filled with swings, a
+  slide, a roundabout, a climbing frame, spring riders, a sandpit, a seesaw (and a second
+  swings and climbing frame in a big one), one for every 40 m² (at most 10), in that
+  order as there's room: square to the playground's longest side (or across it), on a
+  1 m grid tried in an order of its own (the same each time), inside it, clear of
+  buildings, the water, roads and railways (1 m off their edges), tree trunks and each
+  other (1 m apart), in the open before under the trees. Drawn 1.3 times life size, as
+  the people are bigger than life. Loose things: shoved about (steel set in the ground,
+  heavy) and smashed when hit hard (the frames into poles and rails, the seats and
+  panels into plastic, the sandpit's edging and the seesaw into planks). People come
+  to play on them as to a bench (weight 2.2 each), for 15 s to a minute: on the swings
+  (two seats; whoever's on one swinging higher and higher, up to 0.8 m out, dying down
+  once they're off), round the roundabout (up to four, pushed round, slowing once
+  they're off), down the slide and back up its ladder (4 s a go), on the climbing frame
+  (up to five), in the sandpit, two on the seesaw, bouncing on a spring rider.
 - **Busy pedestrian streets** (`src/world/streetLife.ts`): how busy each pedestrian street
   is, by the shops, cafés and the like within 25 m of it per 100 m (Broadmead, East Street,
   Corn Street, Cotham Hill: 15 to 50). Along each, 2.5 people per 10 m, plus 0.15 for each

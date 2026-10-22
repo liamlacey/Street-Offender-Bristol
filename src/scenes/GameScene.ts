@@ -61,6 +61,7 @@ import { WaterRipples } from './WaterRipples';
 import { GRAVITY, Ledges } from '../world/ledges';
 import { LedgeLayer } from '../world/LedgeLayer';
 import { type Block, type Mover, People } from '../world/people';
+import { PLAY_KINDS, PLAY_SCALE } from '../world/playgrounds';
 import { type Pose, PeopleLayer, SIZE as PERSON_SIZE, personTexture } from './PeopleLayer';
 import { type Shape, STIFFNESS, type Wreck, hit as dentAt, newWreck, toBody, toWorld } from '../car/dents';
 import { paintWreck } from './dentArt';
@@ -69,6 +70,9 @@ import { bodyLayout, busTexture, vehicleShadow, vehicleTexture } from './vehicle
 /** Physics runs at a fixed rate so handling feels the same at any frame rate. */
 const PHYSICS_DT = 1 / 120;
 const MAX_STEPS_PER_FRAME = 8;
+
+/** What's in the playgrounds: drawn bigger than life (see PLAY_SCALE). */
+const PLAY = new Set<string>(PLAY_KINDS);
 
 const DEPTH = {
   ground: 0,
@@ -225,7 +229,7 @@ export class GameScene extends Phaser.Scene {
   private people!: People;
   private peopleLayer!: PeopleLayer;
   /** The loose things in the region (their pictures made as they come into view); and those moved out of it, put by (see `placeLoose`). */
-  private loose: { body: LooseProp; image: Phaser.GameObjects.Image | null }[] = [];
+  private loose: { body: LooseProp; image: Phaser.GameObjects.Image | null; parts?: Phaser.GameObjects.Image[] }[] = [];
   private away: { body: LooseProp; image: Phaser.GameObjects.Image | null }[] = [];
   /** Vehicles left standing (dented, shoved, got out of) outside the region, put by till it's back (see `enter`). */
   private parkedAway: Vehicle[] = [];
@@ -1984,7 +1988,11 @@ export class GameScene extends Phaser.Scene {
     for (const i of loose) {
       const l = this.loose[i];
       const { body } = l;
-      if (body.gone) continue;
+      if (body.gone) {
+        for (const part of l.parts ?? []) part.destroy();
+        l.parts = undefined;
+        continue;
+      }
       // (A trolley in the shop isn't there.)
       if (body.inside) {
         l.image?.destroy();
@@ -1996,10 +2004,12 @@ export class GameScene extends Phaser.Scene {
       if (!show) {
         l.image?.destroy();
         l.image = null;
+        for (const part of l.parts ?? []) part.destroy();
+        l.parts = undefined;
       } else
         l.image ??= this.add
           .image(body.x, body.y, body.kind === 'foodcart' || body.kind === 'stall' ? `${TEX.prop(body.kind)}-${body.variant ?? 0}` : body.home ? TEX.prop(body.kind as PropKind) : TEX.debris(body.kind as DebrisKind))
-          .setScale(1 / ART_SCALE)
+          .setScale((PLAY.has(body.kind) ? PLAY_SCALE : 1) / ART_SCALE)
           .setDepth(body.level === 1 ? DEPTH.onDeck : DEPTH.props);
       const image = l.image;
       // A trolley, full of shopping or not.
@@ -2011,7 +2021,17 @@ export class GameScene extends Phaser.Scene {
       this.shownLoose.add(i);
       if (!show || !image) continue;
       const s = p.lift(this.surfaceHeight(body.x, body.y, body.level));
-      image.setPosition(p.x(body.x, s), p.y(body.y, s)).setRotation(body.angle);
+      image.setPosition(p.x(body.x, s), p.y(body.y, s)).setRotation(body.angle + (body.kind === 'roundabout' ? (body.motion?.[0] ?? 0) : 0));
+      // A swings' seats, swinging (a little up off the ground).
+      if (body.kind === 'swings') {
+        l.parts ??= [0, 1].map(() => this.add.image(0, 0, `${TEX.prop('swings')}-seat`).setScale(PLAY_SCALE / ART_SCALE).setDepth(DEPTH.props + 0.01));
+        const up = p.lift(this.surfaceHeight(body.x, body.y, body.level) + 0.5 * 8);
+        const [ux, uy] = [Math.cos(body.angle), Math.sin(body.angle)];
+        l.parts.forEach((part, k) => {
+          const [u, v] = [(k ? 1 : -1) * 0.8 * 8 * PLAY_SCALE, body.motion?.[k] ?? 0];
+          part.setPosition(p.x(body.x + ux * u - uy * v, up), p.y(body.y + uy * u + ux * v, up)).setRotation(body.angle);
+        });
+      }
     }
   }
 

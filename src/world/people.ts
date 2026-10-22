@@ -16,6 +16,7 @@
 import { type GameMap, type Pts, VEHICLE_ROADS, pointInRing, ridgeAxis } from '../map/osm';
 import { type Store, TROLLEY_GAP } from '../map/stores';
 import { type TrolleyRow, trolleyRows } from './parking';
+import { PLAY_KINDS, PLAY_SCALE, type PlayKind } from './playgrounds';
 import { type Act, pedestrianBusy, streetLifeWork } from './streetLife';
 import type { Light } from './lights';
 import { offsetLine } from './world';
@@ -82,6 +83,8 @@ export interface Seat {
   vy: number;
   gone?: boolean;
   level: number;
+  /** A playground's: how its moving parts are (see `play`). */
+  motion?: number[];
 }
 
 /** A shopping trolley (as the world has it: it can be knocked about, or smashed); taken into the shop, it isn't there. */
@@ -305,6 +308,27 @@ export const LOOKS = 48;
 const GRID = 128;
 /** How many sit at a bench or picnic table, for how busy it is round it. */
 const SEAT_WEIGHT = 0.9;
+/** What's in a playground (see playgrounds.ts): people come to play on it, by how busy, as to a seat. */
+const PLAY = new Set<string>(PLAY_KINDS);
+const PLAY_WEIGHT = 2.2;
+/** Where people play on each (along it, across it, px), as many as there's room for. */
+/** (Bigger than life, as what they're on: see PLAY_SCALE.) */
+const PM = PLAY_SCALE * M;
+const PLAY_PLACES: Record<PlayKind, [number, number][]> = {
+  swings: [[-0.8 * PM, 0], [0.8 * PM, 0]],
+  slide: [[-1.6 * PM, 0]],
+  roundabout: [[0.8 * PM, 0], [0, 0.8 * PM], [-0.8 * PM, 0], [0, -0.8 * PM]],
+  climbframe: [[-0.8 * PM, -0.8 * PM], [0.8 * PM, -0.8 * PM], [0.8 * PM, 0.8 * PM], [-0.8 * PM, 0.8 * PM], [0, 0]],
+  sandpit: [[-0.6 * PM, -0.4 * PM], [0.6 * PM, 0.5 * PM], [0.1 * PM, -0.8 * PM]],
+  seesaw: [[-1.5 * PM, 0], [1.5 * PM, 0]],
+  springy: [[0, 0]],
+};
+/** How far a swing goes out either way, px; how quickly (radians/s). A roundabout pushed round, radians/s. A go down the slide and back up its ladder, s. */
+const SWING = 0.8 * PM;
+const SWING_RATE = 2.3;
+const ROUND = 1.6;
+const SLIDE_ROUND = 4;
+const seatWeight = (s: Seat) => (PLAY.has(s.kind) ? PLAY_WEIGHT : SEAT_WEIGHT);
 /** Cells for finding who's close, px. */
 const NEAR_CELL = 4 * M;
 const key = (x: number, y: number) => `${Math.floor(x / GRID)},${Math.floor(y / GRID)}`;
@@ -356,6 +380,9 @@ export class People {
 
   /** The benches and picnic tables people sit at, and the picnics on the grass. */
   private seats: Seat[];
+  /** What's in the playgrounds (some of the seats), and the time, s, for how they move. */
+  private plays: Seat[] = [];
+  private clock = 0;
   private readonly seatGrid = new Map<string, number[]>();
   readonly picnics: Picnic[] = [];
   /** The shopping trolleys (the scene's loose things too), and the big shops with car parks. */
@@ -423,7 +450,9 @@ export class People {
       p.gather = same ?? null;
       if (same && g.host === p) same.host = p;
     }
-    this.seats = seats.filter((b) => (b.kind === 'bench' || b.kind === 'picnic') && b.level === 0);
+    this.seats = seats.filter((b) => (b.kind === 'bench' || b.kind === 'picnic' || PLAY.has(b.kind)) && b.level === 0);
+    this.plays = this.seats.filter((b) => PLAY.has(b.kind));
+    for (const b of this.plays) b.motion ??= [0, 0, 0, 0];
     this.seatGrid.clear();
     this.seats.forEach((b, i) => {
       const list = this.seatGrid.get(key(b.x, b.y)) ?? [];
@@ -791,7 +820,7 @@ export class People {
       for (let y = Math.floor(y0 / GRID); y <= Math.floor(y1 / GRID); y++) {
         for (const [k] of this.along.get(`${x},${y}`) ?? []) w += this.walks[k].busy;
         for (const s of this.spotGrid.get(`${x},${y}`) ?? []) w += this.spots[s].weight;
-        w += (this.seatGrid.get(`${x},${y}`)?.length ?? 0) * SEAT_WEIGHT;
+        for (const k of this.seatGrid.get(`${x},${y}`) ?? []) w += seatWeight(this.seats[k]);
       }
     }
     return w;
@@ -826,11 +855,12 @@ export class People {
       const seats = (this.seatGrid.get(cell) ?? []).filter((k) => !this.seats[k].gone && !seen(this.seats[k].x, this.seats[k].y) && !this.people.some((q) => q.seat === this.seats[k]));
       const sw = spots.reduce((s, k) => s + this.spots[k].weight, 0);
       const ww = walks.reduce((s, [k]) => s + this.walks[k].busy, 0);
-      const cw = seats.length * SEAT_WEIGHT;
+      const cw = seats.reduce((s, k) => s + seatWeight(this.seats[k]), 0);
       if (sw + ww + cw <= 0) continue;
       const pick = this.rand() * (sw + ww + cw);
       if (pick >= sw + ww) {
-        this.sitDown(this.seats[seats[Math.floor(this.rand() * seats.length)]]);
+        let r = pick - sw - ww;
+        this.sitDown(this.seats[seats.find((k) => (r -= seatWeight(this.seats[k])) <= 0) ?? seats[0]]);
       } else if (pick < sw) {
         let r = this.rand() * sw;
         const k = spots.find((s) => (r -= this.spots[s].weight) <= 0) ?? spots[0];
@@ -984,6 +1014,7 @@ export class People {
 
   /** One or two sitting on a bench (facing one way off it), or two to four round a picnic table. */
   private sitDown(seat: Seat): void {
+    if (PLAY.has(seat.kind)) return this.playOn(seat);
     const bench = seat.kind === 'bench';
     // A bench faces one way: the same each time for the same bench.
     const facing = (Math.floor(seat.x * 7 + seat.y * 13) & 1) === 0 ? 1 : -1;
@@ -1001,15 +1032,99 @@ export class People {
     }
   }
 
-  /** Where they sit on their seat, as it is now, facing out from it (a bench) or in across it (a picnic table). */
+  /** One or more playing on something in a playground (a seesaw takes two), a while. */
+  private playOn(seat: Seat): void {
+    const places = PLAY_PLACES[seat.kind as PlayKind];
+    const n = seat.kind === 'seesaw' ? 2 : 1 + Math.floor(this.rand() * places.length);
+    const time = 15 + this.rand() * 50;
+    for (const [u, v] of places.slice().sort(() => this.rand() - 0.5).slice(0, n)) {
+      const p = this.make(seat.x, seat.y, 'sit');
+      p.seat = seat;
+      p.seatAt = [u, v, seat.x, seat.y];
+      p.timer = time + this.rand() * 15;
+      this.onSeat(p);
+    }
+  }
+
+  /**
+   * The playgrounds' moving parts, as people play on them: a swing with
+   * someone on it swinging higher, and dying down once they're off; a
+   * roundabout pushed round, slowing once no one's on it.
+   */
+  private play(dt: number): void {
+    this.clock += dt;
+    const on = new Map<Seat, Person[]>();
+    for (const p of this.people) if (p.seat && p.mode === 'sit' && PLAY.has(p.seat.kind)) on.set(p.seat, [...(on.get(p.seat) ?? []), p]);
+    for (const s of this.plays) {
+      const m = s.motion!;
+      const who = on.get(s) ?? [];
+      if (s.kind === 'swings') {
+        for (const k of [0, 1]) {
+          const used = who.some((p) => (p.seatAt[0] > 0 ? 1 : 0) === k);
+          m[2 + k] = used ? Math.min(SWING, m[2 + k] + dt * 0.25 * M) : Math.max(0, m[2 + k] - dt * 0.2 * M);
+          m[k] = m[2 + k] * Math.sin(this.clock * SWING_RATE + k * 1.7);
+        }
+      } else if (s.kind === 'roundabout') {
+        m[1] = who.length ? Math.min(ROUND, m[1] + dt * 0.8) : m[1] * Math.exp(-dt * 0.4);
+        m[0] = (m[0] + m[1] * dt) % (Math.PI * 2);
+      }
+    }
+  }
+
+  /** Where they sit on their seat, as it is now, facing out from it (a bench) or in across it (a picnic table); or where they are on what they're playing on. */
   private onSeat(p: Person): void {
     const s = p.seat!;
+    if (PLAY.has(s.kind)) return this.onPlay(p);
     const [u, v] = p.seatAt;
     const [ux, uy] = [Math.cos(s.angle), Math.sin(s.angle)];
     p.x = s.x + ux * u - uy * v;
     p.y = s.y + uy * u + ux * v;
     const out = s.kind === 'bench' ? Math.sign(v) : -Math.sign(v);
     p.angle = s.angle + (Math.PI / 2) * out;
+    p.speed = 0;
+  }
+
+  /** Where they are on what they're playing on, as it moves: swinging, going round, down the slide and back up its ladder, bouncing. */
+  private onPlay(p: Person): void {
+    const s = p.seat!;
+    let [u, v] = p.seatAt;
+    let face = s.angle;
+    const m = s.motion ?? [0, 0, 0, 0];
+    switch (s.kind) {
+      case 'swings':
+        // Facing the way they swing, across the frame.
+        v += m[u > 0 ? 1 : 0];
+        face = s.angle + Math.PI / 2;
+        break;
+      case 'roundabout': {
+        const [c, n] = [Math.cos(m[0]), Math.sin(m[0])];
+        [u, v] = [u * c - v * n, u * n + v * c];
+        face = s.angle + Math.atan2(v, u) + Math.PI / 2;
+        break;
+      }
+      case 'slide': {
+        // Down it, then round and back up the ladder (the far end, as it's drawn: the slide's at +x).
+        const t = (this.clock + (p.id % 7) * 0.57) % SLIDE_ROUND;
+        if (t < 1.2) u = -1.6 * PM + (t / 1.2) * 3.8 * PM;
+        else if (t < 2) [u, v] = [2.2 * PM - ((t - 1.2) / 0.8) * 0.4 * PM, ((t - 1.2) / 0.8) * 1.1 * PM];
+        else [u, v] = [1.8 * PM - ((t - 2) / (SLIDE_ROUND - 2)) * 3.4 * PM, 1.1 * PM * (1 - Math.max(0, (t - 3.4) / 0.6))];
+        face = t < 1.2 ? s.angle : s.angle + Math.PI;
+        break;
+      }
+      case 'springy':
+        u += Math.sin(this.clock * 6 + p.id) * 0.15 * PM;
+        break;
+      case 'seesaw':
+        face = s.angle + (u > 0 ? Math.PI : 0);
+        break;
+      default:
+        // On the climbing frame, in the sandpit: facing in.
+        face = s.angle + Math.atan2(-v, -u);
+    }
+    const [ux, uy] = [Math.cos(s.angle), Math.sin(s.angle)];
+    p.x = s.x + ux * u - uy * v;
+    p.y = s.y + uy * u + ux * v;
+    p.angle = face;
     p.speed = 0;
   }
 
@@ -1058,6 +1173,7 @@ export class People {
     levelAt: (level: number, x: number, y: number) => number = (level) => level,
   ): void {
     this.populate(view);
+    this.play(dt);
     this.walkable = walkable;
     const all = [player, ...movers];
     // Danger: you, going fast right by them (or along the pavement at them); and anything on a call, its siren going.

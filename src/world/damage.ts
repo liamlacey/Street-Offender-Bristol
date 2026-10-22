@@ -277,7 +277,7 @@ export function fallen(kind: Exclude<ThingKind, Structure>, x: number, y: number
  * ground) and smaller, the smaller the easier, down to bits too small to break.
  * What each piece is, how strong (as `Toughness`), and what it breaks into.
  */
-export const BREAKUP: Partial<Record<DebrisKind | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block' | 'trolley' | 'foodcart' | 'stall' | 'aboard', Toughness & { into: [DebrisKind, number][] }>> = {
+export const BREAKUP: Partial<Record<DebrisKind | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block' | 'trolley' | 'foodcart' | 'stall' | 'aboard' | 'swings' | 'slide' | 'roundabout' | 'climbframe' | 'sandpit' | 'seesaw' | 'springy', Toughness & { into: [DebrisKind, number][] }>> = {
   // A shopping trolley, hit hard: mangled, its basket's wires and its handle in bits.
   trolley: { material: 'metal', strength: 170, absorb: 0.06, into: [['rail', 3], ['plastic', 2]] },
   // A food cart: its panels and its parasol in bits.
@@ -285,6 +285,14 @@ export const BREAKUP: Partial<Record<DebrisKind | 'bench' | 'picnic' | 'gritbin'
   // A market stall: its canopy torn, its poles and its table in bits (and what was on it); an A-board, split.
   stall: { material: 'timber', strength: 140, absorb: 0.25, into: [['plank', 5], ['plastic', 6], ['rail', 3]] },
   aboard: { material: 'timber', strength: 70, absorb: 0.05, into: [['splinter', 4]] },
+  // The playgrounds' steel frames, bent and torn up (their seats and panels flying); the sandpit's timber edging, and a seesaw's plank; a spring rider, snapped off.
+  swings: { material: 'metal', strength: 200, absorb: 0.25, into: [['pole', 2], ['shortpole', 2], ['plastic', 3]] },
+  slide: { material: 'metal', strength: 190, absorb: 0.2, into: [['rail', 3], ['plastic', 4]] },
+  roundabout: { material: 'metal', strength: 220, absorb: 0.3, into: [['rail', 4], ['shortpole', 2]] },
+  climbframe: { material: 'metal', strength: 210, absorb: 0.3, into: [['pole', 2], ['shortpole', 3], ['rail', 2]] },
+  sandpit: { material: 'timber', strength: 130, absorb: 0.25, into: [['plank', 6]] },
+  seesaw: { material: 'timber', strength: 120, absorb: 0.1, into: [['plank', 2], ['shortpole', 1]] },
+  springy: { material: 'plastic', strength: 90, absorb: 0.05, into: [['plastic', 3]] },
   // A bench and a picnic table, standing loose: smashed to planks.
   bench: { material: 'timber', strength: BENCH_SMASH, absorb: 0.12, into: [['plank', 5]] },
   picnic: { material: 'timber', strength: BENCH_SMASH, absorb: 0.15, into: [['plank', 7]] },

@@ -11,6 +11,7 @@ import type { Building, GameMap, LineKind, Prop, PropKind, Pts, Road } from '../
 import { Decks, waterOf } from './decks';
 import { trolleyRows } from './parking';
 import { streetLifeWork } from './streetLife';
+import { playgroundsWork } from './playgrounds';
 import { Terrain } from './terrain';
 import type { DebrisKind, ThingKind, WallKind } from './damage';
 import { type Work, drain, every } from './work.ts';
@@ -63,6 +64,14 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
   // A market stall (a canopy over a trestle table, and what's on it); and a shop's A-board, light.
   stall: { r: 9, length: 24, invMass: 0.8 },
   aboard: { r: 2, length: 5, invMass: 14 },
+  // The playgrounds' swings, slide, roundabout and climbing frame (steel, set in the ground: shoved, not thrown), sandpit, seesaw and spring riders (bigger than life: see PLAY_SCALE).
+  swings: { r: 9, length: 39, invMass: 0.6 },
+  slide: { r: 5, length: 42, invMass: 0.9 },
+  roundabout: { r: 13, invMass: 0.5 },
+  climbframe: { r: 13, invMass: 0.5 },
+  sandpit: { r: 16, invMass: 0.3 },
+  seesaw: { r: 3, length: 38, invMass: 1.5 },
+  springy: { r: 4.5, invMass: 3 },
 };
 
 /** A tree trunk's radius, px. */
@@ -106,6 +115,8 @@ export interface LooseProp extends Body {
   kind: PropKind | DebrisKind;
   /** Smashed to pieces: it's gone. */
   gone?: boolean;
+  /** How its moving parts are, as people play on it (see people.ts): a roundabout's turn, radians; each swing's seat, how far out, px. */
+  motion?: number[];
   /** 0 on the ground, 1 on a bridge. */
   level: number;
   /** Whether it's been knocked from where it stood. */
@@ -593,6 +604,12 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   for (const c of life.carts) add('foodcart', c.x, c.y, c.angle, c.kind);
   for (const s of life.stalls) add('stall', s.x, s.y, s.angle - Math.PI / 2, s.kind);
   for (const b of life.boards) add('aboard', b.x, b.y, b.angle);
+  // What's in the playgrounds (see playgrounds.ts).
+  for (const t of yield* playgroundsWork(map)) {
+    const l = LOOSE[t.kind]!;
+    const p = { kind: t.kind, x: t.x, y: t.y };
+    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: t.angle, spin: 0, moved: false, level: 0, home: homeOf(p) });
+  }
   // The trolleys in the big shops' car parks' shelters (more than half full, each its own way).
   for (const rows of trolleyRows(map)) {
     for (const [x, y, angle, count] of rows.slice(1)) {
