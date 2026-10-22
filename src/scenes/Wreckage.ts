@@ -165,18 +165,26 @@ export class Wreckage {
 
   /**
    * Whether a loose thing the car's going into this fast breaks up (and if so,
-   * breaks it up): a bench, or a piece of something already broken, into
-   * smaller pieces.
+   * breaks it up): something that stood there smashed, its wreck left where
+   * it was and its bits strewn round it; a piece of something already broken,
+   * into smaller pieces.
    */
   smash(body: LooseProp, car: CarState, speed: number): boolean {
     const b = BREAKUP[body.kind as keyof typeof BREAKUP];
     if (!b || !breaks(b, speed, this.hooks.weight())) return false;
     // Not what's only just broken off, in front of the car that broke it: it'd break up again at once.
     if (body.born !== undefined && this.scene.time.now / 1000 - body.born < FRESH) return false;
-    body.gone = true;
+    // (A wreck's only shoved after.)
+    if (body.wrecked) return false;
+    // Something that stood there (a bench, a cabin, a skip, a slide, the rubbish dumped): its wreck's left where it was. A bit of what's broken breaks into smaller bits.
+    const wreck = !!body.home;
+    if (wreck) body.wrecked = true;
+    else body.gone = true;
     const rand = this.rand.frac.bind(this.rand);
     const size = body.r + (body.length ?? 0) / 2;
-    for (const [kind, count] of b.into) for (const d of debris(kind, count, body.x, body.y, car.vx, car.vy, rand, size)) this.hooks.addDebris(d, body.level);
+    // (Its wreck's left: and more of its bits strewn round it, and rubble.)
+    for (const [kind, count] of b.into) for (const d of debris(kind, wreck ? Math.ceil(count * 1.5) : count, body.x, body.y, car.vx * (wreck ? 0.5 : 1), car.vy * (wreck ? 0.5 : 1), rand, size)) this.hooks.addDebris(d, body.level);
+    if (wreck && size > 8) for (const d of debris('rubble', Math.min(6, Math.round(size / 6)), body.x, body.y, car.vx * 0.3, car.vy * 0.3, rand, size)) this.hooks.addDebris(d, body.level);
     this.effects.burst(b.material, body.x, body.y, Math.round(4 + size));
     this.hooks.audio()?.shatter(b.material, speed);
     giveWay(car, b, this.hooks.weight());

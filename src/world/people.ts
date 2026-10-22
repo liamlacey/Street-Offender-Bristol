@@ -91,6 +91,8 @@ export interface Seat {
   vx: number;
   vy: number;
   gone?: boolean;
+  /** Smashed: its wreck left there (no one sits on it, or plays on it). */
+  wrecked?: boolean;
   level: number;
   /** A playground's: how its moving parts are (see `play`). */
   motion?: number[];
@@ -108,6 +110,8 @@ export interface Trolley {
   level: number;
   /** Knocked, and moving still. */
   moved: boolean;
+  /** Smashed: its wreck left there. */
+  wrecked?: boolean;
   inside?: boolean;
   full?: boolean;
 }
@@ -504,7 +508,7 @@ export class People {
     // The food carts (the same carts as before, where they were: their vendors and queues with them).
     const old = this.carts;
     this.carts = (seats as (Seat & Partial<Trolley>)[])
-      .filter((t): t is Seat & Trolley => (t.kind === 'foodcart' || t.kind === 'stall') && !t.gone)
+      .filter((t): t is Seat & Trolley => (t.kind === 'foodcart' || t.kind === 'stall') && !t.gone && !t.wrecked)
       .map((cart) => {
         const stall = cart.kind === 'stall';
         // (A stall's along its row: it faces out of it.)
@@ -953,7 +957,7 @@ export class People {
       // A spot, or a walk, by how busy each is.
       const spots = this.spotGrid.get(cell) ?? [];
       const walks = this.along.get(cell) ?? [];
-      const seats = (this.seatGrid.get(cell) ?? []).filter((k) => !this.seats[k].gone && !seen(this.seats[k].x, this.seats[k].y) && !this.people.some((q) => q.seat === this.seats[k]));
+      const seats = (this.seatGrid.get(cell) ?? []).filter((k) => !this.seats[k].gone && !this.seats[k].wrecked && !seen(this.seats[k].x, this.seats[k].y) && !this.people.some((q) => q.seat === this.seats[k]));
       const sw = spots.reduce((s, k) => s + this.spots[k].weight, 0);
       const ww = walks.reduce((s, [k]) => s + this.walks[k].busy, 0);
       const cw = seats.reduce((s, k) => s + seatWeight(this.seats[k]), 0);
@@ -1269,7 +1273,7 @@ export class People {
     const s = p.seat;
     if (s) {
       const moved = Math.hypot(s.x - p.seatAt[2], s.y - p.seatAt[3]);
-      if (s.gone || moved > 0.4 * M) {
+      if (s.gone || s.wrecked || moved > 0.4 * M) {
         p.seat = null;
         if (Math.hypot(s.vx, s.vy) > 3 * M) this.knock(p, { vx: s.vx, vy: s.vy }, Math.hypot(s.vx, s.vy));
         else this.rejoin(p);
@@ -1943,7 +1947,7 @@ export class People {
     for (const g of [...this.pitches, ...this.carts]) {
       const [gx, gy] = this.placeOf(g);
       if (g.host || gx < x0 || gx > x1 || gy < y0 || gy > y1 || seen(gx, gy) || (!all && this.rand() > 0.02)) continue;
-      if (g.cart && (g.cart.gone || g.cart.moved || Math.hypot(g.cart.x - g.x, g.cart.y - g.y) > 0.5 * M)) continue;
+      if (g.cart && (g.cart.gone || g.cart.wrecked || g.cart.moved || Math.hypot(g.cart.x - g.x, g.cart.y - g.y) > 0.5 * M)) continue;
       if (g.kind === 'pitch' && Math.abs(Math.round(g.x + g.y)) % 5 === 0) continue;
       if (g.kind === 'pitch') {
         const p = this.make(g.x, g.y, 'perform');
@@ -2054,7 +2058,7 @@ export class People {
     p.speed = 0;
     const g = p.gather;
     const c = g?.cart;
-    if (!g || !c || c.gone || c.moved || Math.hypot(c.x - g.x, c.y - g.y) > 0.5 * M) {
+    if (!g || !c || c.gone || c.wrecked || c.moved || Math.hypot(c.x - g.x, c.y - g.y) > 0.5 * M) {
       this.scare(p, c?.x ?? p.x, c?.y ?? p.y);
       return;
     }
@@ -2344,7 +2348,7 @@ export class People {
     const held = new Set(this.people.map((p) => p.trip?.trolley));
     const standing: [number, Trolley][] = [];
     for (const t of this.trolleys) {
-      if (t.gone || t.inside || t.moved || held.has(t)) continue;
+      if (t.gone || t.wrecked || t.inside || t.moved || held.has(t)) continue;
       const [rx, ry] = [t.x - bx, t.y - by];
       const along = rx * ux + ry * uy;
       if (Math.abs(-rx * uy + ry * ux) > 0.4 * M || along < -0.5 * M || along > (count + 3) * TROLLEY_GAP * M) continue;
@@ -2384,7 +2388,7 @@ export class People {
         }
       } else if (this.rand() < 0.5) {
         // Out of the shop, with a trolley full of shopping (one taken in; or, at first, out of sight, one from the bay).
-        let t = this.trolleys.find((o) => o.inside && !o.gone && Math.hypot(o.x - dx, o.y - dy) < 2 * M) ?? null;
+        let t = this.trolleys.find((o) => o.inside && !o.gone && !o.wrecked && Math.hypot(o.x - dx, o.y - dy) < 2 * M) ?? null;
         if (!t) {
           const row = this.rows[k]?.find((r) => !seen(r[0], r[1]) && this.inRow(r).length);
           t = row ? (this.inRow(row).pop() ?? null) : null;
@@ -2491,7 +2495,7 @@ export class People {
     }
     const t = trip.trolley;
     // Their trolley knocked out of their hands (or smashed): on without it.
-    if (t && (t.gone || t.moved || Math.hypot(t.x - p.x - Math.cos(p.angle) * HOLD, t.y - p.y - Math.sin(p.angle) * HOLD) > 0.6 * M)) trip.trolley = null;
+    if (t && (t.gone || t.wrecked || t.moved || Math.hypot(t.x - p.x - Math.cos(p.angle) * HOLD, t.y - p.y - Math.sin(p.angle) * HOLD) > 0.6 * M)) trip.trolley = null;
     if (trip.leg === 'load') {
       p.speed = 0;
       p.timer -= dt;

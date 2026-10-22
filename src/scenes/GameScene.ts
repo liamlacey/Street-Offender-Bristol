@@ -40,7 +40,7 @@ import type { FirstIds, Progress, Region } from '../world/region';
 import { type Obstacle, Trains } from '../world/trains';
 import { TrainLayer } from './TrainLayer';
 import { Streamer } from '../world/streamer';
-import { ART_SCALE, TEX, TREE_KINDS, TREE_RADIUS, createArt } from './art';
+import { ART_SCALE, TEX, TREE_KINDS, TREE_RADIUS, createArt, wreckTexture } from './art';
 import { CarEffects } from './CarEffects';
 import { Wreckage } from './Wreckage';
 import { Kerbs } from '../world/kerbs';
@@ -134,8 +134,8 @@ const WIND_X = Math.cos(0.35) * 0.9;
 const WIND_Y = Math.sin(0.35) * 0.9;
 /** How long a hop off a speed hump lasts, seconds. */
 const HOP_TIME = 0.35;
-/** How many loose things (benches, bins, and the bits of what's been broken) before the smallest bits stop being kept. */
-const MAX_LOOSE = 1500;
+/** How many bits of what's been broken (not the benches, bins and the rest standing about) before the smallest stop being kept. */
+const MAX_PIECES = 1500;
 
 /**
  * Driving round Bristol: the map from OpenStreetMap, the car, the camera
@@ -251,6 +251,8 @@ export class GameScene extends Phaser.Scene {
   private shownRaised = new Set<number>();
   private shownLoose = new Set<number>();
   private looseFrames = 0;
+  /** How many bits of what's been broken are lying about (see MAX_PIECES). */
+  private pieces = 0;
   /** The building sites' diggers and dumpers at work (see sites.ts). */
   private machines: SiteMachines | null = null;
   private machineBodies: LooseProp[] = [];
@@ -610,7 +612,7 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
       // One of the map's, where it stood (and not by you): this region has it.
-      if (b.home && !b.moved && homeOf(b) === b.home && !inKeep(b)) {
+      if (b.home && !b.moved && !b.wrecked && homeOf(b) === b.home && !inKeep(b)) {
         l.image?.destroy();
         continue;
       }
@@ -623,6 +625,7 @@ export class GameScene extends Phaser.Scene {
     }
     for (const body of r.world.loose) if (!body.home || !taken.has(body.home)) loose.push({ body, image: null });
     this.loose = loose;
+    this.pieces = loose.filter((l) => !l.body.home).length;
     // The building sites' machines, going about their work (the same jobs as before, for those carried over).
     this.machines = new SiteMachines(siteLife(r.map).sites, Math.random, this.machines);
     this.machineBodies = loose.map((l) => l.body).filter((b) => MACHINES.has(b.kind));
@@ -1083,8 +1086,15 @@ export class GameScene extends Phaser.Scene {
       if (body.level !== this.level || body.gone || body.inside) continue;
       // Hit hard enough, a bench smashes to pieces, and what's already broken breaks up further.
       if (this.wreckage.smash(body, car, impactSpeed(car, body.x, body.y, body.r + (body.length ?? 0) / 2, body.vx, body.vy))) {
-        image?.destroy();
-        this.loose[i].image = null;
+        const l = this.loose[i];
+        // Its wreck, where it was (its moving parts gone with it); or, a bit of something, gone into smaller bits.
+        for (const part of l.parts ?? []) part.destroy();
+        l.parts = undefined;
+        if (body.wrecked && image) image.setTexture(wreckTexture(this, image.texture.key));
+        else {
+          image?.destroy();
+          l.image = null;
+        }
         continue;
       }
       const knock = collideCarWithBody(car, body, undefined, this.contact);
@@ -1846,8 +1856,9 @@ export class GameScene extends Phaser.Scene {
   /** A piece of something broken, flying off loose: it ends up in the way. */
   private addDebris(d: Debris, level: number): void {
     // Enough is enough: past this, the smallest bits are left out.
-    if (this.loose.length > MAX_LOOSE && (d.kind === 'rubble' || d.kind === 'brick' || d.kind === 'foliage' || d.kind === 'twig' || d.kind === 'glass' || d.kind === 'splinter')) return;
+    if (this.pieces > MAX_PIECES && (d.kind === 'rubble' || d.kind === 'brick' || d.kind === 'foliage' || d.kind === 'twig' || d.kind === 'glass' || d.kind === 'splinter')) return;
     const body: LooseProp = { ...d, level, moved: true, born: this.time.now / 1000 };
+    this.pieces++;
     const image = this.add
       .image(d.x, d.y, TEX.debris(d.kind))
       .setScale(1 / ART_SCALE)
@@ -2034,12 +2045,12 @@ export class GameScene extends Phaser.Scene {
         l.parts = undefined;
       } else
         l.image ??= this.add
-          .image(body.x, body.y, body.kind === 'foodcart' || body.kind === 'stall' ? `${TEX.prop(body.kind)}-${body.variant ?? 0}` : body.home ? TEX.prop(body.kind as PropKind) : TEX.debris(body.kind as DebrisKind))
+          .image(body.x, body.y, ((key) => (body.wrecked ? wreckTexture(this, key) : key))(body.kind === 'foodcart' || body.kind === 'stall' ? `${TEX.prop(body.kind)}-${body.variant ?? 0}` : body.home ? TEX.prop(body.kind as PropKind) : TEX.debris(body.kind as DebrisKind)))
           .setScale((PLAY.has(body.kind) ? PLAY_SCALE : 1) / ART_SCALE)
           .setDepth(body.level === 1 ? DEPTH.onDeck : DEPTH.props);
       const image = l.image;
       // A trolley, full of shopping or not.
-      if (image && body.kind === 'trolley') {
+      if (image && body.kind === 'trolley' && !body.wrecked) {
         const look = body.full ? `${TEX.prop('trolley')}-full` : TEX.prop('trolley');
         if (image.texture.key !== look) image.setTexture(look);
       }
@@ -2049,7 +2060,7 @@ export class GameScene extends Phaser.Scene {
       const s = p.lift(this.surfaceHeight(body.x, body.y, body.level));
       image.setPosition(p.x(body.x, s), p.y(body.y, s)).setRotation(body.angle + (body.kind === 'roundabout' ? (body.motion?.[0] ?? 0) : 0));
       // A digger's arm, out from the front of its house (swinging as it digs).
-      if (body.kind === 'digger') {
+      if (body.kind === 'digger' && !body.wrecked) {
         l.parts ??= [this.add.image(0, 0, `${TEX.prop('digger')}-arm`).setScale(1 / ART_SCALE).setOrigin(0.06, 0.5).setDepth(DEPTH.props + 0.01)];
         const up = p.lift(this.surfaceHeight(body.x, body.y, body.level) + 1 * 8);
         const a = body.angle + (body.motion?.[0] ?? 0);
@@ -2057,7 +2068,7 @@ export class GameScene extends Phaser.Scene {
         l.parts[0].setPosition(p.x(px, up), p.y(py, up)).setRotation(a);
       }
       // A swings' seats, swinging (a little up off the ground).
-      if (body.kind === 'swings') {
+      if (body.kind === 'swings' && !body.wrecked) {
         l.parts ??= [0, 1].map(() => this.add.image(0, 0, `${TEX.prop('swings')}-seat`).setScale(PLAY_SCALE / ART_SCALE).setDepth(DEPTH.props + 0.01));
         const up = p.lift(this.surfaceHeight(body.x, body.y, body.level) + 0.5 * 8);
         const [ux, uy] = [Math.cos(body.angle), Math.sin(body.angle)];

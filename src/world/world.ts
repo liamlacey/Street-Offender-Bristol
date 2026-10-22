@@ -134,6 +134,8 @@ export interface LooseProp extends Body {
   kind: PropKind | DebrisKind;
   /** Smashed to pieces: it's gone. */
   gone?: boolean;
+  /** Smashed, and its wreck left where it was (see WRECKS). */
+  wrecked?: boolean;
   /** How its moving parts are, as people play on it (see people.ts): a roundabout's turn, radians; each swing's seat, how far out, px. */
   motion?: number[];
   /** 0 on the ground, 1 on a bridge. */

@@ -59,6 +59,70 @@ export const TREE_RADIUS = 32;
 
 type Ctx = CanvasRenderingContext2D;
 
+/**
+ * Something smashed, its wreck left where it was: its own picture crushed
+ * (squashed and twisted a little), torn (bites out of its edges), and
+ * battered (grimy, scorched, scratched). Made once for each picture.
+ */
+export function wreckTexture(scene: Phaser.Scene, key: string): string {
+  const out = `${key}-wreck`;
+  if (scene.textures.exists(out)) return out;
+  const src = scene.textures.get(key).getSourceImage() as HTMLCanvasElement;
+  const [w, h] = [src.width, src.height];
+  const texture = scene.textures.createCanvas(out, w, h)!;
+  const ctx = texture.context;
+  let seed = 7;
+  for (const ch of key) seed = (seed * 31 + ch.charCodeAt(0)) % 2147483647;
+  const rand = seeded(seed || 1);
+  ctx.save();
+  ctx.translate(w / 2, h / 2);
+  ctx.rotate((rand() - 0.5) * 0.14);
+  ctx.scale(0.93, 0.84);
+  ctx.drawImage(src, -w / 2, -h / 2);
+  ctx.restore();
+  // Torn: jagged bites out of its edges.
+  ctx.globalCompositeOperation = 'destination-out';
+  const bites = 3 + Math.floor(rand() * 3);
+  for (let k = 0; k < bites; k++) {
+    const edge = Math.floor(rand() * 4);
+    const t = rand();
+    const [cx, cy] = edge === 0 ? [t * w, 0] : edge === 1 ? [w, t * h] : edge === 2 ? [t * w, h] : [0, t * h];
+    const r = Math.min(w, h) * (0.15 + rand() * 0.2);
+    ctx.beginPath();
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2;
+      const d = r * (0.5 + rand() * 0.6);
+      if (i) ctx.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+      else ctx.moveTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Battered: grimy all over, scorched in places, and scratched, on what's left of it.
+  ctx.globalCompositeOperation = 'source-atop';
+  ctx.fillStyle = 'rgba(45,38,30,0.3)';
+  ctx.fillRect(0, 0, w, h);
+  for (let k = 0; k < 4; k++) {
+    const g = ctx.createRadialGradient(rand() * w, rand() * h, 0, rand() * w, rand() * h, Math.min(w, h) * (0.3 + rand() * 0.4));
+    g.addColorStop(0, 'rgba(20,16,12,0.55)');
+    g.addColorStop(1, 'rgba(20,16,12,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+  ctx.strokeStyle = 'rgba(210,205,195,0.45)';
+  ctx.lineWidth = Math.max(1, w / 60);
+  for (let k = 0; k < 5; k++) {
+    ctx.beginPath();
+    const [x, y] = [rand() * w, rand() * h];
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (rand() - 0.5) * w * 0.4, y + (rand() - 0.5) * h * 0.4);
+    ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  texture.refresh();
+  return out;
+}
+
 export function canvasTexture(scene: Phaser.Scene, key: string, w: number, h: number, draw: (ctx: Ctx) => void): void {
   if (scene.textures.exists(key)) return;
   const texture = scene.textures.createCanvas(key, Math.ceil(w * ART_SCALE), Math.ceil(h * ART_SCALE))!;

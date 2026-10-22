@@ -137,7 +137,8 @@ describe('people', () => {
     const [x, y] = parkStreet;
     const people = new People(map, { rand: seeded(11) });
     people.populate(viewAt(x, y), true);
-    const p = people.people[0];
+    // (Someone walking along on the ground, not up on a bridge.)
+    const p = people.people.find((q) => q.level === 0 && q.mode === 'walk')!;
     people.knock(p, { vx: 1, vy: 0 }, 2 * 8);
     for (let t = 0; t < 1; t += 1 / 30) people.update(1 / 30, viewAt(x, y), still(-1e6, -1e6), [], () => 'red', () => true);
     people.hits.length = 0;

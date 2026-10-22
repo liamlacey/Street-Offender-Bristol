@@ -1176,12 +1176,23 @@ bounces off.
 | Fountain (the big stone ones) | stone | 310 | Smashed: rubble and stone scattered the way the car went |
 | Harbour crane | iron | 330 | Goes over, its jib with it: girders and bent bars lying where it fell |
 | A bridge's parapet | stone | 260 | Knocked through (2.5 m, up to 5 m): the gap's gone from the deck, and beyond it the drop (into the water, or onto the road below). Where a pavement or cycleway is mapped as its own bridge alongside a road's, there's no parapet between them |
-| Bench | timber, in parts | 150 | Below: shoved. Above: smashed into planks, scattered the way the car was going |
+| Bench | timber, in parts | 150 | Below: shoved. Above: smashed, its wreck left where it stood and planks scattered the way the car was going |
 | Garden wall (`barrier=wall`, …) | stone | 200 | Crumbles: a gap 2 m wide (up to 4 m, the harder it's hit) in rubble and bricks; the rest stands |
 | Bus shelter | glass | 140 | Smashed through (a gap up to its whole length): glass strewn, bent bars |
 | Hedge | plant | 80 | Torn through (a 3 m gap, up to 6 m): leaves flying, and clumps of it and twigs strewn the way the car went |
 | Fence | timber | 70 | Broken through (2.5 m, up to 5 m) into planks |
 | Railings | metal | 130 | Broken through (2.5 m, up to 5 m), bent bars |
+
+Nothing smashed is gone: anything that stood there (a bench, a picnic table, a
+planter, a trolley, a food cart, a market stall, what's in the playgrounds and on the
+building sites, the rubbish dumped on the brownfield) leaves its wreck where it was:
+its picture crushed (squashed and twisted a little), torn (bites out of its edges) and
+battered (grimy, scorched, scratched), shoved about after but not smashed again, no
+one sitting on it or playing on it; with half as many again of its bits strewn round
+it as a loose bit of something would break into, and rubble round anything big. The
+bits break into smaller bits, down to those too small to break. Up to 1,500 bits of
+what's been broken lie about (the smallest left out past that), not counting what
+stands about.
 
 **Vehicles** (yours, the traffic, the parked cars; `src/car/dents.ts`, painted by
 `src/scenes/dentArt.ts`) are damaged where they're hit, by how hard: the impulse of the
