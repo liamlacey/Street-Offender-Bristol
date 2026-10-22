@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CRUMPLE, DENT, type Shape, hit, newWreck, onOutline, toBody, toWorld } from './dents';
+import { CRUMPLE, DENT, type Shape, hit, lampAt, newWreck, onOutline, toBody, toWorld } from './dents';
 
 // A car 38 px long and 18 wide, its mirrors 3 px ahead of its middle, its windscreen 6.
 const car: Shape = { length: 38, width: 18, stiffness: 1, mirror: 3, screen: 6 };
@@ -75,5 +75,33 @@ describe('damage', () => {
     // A harder one, though, counts.
     hit(w, car, 25, 0, 90, 0.11, rand);
     expect(w.marks.length).toBeGreaterThan(marks);
+  });
+});
+
+describe('the lamps (indicators, brake lights)', () => {
+  const bus: Shape = { length: 96, width: 20, stiffness: 3, mirror: 36, screen: 40 };
+  const [hl, hw] = [48, 10];
+
+  it('are where they were on a body that is not crumpled there', () => {
+    const w = newWreck();
+    expect(lampAt(w, hl - 0.8, -(hw - 1), hl, hw)).toEqual([hl - 0.8, -(hw - 1)]);
+  });
+
+  it('move in with the body where its front is crumpled, and go out where the light is smashed', () => {
+    const w = newWreck();
+    // Hit hard at the front, on its left side: crumpled in there, the front left light smashed.
+    hit(w, bus, hl, -5, 900, 0, () => 0.5);
+    expect(w.marks.some((m) => m.kind === 'crumple')).toBe(true);
+    expect(lampAt(w, hl - 0.8, -(hw - 1), hl, hw)).toBeNull();
+    // Its right-hand front lamp, if it's still lit, pushed back with what's crumpled near it; the back ones where they were.
+    const right = lampAt(w, hl - 0.8, hw - 1, hl, hw);
+    if (right) expect(right[0]).toBeLessThanOrEqual(hl - 0.8);
+    expect(lampAt(w, -(hl - 0.8), hw - 1, hl, hw)).toEqual([-(hl - 0.8), hw - 1]);
+    // A crumple right at a lamp (a lighter hit, the light not smashed): the lamp's pushed in with it.
+    const w2 = newWreck();
+    w2.marks.push({ kind: 'crumple', u: hl, v: 0, size: 6, angle: 0, side: 'front', seed: 1 });
+    const pushed = lampAt(w2, hl - 0.8, 2, hl, hw)!;
+    expect(pushed[0]).toBeLessThan(hl - 5);
+    expect(pushed[1]).toBe(2);
   });
 });

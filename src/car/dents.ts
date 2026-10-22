@@ -176,6 +176,32 @@ export function hit(w: Wreck, shape: Shape, u: number, v: number, impulse: numbe
   return out;
 }
 
+/**
+ * Where a lamp (an indicator, a brake light) at (u, v) on the body is now,
+ * the body crumpled in round it: pushed in with the outline there (as
+ * dentArt.ts bites it away); or null if its corner's light is smashed. `hl`
+ * and `hw` are half the body's length and width.
+ */
+export function lampAt(w: Wreck, u: number, v: number, hl: number, hw: number): [number, number] | null {
+  const part = `light${u >= 0 ? 'Front' : 'Rear'}${v >= 0 ? 'Right' : 'Left'}` as Part;
+  if (w.lost.includes(part)) return null;
+  let [pu, pv] = [u, v];
+  for (const m of w.marks) {
+    if (m.kind !== 'crumple') continue;
+    const [ix, iy] = m.side === 'front' ? [-1, 0] : m.side === 'rear' ? [1, 0] : m.side === 'left' ? [0, 1] : [0, -1];
+    // How far along the bite it is (from its middle, -1 to 1), and how far in from that edge it already sits.
+    const span = m.size * 2.4 + 3;
+    const t = ((u - m.u) * -iy + (v - m.v) * ix) / span;
+    if (Math.abs(t) >= 1) continue;
+    const inside = m.side === 'front' ? hl - u : m.side === 'rear' ? u + hl : m.side === 'left' ? v + hw : hw - v;
+    const push = m.size * (1 - t * t) - inside;
+    if (push <= 0) continue;
+    pu += ix * push;
+    pv += iy * push;
+  }
+  return [pu, pv];
+}
+
 /** Where the wheels are along a car, from its middle, as a fraction of its length. */
 export const WHEELS = [-0.32, 0.27];
 

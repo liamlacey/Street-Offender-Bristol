@@ -659,6 +659,8 @@ stop beyond that too (half their widths together ÷ the tangent of the angle, at
   it's broken down where it is, smoking, hazards flashing, and others go round it.
   Your car smokes too, its front wrecked. A parked car knocked hard enough (15) sets its
   alarm off for 12 s: beeping, its hazards flashing.
+- Its lamps (indicators, hazards, brake lights) are where the body is now: pushed in with
+  it where it's crumpled, and dark where that corner's light is smashed.
 - A road off the map's edge: driven on to its end, and gone.
 - Standing still 25 s, not for a red light or behind you (anywhere along the queue it's
   in): a knot; out of sight, it's taken off the road.

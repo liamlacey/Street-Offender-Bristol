@@ -1,5 +1,6 @@
 import type * as Phaser from 'phaser';
 import type { Perspective } from '../world/perspective';
+import { lampAt } from '../car/dents';
 import type { Traffic, Vehicle } from '../world/traffic';
 import { ART_SCALE } from './art';
 import { forgetWreck, paintWreck } from './dentArt';
@@ -114,9 +115,17 @@ export class TrafficLayer {
     const [lx, ly] = [cy, -cx];
     const back = v.length / 2 - 0.8;
     const side = v.r - 1.6;
+    // Each lamp where it is on the body now: pushed in with it where it's crumpled, and none where it's smashed.
+    const [hl, hw] = [v.length / 2, v.r];
+    const lamp = (along: number, left: number, size: number) => {
+      const at = v.wreck ? lampAt(v.wreck, along, -left, hl, hw) : [along, -left];
+      if (!at) return;
+      const [u, w] = at;
+      g.fillCircle(x + cx * u - lx * w, y + cy * u - ly * w, size);
+    };
     if (v.braking) {
       g.fillStyle(0xff2a1f, 0.95);
-      for (const k of [-1, 1]) g.fillCircle(x - cx * back + lx * side * k, y - cy * back + ly * side * k, 1.5);
+      for (const k of [-1, 1]) lamp(-back, side * k, 1.5);
     }
     // Each its own indicators' timing (a little quicker or slower, and out of step with the rest); an alarm's flashing quicker.
     const period = v.alarm > 0 ? 0.5 : 0.68 + ((v.id * 37) % 23) / 100;
@@ -124,7 +133,7 @@ export class TrafficLayer {
     if ((v.turning || hazards) && flash) {
       g.fillStyle(0xffa424, 1);
       for (const k of hazards ? [1, -1] : [v.turning === -1 ? 1 : -1]) {
-        for (const along of [back, -back]) g.fillCircle(x + cx * along + lx * (side + 0.6) * k, y + cy * along + ly * (side + 0.6) * k, 1.3);
+        for (const along of [back, -back]) lamp(along, (side + 0.6) * k, 1.3);
       }
     }
   }
