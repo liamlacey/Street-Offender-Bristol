@@ -671,10 +671,11 @@ stop beyond that too (half their widths together ÷ the tangent of the angle, at
 **What drives:** small cars, hatchbacks, saloons, estates, SUVs, vans (18, 26, 14, 8,
 15, 14%) and, on secondary roads and bigger, lorries (5%); in the colours of Britain's
 cars (grey, black, white, blue, silver, red the most), vans mostly white. Each lane
-carries trunk 3.6, primary 3.2, secondary 2.6, tertiary 2.1, streets 1 vehicles per
-100 m, times 1 + activity ÷ 15 (at most 3 times). Up to 55 at once, within the view
-plus 30 m; new ones out of sight (at least 7 m from any other, no faster than it can
-follow the one ahead at), and they go 40 m beyond that.
+carries trunk 7, primary 6, secondary 4, tertiary 2.6, streets 1 vehicles per
+100 m, times 1 + activity ÷ 15 (at most 3 times, and at most 9 per 100 m). Up to 70 at
+once, within the view plus 30 m (counting only the stretches of each lane within that,
+and putting new ones only there); new ones out of sight (at least 7 m from any other,
+no faster than it can follow the one ahead at), and they go 40 m beyond that.
 
 **Buses** run the real bus routes (OSM's `route=bus` relations, as the `map` call
 returns them: every route with a way in the area). When the map's built, each route's

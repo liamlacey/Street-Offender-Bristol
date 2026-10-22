@@ -314,9 +314,10 @@ const SPEED: Partial<Record<RoadKind, number>> = { trunk: 13.4 * M, primary: 12.
 const MAX_SPEED = 13.4 * M;
 /** Round a bus station's yard, px/s. */
 const YARD_SPEED = 5 * M;
-/** How many vehicles a lane carries, per 100 m, on a quiet stretch; more where there's more to go to (up to TRAFFIC_BUSIEST times as many). */
-const DENSITY: Partial<Record<RoadKind, number>> = { trunk: 3.6, primary: 3.2, secondary: 2.6, tertiary: 2.1, street: 1 };
+/** How many vehicles a lane carries, per 100 m, on a quiet stretch (the main roads busy wherever they go); more where there's more to go to (up to BUSIEST times as many, and no more than CROWDED). */
+const DENSITY: Partial<Record<RoadKind, number>> = { trunk: 7, primary: 6, secondary: 4, tertiary: 2.6, street: 1 };
 const BUSIEST = 3;
+const CROWDED = 9;
 /** How many bikes ride along a cycle path each way, per 100 m. */
 const PATH_BIKES = 0.9;
 /** How fast each kind's driven, against the road's usual speed (before the driver's own pace). */
@@ -568,7 +569,7 @@ export function* lanesWork(map: GameMap, paths = false, joins: Join[] = []): Wor
           activity: r.activity ?? 0,
           busLane: index === 0 ? (r.lanes ?? []).filter((l) => l.kind === 'bus' && l.side === dir).reduce((w, l) => w + l.width, 0) : 0,
           ...cycling(r, dir, index, left, offset),
-          density: paths ? PATH_BIKES / (100 * M) : r.bus ? 0 : ((DENSITY[r.kind] ?? 0.6) * Math.min(BUSIEST, 1 + (r.activity ?? 0) / 15)) / (100 * M),
+          density: paths ? PATH_BIKES / (100 * M) : r.bus ? 0 : Math.min(CROWDED, (DENSITY[r.kind] ?? 0.6) * Math.min(BUSIEST, 1 + (r.activity ?? 0) / 15)) / (100 * M),
           ...(paths ? { path: true } : {}),
           ...(r.bus ? { bus: true } : {}),
           stops: [],
@@ -1042,7 +1043,7 @@ export class Traffic {
       r.legs.flatMap((leg, k) => (leg < 0 ? [] : (lanesOfRoad.get(leg >> 1) ?? []).filter((l) => l.dir === (leg & 1 ? -1 : 1) && l.index === 0).map((lane) => ({ lane, leg: k })))),
     );
     this.rand = options.rand ?? Math.random;
-    this.max = options.max ?? 55;
+    this.max = options.max ?? 70;
     this.maxBuses = options.buses ?? MAX_BUSES;
     const yards = map.areas.filter((a) => a.kind === 'yard').map((a) => a.rings[0]);
     yield;
@@ -2968,28 +2969,31 @@ export class Traffic {
     this.spawnTimer -= dt;
     if (this.spawnTimer > 0 && this.started) return;
     this.spawnTimer = 0.2;
-    // How many the lanes round you should have, and where.
-    const candidates: [Lane, number][] = [];
+    // How many the lanes round you should have, and where: the stretches of them near you (a long main road's only partly).
+    const candidates: [[Lane, number, number], number][] = [];
     let expected = 0;
     for (const lane of this.lanes) {
       const [x0, y0] = [lane.pts[0], lane.pts[1]];
       const [x1, y1] = [lane.pts[lane.pts.length - 2], lane.pts[lane.pts.length - 1]];
-      if (Math.min(Math.hypot(x0 - player.x, y0 - player.y), Math.hypot(x1 - player.x, y1 - player.y)) > near + lane.length) continue;
-      expected += lane.density * Math.min(lane.length, 2 * near);
-      candidates.push([lane, lane.density * lane.length]);
+      if (!lane.density || Math.min(Math.hypot(x0 - player.x, y0 - player.y), Math.hypot(x1 - player.x, y1 - player.y)) > near + lane.length) continue;
+      for (const [a, b] of spansNear(lane, player.x, player.y, near)) {
+        expected += lane.density * (b - a);
+        candidates.push([[lane, a, b], lane.density * (b - a)]);
+      }
     }
     const target = Math.min(this.max, Math.round(expected * 0.9));
     this.target = target;
     // At the start, fill the streets (in view too); after, a few at a time, out of sight.
-    const tries = this.started ? 6 : target * 4;
+    const tries = this.started ? 10 : target * 4;
     for (let k = 0; k < tries && this.vehicles.length < target; k++) {
-      const lane = pick(this.rand, candidates);
-      if (!lane) break;
-      const s = this.rand() * lane.length;
+      const span = pick(this.rand, candidates);
+      if (!span) break;
+      const [lane, a, b] = span;
+      const s = a + this.rand() * (b - a);
       const [x, y] = pathAt(lane, s);
       const dist = Math.hypot(x - player.x, y - player.y);
       // Not right by you (at the start, not within 25 m: no one appears just ahead of you and has to brake hard).
-      if (dist > near || dist < (this.started ? 10 : 25) * M) continue;
+      if (dist < (this.started ? 10 : 25) * M) continue;
       if (this.started && this.inView(x, y, view, 50)) continue;
       // Room for it.
       if (this.vehicles.some((v) => Math.hypot(v.x - x, v.y - y) < 7 * M)) continue;
@@ -3071,6 +3075,28 @@ class LaneHeap {
 /** A lane's name, by where it is (the same lane, made again from the same roads, has the same one). */
 function laneKey(l: Lane): string {
   return `${l.pts[0]},${l.pts[1]},${l.pts[l.pts.length - 2]},${l.pts[l.pts.length - 1]},${l.index},${l.path ? 1 : 0}`;
+}
+
+/** The stretches of a path (from, to: distance along it) within `r` of (x, y). */
+export function spansNear(p: Path, x: number, y: number, r: number): [number, number][] {
+  const spans: [number, number][] = [];
+  for (let i = 0; i + 1 < p.at.length; i++) {
+    const [ax, ay, bx, by] = [p.pts[i * 2], p.pts[i * 2 + 1], p.pts[i * 2 + 2], p.pts[i * 2 + 3]];
+    const len = p.at[i + 1] - p.at[i];
+    if (!len) continue;
+    // Where along the segment it's within r: |a + t (b - a) - c| = r, t in [0, 1].
+    const [dx, dy, fx, fy] = [(bx - ax) / len, (by - ay) / len, ax - x, ay - y];
+    const along = -(fx * dx + fy * dy);
+    const off = r * r - (fx * fx + fy * fy - along * along);
+    if (off <= 0) continue;
+    const [t0, t1] = [Math.max(0, along - Math.sqrt(off)), Math.min(len, along + Math.sqrt(off))];
+    if (t1 <= t0) continue;
+    const [a, b] = [p.at[i] + t0, p.at[i] + t1];
+    const last = spans[spans.length - 1];
+    if (last && a - last[1] < 1) last[1] = b;
+    else spans.push([a, b]);
+  }
+  return spans;
 }
 
 /** Picks one of some things by weight. */
