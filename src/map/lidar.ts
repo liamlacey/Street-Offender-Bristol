@@ -149,6 +149,7 @@ export function findTrees(g: HeightGrid, allowed: (i: number, j: number) => bool
       }
       if (!top) continue;
       // The crown: what's at least half as high round it, and how rough it is (leaves are; roofs aren't).
+      const high = Math.max(2.5, peak * 0.5);
       let area = 0;
       let rough = 0;
       let pairs = 0;
@@ -157,7 +158,7 @@ export function findTrees(g: HeightGrid, allowed: (i: number, j: number) => bool
         for (let di = -crownReach; di <= crownReach; di++) {
           if (di * di + dj * dj > crownReach * crownReach) continue;
           const v = at(i + di, j + dj);
-          if (!(v > Math.max(2.5, peak * 0.5))) continue;
+          if (!(v > high)) continue;
           if (!allowed(i + di, j + dj)) blocked++;
           area++;
           const right = at(i + di + 1, j + dj);
@@ -175,10 +176,27 @@ export function findTrees(g: HeightGrid, allowed: (i: number, j: number) => bool
   }
   // Big crowns have more than one high point: keep the highest of any too close together.
   found.sort((a, b) => b.h - a.h);
+  // (Kept ones by where they are, in 8 m squares, the furthest apart two can be and still clash: each looks only at those round it.)
   const kept: FoundTree[] = [];
+  const square = 8 * pxPerMetre;
+  const squares = new Map<number, FoundTree[]>();
+  const keyOf = (i: number, j: number) => i * 65536 + j;
   for (const t of found) {
-    if (kept.some((k) => Math.hypot(k.x - t.x, k.y - t.y) / pxPerMetre < Math.max(3, Math.min(k.r, t.r) * 0.9))) continue;
+    const ci = Math.floor(t.x / square);
+    const cj = Math.floor(t.y / square);
+    let clash = false;
+    for (let i = ci - 1; i <= ci + 1 && !clash; i++) {
+      for (let j = cj - 1; j <= cj + 1 && !clash; j++) {
+        const near = squares.get(keyOf(i, j));
+        if (near) clash = near.some((k) => Math.hypot(k.x - t.x, k.y - t.y) / pxPerMetre < Math.max(3, Math.min(k.r, t.r) * 0.9));
+      }
+    }
+    if (clash) continue;
     kept.push(t);
+    const key = keyOf(ci, cj);
+    const list = squares.get(key);
+    if (list) list.push(t);
+    else squares.set(key, [t]);
   }
   return kept;
 }
