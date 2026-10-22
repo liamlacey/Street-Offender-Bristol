@@ -153,15 +153,30 @@ export function addLidar(map: GameMap, dsm: Raster, dtm: Raster): LidarReport {
   const osm = map.trees;
   const matched = new Set<number>();
   const added: number[] = [];
+  // (OSM's trees by where they are, in 5 m squares: each found tree looks only at those round it.)
+  const cell = 5 * px;
+  const cells = new Map<string, number[]>();
+  for (let k = 0; k < osm.length; k += 4) {
+    const key = `${Math.floor(osm[k] / cell)},${Math.floor(osm[k + 1] / cell)}`;
+    const list = cells.get(key);
+    if (list) list.push(k);
+    else cells.set(key, [k]);
+  }
   for (const t of found) {
     // An OSM tree here already: it's the one measured.
     let near = -1;
     let nearD = 5 * px;
-    for (let k = 0; k < osm.length; k += 4) {
-      const d = Math.hypot(osm[k] - t.x, osm[k + 1] - t.y);
-      if (d < nearD) {
-        nearD = d;
-        near = k;
+    const [ci, cj] = [Math.floor(t.x / cell), Math.floor(t.y / cell)];
+    for (let i = ci - 1; i <= ci + 1; i++) {
+      for (let j = cj - 1; j <= cj + 1; j++) {
+        for (const k of cells.get(`${i},${j}`) ?? []) {
+          const d = Math.hypot(osm[k] - t.x, osm[k + 1] - t.y);
+          // (The first of those as near, as before: in the order they're listed.)
+          if (d < nearD || (d === nearD && near >= 0 && k < near)) {
+            nearD = d;
+            near = k;
+          }
+        }
       }
     }
     if (near >= 0) {
@@ -777,8 +792,15 @@ const LEDGE_FLAT = 0.3;
 const LEDGE_FOOT = 0.25;
 /** Shorter than this, metres, it's a bump in the survey, not a ledge. */
 const LEDGE_SHORTEST = 3;
-/** How far from the line it's kept to when it's simplified, metres. */
-const LEDGE_TOLERANCE = 0.6;
+/**
+ * Its line's smoothed first, each point the average of those this many either
+ * side of it (the survey's metre squares make a wall at a slant a staircase),
+ * then simplified, kept to within LEDGE_TOLERANCE metres of it.
+ */
+const LEDGE_SMOOTH = 2;
+const LEDGE_TOLERANCE = 0.9;
+/** Not its top within this of a carriageway's edge, metres (only its foot). */
+const LEDGE_ROAD = 1;
 
 /**
  * Sharp drops in the bare ground (a quay's edge into the water, a retaining
@@ -817,8 +839,8 @@ export function findLedges(map: GameMap, dtm: Raster, toGrid: (x: number, y: num
   for (const r of map.roads) {
     if (r.bridge) along(r.pts, 1, 2, r.width / 2 + 2 * px);
     else if (r.kind === 'steps') along(r.pts, 1, 2, r.width / 2);
-    // Not its top on a carriageway (the road would drop away under you); its foot can be.
-    else if (VEHICLE_ROADS.has(r.kind)) along(r.pts, 2, 0, r.width / 2);
+    // Not its top on a carriageway or a railway (it would drop away under you); its foot can be.
+    else if (VEHICLE_ROADS.has(r.kind) || r.kind === 'rail') along(r.pts, 2, 0, r.width / 2 + LEDGE_ROAD * px);
   }
   for (const l of map.lines) if (l.kind === 'wall' || l.kind === 'fence' || l.kind === 'hedge') along(l.pts, 1, 1);
 
@@ -923,12 +945,26 @@ export function findLedges(map: GameMap, dtm: Raster, toGrid: (x: number, y: num
       pts.splice(0, pts.length, ...back);
       drops.reverse();
     }
-    const keep = simplify(pts, LEDGE_TOLERANCE * px);
-    ledges.push({ pts: keep.flatMap((n) => [Math.round(pts[n * 2]), Math.round(pts[n * 2 + 1])]), drop: keep.map((n) => Math.round(drops[n] * px)) });
+    const smooth = smoothLine(pts, LEDGE_SMOOTH);
+    const keep = simplify(smooth, LEDGE_TOLERANCE * px);
+    ledges.push({ pts: keep.flatMap((n) => [Math.round(smooth[n * 2]), Math.round(smooth[n * 2 + 1])]), drop: keep.map((n) => Math.round(drops[n] * px)) });
   }
   if (ledges.length) map.ledges = ledges;
   else delete map.ledges;
   return ledges.length;
+}
+
+/** A line smoothed: each point (but its ends) the average of those up to `reach` either side of it. */
+function smoothLine(pts: number[], reach: number): number[] {
+  const n = pts.length / 2;
+  const out = pts.slice();
+  for (let i = 1; i < n - 1; i++) {
+    const r = Math.min(reach, i, n - 1 - i);
+    let [sx, sy] = [0, 0];
+    for (let j = i - r; j <= i + r; j++) [sx, sy] = [sx + pts[j * 2], sy + pts[j * 2 + 1]];
+    [out[i * 2], out[i * 2 + 1]] = [sx / (2 * r + 1), sy / (2 * r + 1)];
+  }
+  return out;
 }
 
 /** Which of a line's points to keep (Douglas–Peucker): those that stray more than `tolerance` from the straight line between the kept ones. */

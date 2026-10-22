@@ -461,12 +461,15 @@ ground):
   wall into a slope a couple of metres wide): the way it falls the steepest of
   the 8 ways round it. Not at a building (or a metre round one: the survey's made
   up under them), a bridge (and 2 m round it), steps, or a wall, fence or hedge
-  OSM has; its top not in the water or on a carriageway (its foot can be). Tops
+  OSM has; its top not in the water or on a carriageway or a railway, nor within 1 m of one's
+  edge (its foot can be). Tops
   side by side, falling within 90° of the same way, are joined into lines
   (diagonally only where there's no corner to go round); lines shorter than 3 m
-  are dropped, and the rest simplified (Douglas–Peucker, 0.6 m), each point half
-  a metre on from its top's middle, the way it falls, running so the ground falls
-  away on their right, with how far it drops there.
+  are dropped, each point half a metre on from its top's middle, the way it falls,
+  running so the ground falls away on their right, with how far it drops there.
+  The rest are smoothed (each point but the ends the average of those up to 2
+  either side: the survey's metre squares make a wall at a slant a staircase),
+  then simplified (Douglas–Peucker, 0.9 m).
 
 **In the game, the ledges** (`src/world/ledges.ts`, drawn by `LedgeLayer.ts`): go
 over one from the top (your middle crossing its edge) and you fall as far as it
