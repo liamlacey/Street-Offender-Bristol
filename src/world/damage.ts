@@ -279,7 +279,7 @@ export function fallen(kind: Exclude<ThingKind, Structure>, x: number, y: number
  * ground) and smaller, the smaller the easier, down to bits too small to break.
  * What each piece is, how strong (as `Toughness`), and what it breaks into.
  */
-export const BREAKUP: Partial<Record<DebrisKind | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block' | 'trolley' | 'foodcart' | 'stall' | 'aboard' | 'swings' | 'slide' | 'roundabout' | 'climbframe' | 'sandpit' | 'seesaw' | 'springy' | 'cabin' | 'portaloo' | 'skip' | 'pallet' | 'pipes' | 'digger' | 'dumper' | 'mattress' | 'sofa' | 'tyres' | 'binbags' | 'fridge', Toughness & { into: [DebrisKind, number][] }>> = {
+export const BREAKUP: Partial<Record<DebrisKind | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block' | 'trolley' | 'foodcart' | 'stall' | 'aboard' | 'swings' | 'slide' | 'roundabout' | 'climbframe' | 'sandpit' | 'seesaw' | 'springy' | 'cabin' | 'portaloo' | 'skip' | 'pallet' | 'pipes' | 'digger' | 'dumper' | 'mattress' | 'sofa' | 'tyres' | 'binbags' | 'fridge' | 'drum' | 'cone' | 'woodpallet' | 'washer' | 'carpet' | 'burntcar' | 'tent' | 'campfire', Toughness & { into: [DebrisKind, number][] }>> = {
   // A shopping trolley, hit hard: mangled, its basket's wires and its handle in bits.
   trolley: { material: 'metal', strength: 170, absorb: 0.06, into: [['rail', 3], ['plastic', 2]] },
   // A food cart: its panels and its parasol in bits.
@@ -310,6 +310,16 @@ export const BREAKUP: Partial<Record<DebrisKind | 'bench' | 'picnic' | 'gritbin'
   tyres: { material: 'plastic', strength: 140, absorb: 0.05, into: [['plastic', 2]] },
   binbags: { material: 'plastic', strength: 25, absorb: 0.02, into: [['plastic', 5]] },
   fridge: { material: 'metal', strength: 110, absorb: 0.1, into: [['plastic', 2], ['glass', 1], ['rail', 1]] },
+  // An oil drum burst open, a cone split, a pallet's slats, a washing machine's panels and its door's glass, a carpet torn.
+  drum: { material: 'metal', strength: 90, absorb: 0.08, into: [['rail', 1], ['plastic', 1]] },
+  cone: { material: 'plastic', strength: 40, absorb: 0.02, into: [['plastic', 2]] },
+  woodpallet: { material: 'timber', strength: 90, absorb: 0.06, into: [['splinter', 4]] },
+  washer: { material: 'metal', strength: 120, absorb: 0.1, into: [['plastic', 2], ['glass', 2], ['rail', 1]] },
+  carpet: { material: 'plastic', strength: 60, absorb: 0.05, into: [['plastic', 3]] },
+  // A burnt-out car: its shell crumpled further, bits of it off; a tent ripped, its poles bent; a campfire scattered, burning.
+  burntcar: { material: 'metal', strength: 260, absorb: 0.4, into: [['rail', 3], ['glass', 3], ['rubble', 2]] },
+  tent: { material: 'plastic', strength: 45, absorb: 0.03, into: [['plastic', 4], ['rail', 1]] },
+  campfire: { material: 'stone', strength: 140, absorb: 0.2, into: [['rubble', 4], ['billet', 2]] },
   // A bench and a picnic table, standing loose: smashed to planks.
   bench: { material: 'timber', strength: BENCH_SMASH, absorb: 0.12, into: [['plank', 5]] },
   picnic: { material: 'timber', strength: BENCH_SMASH, absorb: 0.15, into: [['plank', 7]] },

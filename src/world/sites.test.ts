@@ -97,4 +97,24 @@ describe('building sites and brownfield', () => {
     for (const t of things) expect(Math.hypot(t.x - c.x, t.y - c.y)).toBeGreaterThan(2 * M);
     expect(buildWorld(big).fixed.filter((p) => p.kind === 'crane' && p.tower)).toHaveLength(1);
   });
+
+  it('has a bigger brownfield strewn with rubbish, a burnt-out car on it, a camp away from the road, gulls, and people cutting across it', () => {
+    const big = lots();
+    big.areas[1].rings[0] = [800, 120, 1300, 120, 1300, 600, 800, 600];
+    const life = siteLife(big);
+    const brown = big.areas[1].rings[0];
+    const on = (k: string) => life.tips.filter((t) => t.kind === k && pointInRing(t.x, t.y, brown));
+    expect(life.tips.filter((t) => pointInRing(t.x, t.y, brown)).length).toBeGreaterThan(25);
+    expect(new Set(life.tips.map((t) => t.kind)).size).toBeGreaterThan(8);
+    expect(on('burntcar').length).toBeGreaterThanOrEqual(1);
+    const [fire] = on('campfire');
+    expect(fire).toBeDefined();
+    // (Away from the road, the south side; its tents round it.)
+    expect(fire.y).toBeLessThan(400);
+    expect(on('tent').length).toBeGreaterThanOrEqual(1);
+    for (const t of on('tent')) expect(Math.hypot(t.x - fire.x, t.y - fire.y)).toBeLessThan(5 * M);
+    expect(life.gulls.length).toBeGreaterThanOrEqual(1);
+    expect(life.wanderers.length).toBeGreaterThanOrEqual(2);
+    expect(life.wastes).toHaveLength(1);
+  });
 });

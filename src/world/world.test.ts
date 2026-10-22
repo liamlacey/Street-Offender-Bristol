@@ -46,7 +46,7 @@ describe('buildWorld', () => {
   });
 
   it('makes benches, bins, picnic tables, grit bins, planters, blocks, trolleys, food carts, market stalls, A-boards, playground things, and the things on the building sites and brownfield loose, and lamp posts and trees fixed', () => {
-    expect(world.loose.every((l) => ['bench', 'bin', 'picnic', 'gritbin', 'planter', 'block', 'trolley', 'foodcart', 'stall', 'aboard', 'swings', 'slide', 'roundabout', 'climbframe', 'sandpit', 'seesaw', 'springy', 'cabin', 'portaloo', 'skip', 'pallet', 'pipes', 'digger', 'dumper', 'mattress', 'sofa', 'tyres', 'binbags', 'fridge'].includes(l.kind))).toBe(true);
+    expect(world.loose.every((l) => ['bench', 'bin', 'picnic', 'gritbin', 'planter', 'block', 'trolley', 'foodcart', 'stall', 'aboard', 'swings', 'slide', 'roundabout', 'climbframe', 'sandpit', 'seesaw', 'springy', 'cabin', 'portaloo', 'skip', 'pallet', 'pipes', 'digger', 'dumper', 'mattress', 'sofa', 'tyres', 'binbags', 'fridge', 'drum', 'cone', 'woodpallet', 'washer', 'carpet', 'burntcar', 'tent', 'campfire'].includes(l.kind))).toBe(true);
     // The heavy ones are hard to shift.
     expect(world.loose.find((l) => l.kind === 'block')!.invMass).toBeLessThan(1);
     expect(world.loose.length).toBeGreaterThan(100);

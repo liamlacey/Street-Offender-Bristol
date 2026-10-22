@@ -974,9 +974,18 @@ but the water and the buildings.
     crane on one of 4,000 m² or more, near its middle: its mast 40 m up, its 45 m jib
     turning slowly round (0.05 to 0.09 rad/s). Its workers, one spot per 400 m² (at most
     8), in hi-vis vests and white hard hats, standing about or going about the site.
-  - Brownfield (100 m² or more) has fly-tipped rubbish on it: a pile for every 600 m² (1
-    to 6), each two to five of mattresses, sofas, tyres, bin bags and fridges, within 10 m
-    of its edge on the side nearest a road, 12 m apart.
+  - Brownfield (100 m² or more) has fly-tipped rubbish on it: a pile for every 300 m² (1
+    to 12), each three to seven of mattresses, sofas, tyres, bin bags, fridges, oil
+    drums, traffic cones, wooden pallets, washing machines and rolled-up carpets; a
+    third of the way, within 14 m of its edge on the side nearest a road, then about it,
+    9 m apart. A burnt-out car on one of 1,200 m² or more (two on one of 6,000). On one
+    of 800 m² or more, well away from the road, a rough sleepers' camp: a campfire (its
+    flames flickering) with one or two tents round it, their doors to it, and two to
+    four sitting round it, facing it, a good while (weight 1.6). Gulls picking at the
+    rubbish (as the pigeons do: white, bigger), and people cutting across it, one spot
+    per 1,000 m² (at most 4), going about it, half with a dog. Nothing's put on anything
+    paved or laid out mapped over it (a car park, a forecourt, a square, a playground, a
+    pitch, a platform), nor on a building site's.
   - All of it loose things: knocked about, and smashed (a cabin into panels, glass and
     plastic; a pallet into bricks; a mattress, a sofa, bin bags into bits), the skips,
     diggers and dumpers only by the hardest hits.

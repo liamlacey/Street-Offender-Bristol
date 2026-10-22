@@ -226,8 +226,10 @@ function takings(scene: Phaser.Scene, act: Act): string {
 }
 
 /** A pigeon from above, facing right: standing, pecking (head down), or flying (wings up, wings down). */
-function pigeonTexture(scene: Phaser.Scene, pose: 'stand' | 'peck' | 'fly0' | 'fly1'): string {
-  const key = `pigeon-${pose}`;
+function pigeonTexture(scene: Phaser.Scene, pose: 'stand' | 'peck' | 'fly0' | 'fly1', gull = false): string {
+  const key = `${gull ? 'gull' : 'pigeon'}-${pose}`;
+  // (A gull: white, its wings grey, its beak yellow.)
+  const [wing, tail, body, neck, head, beak] = gull ? ['#a9b0b6', '#2a2c2e', '#f2f2ee', '#e8e8e4', '#f6f6f2', '#e8c22a'] : ['#7d8590', '#5d6570', '#8a929c', '#6a7d74', '#5a6068', '#d9a080'];
   canvasTexture(scene, key, 6, 6, (ctx) => {
     const ellipse = (x: number, y: number, rx: number, ry: number, fill: string) => {
       ctx.fillStyle = fill;
@@ -237,16 +239,16 @@ function pigeonTexture(scene: Phaser.Scene, pose: 'stand' | 'peck' | 'fly0' | 'f
     };
     if (pose === 'fly0' || pose === 'fly1') {
       const spread = pose === 'fly0' ? 2.6 : 1.6;
-      ellipse(2.8, 3 - spread * 0.7, 0.9, spread * 0.55, '#7d8590');
-      ellipse(2.8, 3 + spread * 0.7, 0.9, spread * 0.55, '#7d8590');
+      ellipse(2.8, 3 - spread * 0.7, 0.9, spread * 0.55, wing);
+      ellipse(2.8, 3 + spread * 0.7, 0.9, spread * 0.55, wing);
     } else ellipse(3.2, 3.3, 1.3, 0.75, 'rgba(0,0,0,0.2)');
     // Tail, body, the sheen on its neck, its head and beak.
-    ellipse(1.3, 3, 0.8, 0.5, '#5d6570');
-    ellipse(2.8, 3, 1.3, 0.85, '#8a929c');
+    ellipse(1.3, 3, 0.8, 0.5, tail);
+    ellipse(2.8, 3, 1.3, 0.85, body);
     const hx = pose === 'peck' ? 4.6 : 4.1;
-    ellipse(hx - 0.5, 3, 0.5, 0.55, '#6a7d74');
-    ellipse(hx, 3, 0.45, 0.45, '#5a6068');
-    ellipse(hx + 0.5, 3, 0.25, 0.15, '#d9a080');
+    ellipse(hx - 0.5, 3, 0.5, 0.55, neck);
+    ellipse(hx, 3, 0.45, 0.45, head);
+    ellipse(hx + 0.5, 3, 0.25, 0.15, beak);
   });
   return key;
 }
@@ -494,10 +496,10 @@ export class PeopleLayer {
       for (const b of f.birds) {
         flying.add(b);
         const pose = b.flying ? (Math.floor(now / 90 + b.angle * 3) % 2 ? 'fly0' : 'fly1') : b.peck && Math.floor(now / 250 + b.angle * 5) % 2 ? 'peck' : 'stand';
-        const key = pigeonTexture(this.scene, pose);
+        const key = pigeonTexture(this.scene, pose, f.gull);
         let im = this.birds.get(b);
         if (!im) {
-          im = this.scene.add.image(0, 0, key).setScale(SIZE / ART_SCALE);
+          im = this.scene.add.image(0, 0, key).setScale(((f.gull ? 1.3 : 1) * SIZE) / ART_SCALE);
           this.birds.set(b, im);
         } else if (im.texture.key !== key) im.setTexture(key);
         const lift = perspective.lift(this.base(b.x, b.y, 0) + 0.2 * 8 + b.z);

@@ -88,6 +88,15 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
   tyres: { r: 3, invMass: 6 },
   binbags: { r: 3, invMass: 10 },
   fridge: { r: 2.8, invMass: 2 },
+  drum: { r: 2.4, invMass: 3 },
+  cone: { r: 1.6, invMass: 25 },
+  woodpallet: { r: 4, invMass: 6 },
+  washer: { r: 2.6, invMass: 2.5 },
+  carpet: { r: 2, length: 19, invMass: 6 },
+  // A burnt-out car: a heavy shell. A tent, light; a campfire's ring of stones, heavy.
+  burntcar: { r: 7.5, length: 35, invMass: 0.6 },
+  tent: { r: 6, length: 18, invMass: 8 },
+  campfire: { r: 5.5, invMass: 0.5 },
 };
 
 /** Which of the food carts sells ice cream (see CARTS). */

@@ -173,6 +173,8 @@ export interface Bird {
 export interface Flock {
   x: number;
   y: number;
+  /** Gulls (at the rubbish on the brownfield), not pigeons. */
+  gull?: boolean;
   birds: Bird[];
   away: number;
 }
@@ -353,6 +355,8 @@ interface Spot {
   grass?: boolean;
   /** On a building site: its workers, in hi-vis. */
   hivis?: boolean;
+  /** On the brownfield: cutting across it, a dog with some. */
+  waste?: boolean;
 }
 
 /** Where a crossing's kerbs are (either side of the road, on the pavement), and how it works. */
@@ -392,7 +396,9 @@ const SWING = 0.8 * PM;
 const SWING_RATE = 2.3;
 const ROUND = 1.6;
 const SLIDE_ROUND = 4;
-const seatWeight = (s: Seat) => (PLAY.has(s.kind) ? PLAY_WEIGHT : SEAT_WEIGHT);
+/** A campfire on the brownfield: two to four sit round it a good while, close, facing it. */
+const FIRE_WEIGHT = 1.6;
+const seatWeight = (s: Seat) => (PLAY.has(s.kind) ? PLAY_WEIGHT : s.kind === 'campfire' ? FIRE_WEIGHT : SEAT_WEIGHT);
 /** Cells for finding who's close, px. */
 const NEAR_CELL = 4 * M;
 const key = (x: number, y: number) => `${Math.floor(x / GRID)},${Math.floor(y / GRID)}`;
@@ -521,7 +527,7 @@ export class People {
       p.gather = same ?? null;
       if (same && g.host === p) same.host = p;
     }
-    this.seats = seats.filter((b) => (b.kind === 'bench' || b.kind === 'picnic' || PLAY.has(b.kind)) && b.level === 0);
+    this.seats = seats.filter((b) => (b.kind === 'bench' || b.kind === 'picnic' || b.kind === 'campfire' || PLAY.has(b.kind)) && b.level === 0);
     this.plays = this.seats.filter((b) => PLAY.has(b.kind));
     for (const b of this.plays) b.motion ??= [0, 0, 0, 0];
     this.seatGrid.clear();
@@ -672,6 +678,10 @@ export class People {
     const sites = yield* siteLifeWork(map);
     for (const ring of sites.sites) this.areas.push(ring);
     for (const w of sites.workers) this.addSpot({ x: w.x, y: w.y, angle: this.rand() * Math.PI * 2, weight: 1.2, group: this.rand() < 0.4, hivis: true });
+    // The brownfield: people cutting across it (a dog with some), and the gulls at its rubbish.
+    for (const ring of sites.wastes) this.areas.push(ring);
+    for (const w of sites.wanderers) this.addSpot({ x: w.x, y: w.y, angle: this.rand() * Math.PI * 2, weight: 0.8, group: false, waste: true });
+    for (const g of sites.gulls) this.flocks.push({ x: g.x, y: g.y, birds: [], away: 0, gull: true });
     // Outside the shops, cafés and bars, on the pavement; at the sights, in groups.
     const v = map.venues ?? [];
     for (let i = 0; i + 2 < v.length; i += 3) {
@@ -1125,9 +1135,10 @@ export class People {
       return;
     }
     const area = this.areas.findIndex((ring) => pointInRing(s.x, s.y, ring));
-    if (area >= 0 && !s.group && this.rand() < 0.6) {
+    if (area >= 0 && !s.group && (s.waste || this.rand() < 0.6)) {
       const p = this.make(s.x, s.y, 'wander');
       if (s.hivis) p.hivis = true;
+      if (s.waste && this.rand() < 0.5) this.withDog(p);
       p.area = area;
       [p.tx, p.ty] = [s.x, s.y];
       return;
@@ -1154,6 +1165,20 @@ export class People {
   /** One or two sitting on a bench (facing one way off it), or two to four round a picnic table. */
   private sitDown(seat: Seat): void {
     if (PLAY.has(seat.kind)) return this.playOn(seat);
+    if (seat.kind === 'campfire') {
+      const n = 2 + Math.floor(this.rand() * 3);
+      const time = 60 + this.rand() * 180;
+      const turn = this.rand() * Math.PI * 2;
+      for (let k = 0; k < n; k++) {
+        const a = turn + (k / n) * Math.PI * 2 + (this.rand() - 0.5) * 0.4;
+        const p = this.make(seat.x, seat.y, 'sit');
+        p.seat = seat;
+        p.seatAt = [Math.cos(a) * 1.5 * M, Math.sin(a) * 1.5 * M, seat.x, seat.y];
+        p.timer = time + this.rand() * 20;
+        this.onSeat(p);
+      }
+      return;
+    }
     const bench = seat.kind === 'bench';
     // A bench faces one way: the same each time for the same bench.
     const facing = (Math.floor(seat.x * 7 + seat.y * 13) & 1) === 0 ? 1 : -1;
@@ -1219,7 +1244,7 @@ export class People {
     p.x = s.x + ux * u - uy * v;
     p.y = s.y + uy * u + ux * v;
     const out = s.kind === 'bench' ? Math.sign(v) : -Math.sign(v);
-    p.angle = s.angle + (Math.PI / 2) * out;
+    p.angle = s.kind === 'campfire' ? Math.atan2(s.y - p.y, s.x - p.x) : s.angle + (Math.PI / 2) * out;
     p.speed = 0;
   }
 

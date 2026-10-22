@@ -2059,6 +2059,13 @@ export class GameScene extends Phaser.Scene {
       if (!show || !image) continue;
       const s = p.lift(this.surfaceHeight(body.x, body.y, body.level));
       image.setPosition(p.x(body.x, s), p.y(body.y, s)).setRotation(body.angle + (body.kind === 'roundabout' ? (body.motion?.[0] ?? 0) : 0));
+      // A campfire's flames, flickering (none once it's scattered).
+      if (body.kind === 'campfire' && !body.wrecked) {
+        l.parts ??= [this.add.image(0, 0, `${TEX.prop('campfire')}-flame-0`).setScale(1 / ART_SCALE).setDepth(DEPTH.props + 0.02)];
+        const up = p.lift(this.surfaceHeight(body.x, body.y, body.level) + 0.5 * 8);
+        const f = Math.floor(this.time.now / 110 + body.x) % 3;
+        l.parts[0].setTexture(`${TEX.prop('campfire')}-flame-${f}`).setPosition(p.x(body.x, up), p.y(body.y, up)).setRotation(this.time.now / 900);
+      }
       // A digger's arm, out from the front of its house (swinging as it digs).
       if (body.kind === 'digger' && !body.wrecked) {
         l.parts ??= [this.add.image(0, 0, `${TEX.prop('digger')}-arm`).setScale(1 / ART_SCALE).setOrigin(0.06, 0.5).setDepth(DEPTH.props + 0.01)];

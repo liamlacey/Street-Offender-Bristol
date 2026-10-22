@@ -457,7 +457,15 @@ export type PropKind =
   | 'sofa'
   | 'tyres'
   | 'binbags'
-  | 'fridge';
+  | 'fridge'
+  | 'drum'
+  | 'cone'
+  | 'woodpallet'
+  | 'washer'
+  | 'carpet'
+  | 'burntcar'
+  | 'tent'
+  | 'campfire';
 
 export interface Prop {
   kind: PropKind;

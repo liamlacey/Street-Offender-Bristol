@@ -787,6 +787,113 @@ export function createArt(scene: Phaser.Scene): void {
     ctx.fillStyle = 'rgba(160,110,60,0.4)';
     ctx.fillRect(3.5, 0.8, 1.6, 1.4);
   });
+  // More fly-tipped: an oil drum (rusting), a traffic cone, a wooden pallet, a washing machine, a rolled-up carpet.
+  canvasTexture(scene, TEX.prop('drum'), 6, 6, (ctx) => {
+    circle(ctx, 3.3, 3.3, 2.5, 'rgba(0,0,0,0.22)');
+    circle(ctx, 2.9, 2.9, 2.5, '#2f5a8a');
+    circle(ctx, 2.9, 2.9, 1.9, '#3b6a9c');
+    circle(ctx, 3.6, 2.2, 0.8, '#8a4a22');
+    circle(ctx, 2, 3.4, 0.35, '#1d1f22');
+  });
+  canvasTexture(scene, TEX.prop('cone'), 4, 4, (ctx) => {
+    roundRect(ctx, 0.2, 0.2, 3.4, 3.4, 0.5, '#e8541c');
+    circle(ctx, 1.9, 1.9, 1.2, '#f2f2ee');
+    circle(ctx, 1.9, 1.9, 0.7, '#e8541c');
+  });
+  canvasTexture(scene, TEX.prop('woodpallet'), 10, 9, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(0.8, 0.8, 9.2, 8);
+    ctx.fillStyle = '#a7834f';
+    for (let y = 0; y < 8; y += 1.75) ctx.fillRect(0, y, 9.6, 1.2);
+    ctx.fillStyle = '#8a6a3c';
+    for (const x of [0.3, 4.3, 8.3]) ctx.fillRect(x, 0, 1, 8);
+  });
+  canvasTexture(scene, TEX.prop('washer'), 6, 6, (ctx) => {
+    roundRect(ctx, 0.6, 0.6, 5.2, 5.2, 0.5, 'rgba(0,0,0,0.22)');
+    roundRect(ctx, 0, 0, 5.2, 5.2, 0.5, '#e4e7e8');
+    circle(ctx, 2.6, 3, 1.6, '#5c6a72');
+    circle(ctx, 2.6, 3, 1.1, '#8fa3ad');
+    ctx.fillStyle = '#b5babd';
+    ctx.fillRect(0.4, 0.4, 4.4, 0.9);
+  });
+  canvasTexture(scene, TEX.prop('carpet'), 20, 5, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(0.8, 0.8, 19, 4);
+    roundRect(ctx, 0, 0, 19, 4, 2, '#7a3b3b');
+    ctx.fillStyle = '#c0a060';
+    for (let x = 2; x < 18; x += 3) ctx.fillRect(x, 0.4, 1, 3.2);
+    circle(ctx, 1.8, 2, 1.6, '#5c2c2c');
+  });
+  // A burnt-out car: its shell blackened and rusted, no glass, its tyres burnt off.
+  canvasTexture(scene, TEX.prop('burntcar'), 36, 17, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(1.5, 1.5, 35, 15.5);
+    roundRect(ctx, 0, 0, 35, 15.5, 3, '#2c2622');
+    roundRect(ctx, 1.5, 1.5, 32, 12.5, 2.5, '#5a3e2c');
+    const rand = seeded(17);
+    for (let i = 0; i < 40; i++) {
+      ctx.fillStyle = ['#7a4a2a', '#1b1714', '#8f5a32', '#3a2e26'][i % 4];
+      ctx.beginPath();
+      ctx.arc(2 + rand() * 31, 2 + rand() * 11.5, 0.6 + rand() * 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Where its windows were: holes.
+    roundRect(ctx, 8, 2.5, 6, 10.5, 1, '#141210');
+    roundRect(ctx, 22, 3, 5, 9.5, 1, '#141210');
+    for (const [x, y] of [[6, -0.5], [6, 13.5], [27, -0.5], [27, 13.5]]) roundRect(ctx, x, y, 5, 2.5, 1, '#3d3a37');
+  });
+  // A tent: its flysheet (green), ridge along it, its door at the front (+x).
+  canvasTexture(scene, TEX.prop('tent'), 19, 13, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(1.5, 1.5, 17.5, 11.5);
+    roundRect(ctx, 0, 0, 18, 12, 2, '#3f6b3a');
+    ctx.fillStyle = '#4f8248';
+    ctx.fillRect(1, 1, 16, 5);
+    ctx.fillStyle = '#2f5230';
+    ctx.fillRect(0, 5.6, 18, 0.8);
+    ctx.fillStyle = '#26402a';
+    ctx.beginPath();
+    ctx.moveTo(18, 3);
+    ctx.lineTo(14.5, 6);
+    ctx.lineTo(18, 9);
+    ctx.closePath();
+    ctx.fill();
+  });
+  // A campfire: a ring of stones, the logs in it, the ash (its flames drawn on their own, flickering).
+  canvasTexture(scene, TEX.prop('campfire'), 12, 12, (ctx) => {
+    circle(ctx, 6, 6, 5, '#5a5248');
+    circle(ctx, 6, 6, 3.8, '#2a2522');
+    for (let k = 0; k < 9; k++) {
+      const a = (k / 9) * Math.PI * 2;
+      circle(ctx, 6 + Math.cos(a) * 4.6, 6 + Math.sin(a) * 4.6, 1.1, k % 2 ? '#8a8378' : '#9e978b');
+    }
+    ctx.strokeStyle = '#5a3a22';
+    ctx.lineWidth = 1;
+    for (const a of [0.3, 1.9, 3.6]) {
+      ctx.beginPath();
+      ctx.moveTo(6 - Math.cos(a) * 3, 6 - Math.sin(a) * 3);
+      ctx.lineTo(6 + Math.cos(a) * 3, 6 + Math.sin(a) * 3);
+      ctx.stroke();
+    }
+  });
+  for (let f = 0; f < 3; f++) {
+    canvasTexture(scene, `${TEX.prop('campfire')}-flame-${f}`, 8, 8, (ctx) => {
+      const g = ctx.createRadialGradient(4, 4, 0, 4, 4, 3.6 + f * 0.3);
+      g.addColorStop(0, 'rgba(255,240,170,0.95)');
+      g.addColorStop(0.4, 'rgba(255,160,40,0.85)');
+      g.addColorStop(1, 'rgba(220,60,20,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      for (let k = 0; k < 7; k++) {
+        const a = (k / 7) * Math.PI * 2 + f;
+        const r = k % 2 ? 2.2 : 3.8 - f * 0.3;
+        if (k) ctx.lineTo(4 + Math.cos(a) * r, 4 + Math.sin(a) * r);
+        else ctx.moveTo(4 + Math.cos(a) * r, 4 + Math.sin(a) * r);
+      }
+      ctx.closePath();
+      ctx.fill();
+    });
+  }
   // A tower crane's foot: its concrete base, the mast's corner legs.
   canvasTexture(scene, `${TEX.prop('crane')}-tower`, 32, 32, (ctx) => {
     roundRect(ctx, 4, 4, 24, 24, 1, '#9e9a91');

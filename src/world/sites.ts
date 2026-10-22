@@ -18,8 +18,9 @@ import { type Work, drain, every } from './work.ts';
 
 const M = 8;
 
-export const TIP_KINDS = ['mattress', 'sofa', 'tyres', 'binbags', 'fridge'] as const;
-export type TipKind = (typeof TIP_KINDS)[number];
+export const TIP_KINDS = ['mattress', 'sofa', 'tyres', 'binbags', 'fridge', 'drum', 'cone', 'woodpallet', 'washer', 'carpet'] as const;
+/** On the brownfield besides the rubbish: a burnt-out car, and a rough sleepers' camp (tents round a campfire). */
+export type TipKind = (typeof TIP_KINDS)[number] | 'burntcar' | 'tent' | 'campfire';
 export const SITE_KINDS = ['cabin', 'portaloo', 'skip', 'pallet', 'pipes', 'digger', 'dumper'] as const;
 export type SiteKind = (typeof SITE_KINDS)[number];
 export const MACHINES: ReadonlySet<string> = new Set(['digger', 'dumper']);
@@ -38,6 +39,14 @@ export const SITE_SIZE: Record<SiteKind | TipKind, [number, number]> = {
   tyres: [0.75 * M, 0.75 * M],
   binbags: [0.8 * M, 0.7 * M],
   fridge: [0.7 * M, 0.7 * M],
+  drum: [0.6 * M, 0.6 * M],
+  cone: [0.4 * M, 0.4 * M],
+  woodpallet: [1.2 * M, 1 * M],
+  washer: [0.65 * M, 0.65 * M],
+  carpet: [2.4 * M, 0.5 * M],
+  burntcar: [4.4 * M, 1.9 * M],
+  tent: [2.3 * M, 1.6 * M],
+  campfire: [1.4 * M, 1.4 * M],
 };
 
 /** A building site this big or more has anything on it, px²; a cabin and a digger from this, a dumper from this, a tower crane from this. */
@@ -52,8 +61,13 @@ export const CRANE_JIB = 45 * M;
 const PANEL = 3.5 * M;
 const GATE = 7 * M;
 /** A pile of fly-tipped rubbish for every this much brownfield, px² (at least one, at most TIPS); none in less than TIP_LEAST. */
-const PER_TIP = 600 * M * M;
-const TIPS = 6;
+const PER_TIP = 300 * M * M;
+const TIPS = 12;
+/** A burnt-out car on brownfield this big, px² (two on one CARS2 big); a camp on one this big; someone cutting across it for every this much (at most 4). */
+const CARS1 = 1200 * M * M;
+const CARS2 = 6000 * M * M;
+const CAMP = 800 * M * M;
+const PER_WALKER = 1000 * M * M;
 const TIP_LEAST = 100 * M * M;
 /** A worker for every this much building site, px² (at most WORKERS). */
 const PER_WORKER = 400 * M * M;
@@ -79,6 +93,10 @@ export interface SiteLife {
   workers: { x: number; y: number }[];
   /** The building sites themselves (each the outer ring), for the machines to keep to. */
   sites: Pts[];
+  /** The brownfield: each its outer ring (people cut across it); where its gulls pick at the rubbish; where people stand about on it. */
+  wastes: Pts[];
+  gulls: { x: number; y: number }[];
+  wanderers: { x: number; y: number }[];
 }
 
 const cache = new WeakMap<GameMap, SiteLife>();
@@ -93,7 +111,7 @@ export function* siteLifeWork(map: GameMap): Work<SiteLife> {
   const had = cache.get(map);
   if (had) return had;
   const pause = every(4);
-  const life: SiteLife = { tips: [], things: [], fences: [], cranes: [], workers: [], sites: [] };
+  const life: SiteLife = { tips: [], things: [], fences: [], cranes: [], workers: [], sites: [], wastes: [], gulls: [], wanderers: [] };
   const bounded = (pts: Pts, pad: number) => {
     let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
     for (let k = 0; k + 1 < pts.length; k += 2) [x0, y0, x1, y1] = [Math.min(x0, pts[k]), Math.min(y0, pts[k + 1]), Math.max(x1, pts[k]), Math.max(y1, pts[k + 1])];
@@ -107,7 +125,8 @@ export function* siteLifeWork(map: GameMap): Work<SiteLife> {
   }
   const solid = (map.buildings ?? []).filter((b) => !b.bottom).map((b) => bounded(b.rings[0], 0));
   const roads = map.roads.filter((r) => !r.bridge && !r.tunnel && (VEHICLE_ROADS.has(r.kind) || r.kind === 'rail' || r.kind === 'pedestrian' || r.kind === 'footway' || r.kind === 'cycleway')).map((r) => ({ ...bounded(r.pts, r.width / 2 + 2 * M), half: r.width / 2, vehicle: VEHICLE_ROADS.has(r.kind) && r.kind !== 'track' }));
-  const water = (map.areas ?? []).filter((a) => a.kind === 'water' || a.kind === 'pool').map((a) => bounded(a.rings[0], 0));
+  // (The water; and anything paved or laid out mapped over it: a car park, a forecourt, a square, a playground, a pitch, a platform.)
+  const water = (map.areas ?? []).filter((a) => a.kind === 'water' || a.kind === 'pool' || a.kind === 'parking' || a.kind === 'forecourt' || a.kind === 'plaza' || a.kind === 'yard' || a.kind === 'play' || a.kind === 'pitch' || a.kind === 'platform' || a.kind === 'pier').map((a) => bounded(a.rings[0], 0));
   const trees: [number, number][] = [];
   for (let i = 0; i + 3 < (map.trees ?? []).length; i += 4) trees.push([map.trees[i], map.trees[i + 1]]);
   const seen = new Set<string>();
@@ -172,21 +191,55 @@ export function* siteLifeWork(map: GameMap): Work<SiteLife> {
     const edgeDist = (x: number, y: number) => distanceTo(x, y, edge);
     const byEdge = (reach: number) => shuffled.filter(([x, y]) => edgeDist(x, y) < reach);
     if (!site) {
-      // Fly-tipped: in piles, inside its edge on the side nearest a road (or anywhere along its edge, if there's no road near).
+      life.wastes.push(ring);
+      // Fly-tipped: in piles, inside its edge on the side nearest a road first (or anywhere along its edge, if there's no road near), then about it.
       const piles = Math.min(TIPS, Math.max(1, Math.floor(area / PER_TIP)));
-      const roadside = byEdge(10 * M).sort((p, q) => Math.hypot(p[0] - gx, p[1] - gy) * (1 + (hash(p[1], p[0]) % 7) / 10) - Math.hypot(q[0] - gx, q[1] - gy) * (1 + (hash(q[1], q[0]) % 7) / 10));
+      const roadside = byEdge(14 * M).sort((p, q) => Math.hypot(p[0] - gx, p[1] - gy) * (1 + (hash(p[1], p[0]) % 7) / 10) - Math.hypot(q[0] - gx, q[1] - gy) * (1 + (hash(q[1], q[0]) % 7) / 10));
       const piled: [number, number][] = [];
-      for (const [px, py] of roadside) {
+      for (const [px, py] of [...roadside.slice(0, Math.ceil(roadside.length / 3)), ...shuffled]) {
         if (piled.length >= piles) break;
-        if (piled.some(([x, y]) => Math.hypot(x - px, y - py) < 12 * M)) continue;
+        if (piled.some(([x, y]) => Math.hypot(x - px, y - py) < 9 * M)) continue;
+        if (!open(px, py)) continue;
         piled.push([px, py]);
-        const n = 2 + Math.floor(rand() * 4);
+        const n = 3 + Math.floor(rand() * 5);
         for (let k = 0; k < n; k++) {
           const kind = TIP_KINDS[Math.floor(rand() * TIP_KINDS.length)];
-          const near = Array.from({ length: 12 }, () => [px + (rand() - 0.5) * 5 * M, py + (rand() - 0.5) * 5 * M] as [number, number]);
+          const near = Array.from({ length: 12 }, () => [px + (rand() - 0.5) * 6 * M, py + (rand() - 0.5) * 6 * M] as [number, number]);
           const t = put(kind, near, () => rand() * Math.PI * 2, 0.1 * M);
           if (t) life.tips.push(t);
         }
+      }
+      // The gulls, at the rubbish.
+      if (piled.length >= 2) life.gulls.push({ x: r1(piled[1][0]), y: r1(piled[1][1] + 3 * M) });
+      // A burnt-out car or two, dumped and set alight.
+      for (let k = area >= CARS2 ? 2 : area >= CARS1 ? 1 : 0; k > 0; k--) {
+        const t = put('burntcar', shuffled, () => rand() * Math.PI * 2, 1.5 * M);
+        if (t) life.tips.push(t);
+      }
+      // A rough sleepers' camp, well away from the road: a campfire, its tents round it.
+      if (area >= CAMP) {
+        const far = shuffled.filter(([x, y]) => edgeDist(x, y) > 3 * M).sort((p, q) => Math.hypot(q[0] - gx, q[1] - gy) - Math.hypot(p[0] - gx, p[1] - gy));
+        const fire = put('campfire', far.slice(0, 40), () => 0, 2.5 * M);
+        if (fire) {
+          life.tips.push(fire);
+          for (let k = 0, n = 1 + Math.floor(rand() * 2); k < n; k++) {
+            const a = rand() * Math.PI * 2;
+            const ring3 = Array.from({ length: 10 }, (_, i) => [fire.x + Math.cos(a + i * 0.6) * 3.2 * M, fire.y + Math.sin(a + i * 0.6) * 3.2 * M] as [number, number]);
+            let at = 0;
+            const t = put('tent', ring3, () => {
+              // (Its door to the fire.)
+              const [x, y] = ring3[at++];
+              return Math.atan2(fire.y - y, fire.x - x);
+            }, 0.4 * M);
+            if (t) life.tips.push(t);
+          }
+        }
+      }
+      // Someone cutting across it (with the dog), now and then.
+      for (const [x, y] of shuffled) {
+        if (life.wanderers.filter((w) => inside(w.x, w.y)).length >= Math.min(4, Math.max(1, Math.floor(area / PER_WALKER)))) break;
+        if (!open(x, y) || life.wanderers.some((w) => Math.hypot(w.x - x, w.y - y) < 8 * M)) continue;
+        life.wanderers.push({ x: r1(x), y: r1(y) });
       }
       continue;
     }
