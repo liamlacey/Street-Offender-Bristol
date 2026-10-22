@@ -33,6 +33,11 @@ export type AreaKind =
   /** A house's patio, behind it; and its drive, in front (see src/world/homes.ts: worked out as the map's made ready, not in it). */
   | 'patio'
   | 'drive'
+  /** A school's grounds, surfaced; a court marked out on them (see src/world/places.ts). */
+  | 'schoolyard'
+  | 'court'
+  /** An industrial estate's yards, concrete (see src/world/places.ts). */
+  | 'works'
   /** Where people live (`landuse=residential`): their gardens and yards, between and behind the houses, under all else. */
   | 'gardens'
   | 'flowerbed'
@@ -65,6 +70,10 @@ export interface Area {
   surface?: Paving;
   /** A slipway's way down, into the water, radians. */
   angle?: number;
+  /** Lines painted on it, solid, each set its colour and width (a court's): x0, y0, x1, y1, ... */
+  markings?: { colour: string; width: number; segs: number[] }[];
+  /** Only its markings drawn (painted straight on what's there: hopscotch). */
+  bare?: boolean;
   /** Lines painted on it: a petrol station forecourt's lanes (x0, y0, x1, y1, ...). */
   lines?: number[];
 }
@@ -508,7 +517,15 @@ export type PropKind =
   | 'paddling'
   | 'greenhouse'
   | 'playhouse'
-  | 'plantpot';
+  | 'plantpot'
+  // Round the places (see src/world/places.ts).
+  | 'parasol'
+  | 'keg'
+  | 'headstone'
+  | 'tomb'
+  | 'bigbin'
+  | 'forklift'
+  | 'container';
 
 export interface Prop {
   kind: PropKind;
@@ -590,6 +607,8 @@ export interface GameMap {
   busStations?: BusStation[];
   /** The police stations, fire stations, hospitals and ambulance stations (see Service). */
   services?: Service[];
+  /** The places with something going on round them (see Place). */
+  places?: Place[];
   /** Where boats moor, and the ferry routes (see berths.ts). */
   berths?: Berth[];
   /** Where people go: x, y, what (0 a shop, café, bar or the like; 1 a sight: a museum, gallery, monument, statue, viewpoint), ... */
@@ -646,6 +665,56 @@ export interface Service {
 }
 
 export type ServiceKind = 'police' | 'fire' | 'ambulance';
+
+/**
+ * A place of a kind that has things going on round it (see src/world/places.ts): a school's grounds, a pub, a church and its
+ * graveyard, an industrial estate, ... Its outline (outer rings, if it's mapped as one), and its middle.
+ */
+export interface Place {
+  kind: PlaceKind;
+  name?: string;
+  x: number;
+  y: number;
+  rings: Pts[];
+}
+
+export type PlaceKind = 'school' | 'nursery' | 'college' | 'university' | 'hospital' | 'pub' | 'worship' | 'graveyard' | 'industrial' | 'commercial' | 'stadium' | 'sports' | 'library' | 'prison' | 'community';
+
+/** What kind of place it is, if one of those (see Place). */
+export function placeKind(t: Tags): PlaceKind | null {
+  switch (t.amenity) {
+    case 'school':
+      return 'school';
+    case 'kindergarten':
+    case 'childcare':
+      return 'nursery';
+    case 'college':
+      return 'college';
+    case 'university':
+      return 'university';
+    case 'hospital':
+      return 'hospital';
+    case 'pub':
+    case 'bar':
+      return 'pub';
+    case 'place_of_worship':
+      return 'worship';
+    case 'grave_yard':
+      return 'graveyard';
+    case 'library':
+      return 'library';
+    case 'prison':
+      return 'prison';
+    case 'community_centre':
+      return 'community';
+  }
+  if (t.landuse === 'cemetery') return 'graveyard';
+  if (t.landuse === 'industrial') return 'industrial';
+  if (t.landuse === 'commercial' || t.landuse === 'retail') return 'commercial';
+  if (t.leisure === 'stadium') return 'stadium';
+  if (t.leisure === 'sports_centre') return 'sports';
+  return null;
+}
 
 /** What emergency service a place is, if any (see Service). */
 export function serviceKind(t: Tags): ServiceKind | null {
@@ -1162,6 +1231,9 @@ export function areaKind(tags: Tags): AreaKind | null {
 /** Where an area sits in the drawing order (later on top). */
 export const AREA_ORDER: Record<AreaKind, number> = {
   gardens: -1,
+  schoolyard: -0.5,
+  works: -0.5,
+  court: 5,
   patio: 5,
   drive: 6,
   field: 0,
@@ -2575,6 +2647,34 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     addService(n.tags, [[x - h, y - h, x + h, y - h, x + h, y + h, x - h, y + h]]);
   }
 
+  // The places (see Place): outlines (closed ways, multipolygons' outer rings) and points (5 m square), each as itself.
+  const places: Place[] = [];
+  const addPlace = (t: Tags, rings: Pts[]) => {
+    const kind = placeKind(t);
+    if (!kind || !rings.length) return;
+    let [sx, sy, n] = [0, 0, 0];
+    for (const r of rings) for (let k = 0; k + 1 < r.length; k += 2) [sx, sy, n] = [sx + r[k], sy + r[k + 1], n + 1];
+    const [x, y] = [sx / n, sy / n];
+    if (x < 0 || y < 0 || x > width || y > height) return;
+    places.push({ kind, ...(t.name ? { name: t.name } : {}), x: round(x), y: round(y), rings: rings.map(roundPts) });
+  };
+  for (const way of data.ways.values()) {
+    if (!placeKind(way.tags)) continue;
+    const ring = ringOf(way.nodes);
+    if (ring) addPlace(way.tags, [ring]);
+  }
+  for (const rel of data.relations.values()) {
+    if (rel.tags.type !== 'multipolygon' || !placeKind(rel.tags)) continue;
+    const outer = rel.members.filter((m) => m.type === 'way' && m.role !== 'inner').map((m) => data.ways.get(m.ref)?.nodes).filter((w): w is number[] => !!w);
+    addPlace(rel.tags, joinRings(outer).map((r) => pointsOf(r.slice(0, -1))).filter((p): p is Pts => !!p && p.length >= 6));
+  }
+  for (const n of data.nodes.values()) {
+    if (!placeKind(n.tags)) continue;
+    const [x, y] = [proj.x(n.lon), proj.y(n.lat)];
+    const h = 2.5 * PX_PER_METRE;
+    addPlace(n.tags, [[x - h, y - h, x + h, y - h, x + h, y + h, x - h, y + h]]);
+  }
+
   // How busy each road is: what's along it to go to.
   const businesses: [number, number][] = [];
   for (const n of data.nodes.values()) if (isBusiness(n.tags)) businesses.push([proj.x(n.lon), proj.y(n.lat)]);
@@ -2746,6 +2846,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     ...(railStations.length ? { railStations } : {}),
     ...(busStations.length ? { busStations } : {}),
     ...(services.length ? { services } : {}),
+    ...(places.length ? { places } : {}),
     ...(berths.length ? { berths } : {}),
     ...(ferries.length ? { ferries } : {}),
     ...(venues.length ? { venues } : {}),

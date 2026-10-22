@@ -132,6 +132,13 @@ export function canvasTexture(scene: Phaser.Scene, key: string, w: number, h: nu
   texture.refresh();
 }
 
+/** A colour (#rrggbb) lightened (+) or darkened (-) by a fraction. */
+function shadeOf(colour: string, by: number): string {
+  const n = parseInt(colour.slice(1), 16);
+  const f = (c: number) => Math.max(0, Math.min(255, Math.round(by < 0 ? c * (1 + by) : c + (255 - c) * by)));
+  return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
+}
+
 function seeded(seed: number): () => number {
   let s = seed;
   return () => (s = (s * 16807) % 2147483647) / 2147483647;
@@ -1048,6 +1055,89 @@ export function createArt(scene: Phaser.Scene): void {
     circle(ctx, 2, 2, 2, '#b8643a');
     circle(ctx, 2, 2, 1.4, '#3f7a2e');
     circle(ctx, 1.6, 1.6, 0.6, '#5c9a3a');
+  });
+  // Round the places (see src/world/places.ts).
+  // A pub's parasol, from above: its canopy's eight panels, in its colour, the top of its pole.
+  ['#2d5c3a', '#b02a2a', '#efe9d8', '#1f3d6e'].forEach((colour, v) => {
+    canvasTexture(scene, `${TEX.prop('parasol')}-${v}`, 22, 22, (ctx) => {
+      circle(ctx, 11.8, 11.8, 10, 'rgba(0,0,0,0.18)');
+      for (let k = 0; k < 8; k++) {
+        const [a0, a1] = [(k / 8) * Math.PI * 2, ((k + 1) / 8) * Math.PI * 2];
+        ctx.fillStyle = k % 2 ? colour : shadeOf(colour, -0.12);
+        ctx.beginPath();
+        ctx.moveTo(11, 11);
+        ctx.lineTo(11 + Math.cos(a0) * 10, 11 + Math.sin(a0) * 10);
+        ctx.lineTo(11 + Math.cos(a1) * 10, 11 + Math.sin(a1) * 10);
+        ctx.closePath();
+        ctx.fill();
+      }
+      circle(ctx, 11, 11, 0.9, '#d8d8d2');
+    });
+  });
+  // A keg: steel, its rim and its fitting.
+  canvasTexture(scene, TEX.prop('keg'), 6, 6, (ctx) => {
+    circle(ctx, 3.3, 3.3, 2.4, 'rgba(0,0,0,0.22)');
+    circle(ctx, 2.9, 2.9, 2.4, '#a8adb2');
+    circle(ctx, 2.9, 2.9, 1.8, '#c4c9cd');
+    circle(ctx, 2.9, 2.9, 0.6, '#3a3d40');
+  });
+  // Headstones, from above: their tops (rounded, square, a cross), a little lichen; weathered grey, a pale one, a dark one.
+  ['#8f8d87', '#c9c4b8', '#4c4d50'].forEach((stone, v) => {
+    canvasTexture(scene, `${TEX.prop('headstone')}-${v}`, 4, 7, (ctx) => {
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(1.2, 0.8, 2.6, 6);
+      if (v === 2) {
+        roundRect(ctx, 1, 2.6, 2, 1.6, 0.2, stone);
+        roundRect(ctx, 1.6, 0.4, 0.8, 6, 0.2, stone);
+      } else roundRect(ctx, 0.6, 0.4, 2.2, 6, v === 0 ? 1 : 0.2, stone);
+      ctx.fillStyle = 'rgba(160,170,90,0.4)';
+      ctx.fillRect(1, 4.4, 1, 1);
+    });
+  });
+  // A chest tomb: a stone box, its lid's edge.
+  canvasTexture(scene, TEX.prop('tomb'), 19, 9, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(1.2, 1.2, 18, 7.6);
+    roundRect(ctx, 0, 0, 18, 7.6, 0.4, '#9a958b');
+    ctx.strokeStyle = 'rgba(60,55,45,0.4)';
+    ctx.lineWidth = 0.4;
+    ctx.strokeRect(1, 1, 16, 5.6);
+    ctx.fillStyle = 'rgba(140,150,80,0.35)';
+    ctx.fillRect(3, 2, 4, 2);
+  });
+  // A big communal bin (1,100 litres): grey, green or blue, its lid's two halves.
+  ['#6d7276', '#2f6b34', '#2d5c9a'].forEach((colour, v) => {
+    canvasTexture(scene, `${TEX.prop('bigbin')}-${v}`, 12, 11, (ctx) => {
+      shade(ctx, 11, 10);
+      roundRect(ctx, 0, 0, 11, 10, 0.6, colour);
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(0.6, 0.6, 4.6, 8.8);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(5.3, 0, 0.4, 10);
+    });
+  });
+  // A forklift: yellow, its cab's roof, the counterweight behind, the forks out in front.
+  canvasTexture(scene, TEX.prop('forklift'), 23, 11, (ctx) => {
+    shade(ctx, 16, 10);
+    ctx.fillStyle = '#9ea2a6';
+    ctx.fillRect(15, 2.4, 7.6, 1.2);
+    ctx.fillRect(15, 6.4, 7.6, 1.2);
+    roundRect(ctx, 0, 0.6, 15, 8.8, 1.2, '#e8b81c');
+    roundRect(ctx, 0, 1.4, 4, 7.2, 1, '#3a3d40');
+    roundRect(ctx, 5, 1.6, 7, 6.8, 0.6, '#2a2c2e');
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(5.6, 2.2, 5.8, 1);
+  });
+  // A shipping container: its ribbed roof, in one of the shipping lines' colours.
+  ['#a8442e', '#2f5e94', '#2f7a4a', '#c08a2a'].forEach((colour, v) => {
+    canvasTexture(scene, `${TEX.prop('container')}-${v}`, 49, 20, (ctx) => {
+      shade(ctx, 48, 19.4);
+      roundRect(ctx, 0, 0, 48, 19.4, 0.4, colour);
+      ctx.fillStyle = 'rgba(0,0,0,0.14)';
+      for (let x = 2; x < 47; x += 2.4) ctx.fillRect(x, 0.6, 0.8, 18.2);
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';
+      ctx.fillRect(0, 0, 48, 1.2);
+    });
   });
   // A tower crane's foot: its concrete base, the mast's corner legs.
   canvasTexture(scene, `${TEX.prop('crane')}-tower`, 32, 32, (ctx) => {

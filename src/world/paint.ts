@@ -62,6 +62,19 @@ export function drawCarParks(ctx: Ctx, map: GameMap, index: ChunkIndex): void {
       ctx.stroke();
       ctx.restore();
     }
+    for (const m of a.markings ?? []) {
+      ctx.save();
+      ctx.strokeStyle = m.colour;
+      ctx.lineWidth = m.width;
+      ctx.lineCap = 'butt';
+      ctx.beginPath();
+      for (let k = 0; k + 3 < m.segs.length; k += 4) {
+        ctx.moveTo(m.segs[k], m.segs[k + 1]);
+        ctx.lineTo(m.segs[k + 2], m.segs[k + 3]);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
     if (a.kind !== 'parking') continue;
     const { lines } = carParkBays(map, a);
     ctx.save();

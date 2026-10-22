@@ -15,6 +15,7 @@ import { parkLifeWork } from './parkLife';
 import { playgroundsWork } from './playgrounds';
 import { CRANE_HEIGHT, siteLifeWork } from './sites';
 import { homesWork } from './homes';
+import { placesWork } from './places';
 import { Terrain } from './terrain';
 import type { DebrisKind, ThingKind, WallKind } from './damage';
 import { type Work, drain, every } from './work.ts';
@@ -113,6 +114,15 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
   greenhouse: { r: 7.5, length: 20, invMass: 1.2 },
   playhouse: { r: 5.5, invMass: 3 },
   plantpot: { r: 2, invMass: 8 },
+  // Round the places (see places.ts): a pub's parasol (its pole: the canopy's drawn over), a keg; headstones (heavy) and a tomb
+  // (very); a big wheeled bin; a forklift (heavy); a shipping container (all but immovable).
+  parasol: { r: 1.2, invMass: 6 },
+  keg: { r: 2.4, invMass: 3 },
+  headstone: { r: 2.6, invMass: 1.2 },
+  tomb: { r: 4, length: 18, invMass: 0.25 },
+  bigbin: { r: 5, length: 11, invMass: 1.5 },
+  forklift: { r: 5.5, length: 22, invMass: 0.5 },
+  container: { r: 9.5, length: 48, invMass: 0.08 },
 };
 
 /** The maps whose gardens' drives and patios have been put in with their areas. */
@@ -563,11 +573,14 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   yield;
 
   // People's gardens (see homes.ts): their drives and patios on the ground (with the map's own areas, once).
+  // And round the places (see places.ts): a school's playground and its courts.
   const homes = yield* homesWork(map);
+  const places = yield* placesWork(map);
   if (!withHomes.has(map)) {
     withHomes.add(map);
     for (const pts of homes.drives) map.areas.push({ kind: 'drive', rings: [pts] });
     for (const pts of homes.patios) map.areas.push({ kind: 'patio', rings: [pts] });
+    map.areas.push(...places.areas);
   }
   const ground: Wall[] = [];
   const deck: Wall[] = [];
@@ -612,8 +625,9 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
     addRing(level ? deck : ground, line.pts, r, false, level, line.kind as WallKind, line.height);
     if (pause()) yield;
   }
-  // The gardens' walls, fences and hedges (see homes.ts).
+  // The gardens' walls, fences and hedges (see homes.ts); the places' fences (see places.ts).
   for (const l of homes.lines) addRing(ground, l.pts, LINE_THICKNESS[l.kind]!, false, 0, l.kind, l.height);
+  for (const l of places.lines) addRing(ground, l.pts, l.kind === 'mesh' ? 0.6 : l.kind === 'prison' ? 3 : LINE_THICKNESS[l.kind]!, false, 0, l.kind, l.height);
   // The building sites' fences (Heras panels: see sites.ts).
   for (const run of (yield* siteLifeWork(map)).fences) addRing(ground, run, 0.6, false, 0, 'heras');
   // The edge of the map.
@@ -681,6 +695,13 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   for (const t of homes.things) {
     const l = LOOSE[t.kind]!;
     const p = { kind: t.kind, x: t.x, y: t.y };
+    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: t.angle, spin: 0, moved: false, level: 0, home: homeOf(p), ...(t.variant === undefined ? {} : { variant: t.variant }) });
+  }
+  // What's round the places (see places.ts).
+  for (const t of places.things) {
+    const l = LOOSE[t.kind as PropKind];
+    if (!l) continue;
+    const p = { kind: t.kind as PropKind, x: t.x, y: t.y };
     loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: t.angle, spin: 0, moved: false, level: 0, home: homeOf(p), ...(t.variant === undefined ? {} : { variant: t.variant }) });
   }
   // What's in the playgrounds (see playgrounds.ts).

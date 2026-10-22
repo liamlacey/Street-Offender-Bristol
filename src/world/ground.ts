@@ -10,7 +10,7 @@
  */
 
 import type { Area, AreaKind, GameMap, Pts, Road } from '../map/osm';
-import { type Paving, VEHICLE_ROADS, ringArea } from '../map/osm';
+import { AREA_ORDER, type Paving, VEHICLE_ROADS, ringArea } from '../map/osm';
 import { drawCarParks, drawHumps, drawLaneFills, drawLanes, drawPaint } from './paint';
 import { newCanvas } from './canvas';
 import { Surface, surfacePaint } from './surface';
@@ -56,6 +56,9 @@ export function surfacePalette(): Palette {
     park: s(Surface.Grass),
     garden: s(Surface.Grass),
     gardens: s(Surface.Grass),
+    schoolyard: s(Surface.Pavement),
+    works: s(Surface.Road),
+    court: s(Surface.Pavement),
     patio: s(Surface.Pavement),
     drive: s(Surface.Road),
     field: s(Surface.Dirt),
@@ -121,10 +124,12 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
   ctx.fillStyle = palette.base;
   ctx.fillRect(x0, y0, w, h);
 
-  // Grass, squares, water: all but the traffic islands, which stand up out of the road.
-  for (const i of index.areas) {
+  // Grass, squares, water: all but the traffic islands, which stand up out of the road. (In order: those worked out as the map's
+  // made ready, a garden's drive, a school's tarmac, are after the map's own in its list, but go in among them.)
+  const order = [...index.areas].sort((p, q) => AREA_ORDER[map.areas[p].kind] - AREA_ORDER[map.areas[q].kind] || p - q);
+  for (const i of order) {
     const a = map.areas[i];
-    if (a.kind === 'island') continue;
+    if (a.kind === 'island' || a.bare) continue;
     // A pontoon floats: its shadow on the water round it, first.
     if (a.kind === 'pontoon' && !palette.surface) strokeRings(ctx, a.rings, 'rgba(10,25,35,0.35)', 7);
     fillRings(ctx, a.rings, a.surface ? palette.paving[a.surface] : palette.area[a.kind]);

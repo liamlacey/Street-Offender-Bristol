@@ -194,7 +194,8 @@ the left side's traffic goes the way's way, the right side's against it).
   `unclassified`, two-way, 6.5 m wide or more, no `parking*` tag at all, nothing else
   along its kerbs): parallel, 2 m deep, unmarked (no lines painted); on one side
   (which, by its name, the same each time), both if it's 9 m wide or more. As along
-  nearly every residential street in Bristol.
+  nearly every residential street in Bristol. None within 40 m of a fire, police or
+  ambulance station (the road outside's kept clear).
 - Bus lanes, cycle lanes and parking bays are painted only along stretches clear of
   junctions (6 m either side of a node where three or more ways out of it meet: not
   where a street's just mapped in pieces), crossings with stripes or lights (3 m
@@ -1008,6 +1009,50 @@ but the water and the buildings.
     knocked about, and smashed (a greenhouse to glass, a shed to planks, a bin split)
     if it's hit hard enough, leaving its wreck.
   - The same every time, from where each house is.
+- **Places** (the map's `places`: school grounds `amenity=school`, nurseries
+  `kindergarten`/`childcare`, `college`, `university`, `hospital`, pubs `pub`/`bar`,
+  `place_of_worship`, graveyards `amenity=grave_yard`/`landuse=cemetery`, industrial
+  and commercial land `landuse=industrial`/`commercial`/`retail`, `leisure=stadium`,
+  `sports_centre`, `library`, `prison`, `community_centre`: outlines, or points as
+  5 m squares; laid out by `src/world/places.ts` as each region's made ready):
+  - A school (600 m² or more; a nursery 150 m²): its grounds tarmac (under what's
+    mapped on them: the field, the car park), one court marked out (two on 6,000 m² or
+    more): netball at a primary (thirds, centre circle, shooting circles), five-a-side
+    at a secondary (halfway, centre circle, goal areas), the biggest that fits of
+    30.5 × 15.25, 24 × 13 or 18 × 10 m; hopscotch (two at a primary). A primary
+    (named primary, infant, junior, C of E, Catholic, St ..., or a nursery): a
+    climbing frame, a slide, spring riders (a sandpit at a nursery); picnic benches; a
+    secondary: five to nine bikes in a row. A 1.8 m green weld-mesh fence round the
+    grounds (not across a building or road), its 5 m gate where the edge comes nearest
+    a road. Children in the playground (one per 70 m², 8 to 40; 4 to 12 at a nursery;
+    smaller the younger), running about it and never leaving it, and never hit: anything
+    coming at them and they're out of its way, and off running (as the dogs are). A
+    teacher or two; parents in a group outside the gate; a lollipop lady (white coat,
+    peaked cap, her sign) at the kerb.
+  - A pub (its building, or the one its point's in): two to four smokers out the
+    front, an A-board, one to three kegs against the wall by the door; a beer garden
+    on open ground (or grass) behind and beside it (not the road side): two to six
+    picnic tables 3 m apart, people at them, most under a parasol (one colour a pub).
+  - A graveyard (150 m² or more): headstones in rows across its long axis, one every
+    1.4 m, the rows 2.6 m apart (spaced out on a big one to at most about 500), a
+    fifth left empty, clear of its paths (1.5 m), trees and church; one in 16 a chest
+    tomb. Benches beside its paths; a few visitors.
+  - A block of flats (`building=apartments`, 120 m² or more): a lawn 6 m out round
+    it (under everything else); three to six big communal bins (grey, green, blue) to
+    one side of its door (the side nearest the road), bikes to the other.
+  - Lock-up garages (`garages`, or a `garage` over 40 m²): tarmac 5.5 m deep along
+    the side facing the nearer way in; a car nose to a door at about a third of them,
+    tyres, a pallet or a bin at others.
+  - Industrial land (800 m² or more): its yards concrete; at each shed (300 m² or
+    more, up to 30), from its door (the side nearest a road): a lorry backed up to it
+    (70%), a forklift, pallets, a container, a skip, big bins (each most of the
+    time), a worker or two in hi-vis. Shops' and offices' land: big bins and a pallet
+    out the back of each building of 500 m² or more.
+  - A university, college, hospital, library, sports or community centre: people at
+    each building's door (more at a university, a hospital's smokers to one side),
+    bikes (not a hospital), a bench. A stadium: a crowd all round it (a match on),
+    stewards in hi-vis, burger vans.
+  - The prison: a 5.5 m stone wall round it (all but unbreakable).
 - **Building sites and brownfield** (`src/world/sites.ts`; drawn bare earth, and
   rough ground: patchy rank grass and weeds over earth, gravel and bits of rubble):
   - A building site (150 m² or more) is fenced all round with Heras panels (2 m steel

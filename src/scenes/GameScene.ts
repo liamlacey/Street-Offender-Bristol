@@ -138,7 +138,7 @@ const HOP_TIME = 0.35;
 /** At most this often your vehicle's damage is repainted, ms. */
 const REPAINT_EVERY = 250;
 /** The loose things with more than one look (which, by their `variant`). */
-const VARIED: ReadonlySet<string> = new Set(['foodcart', 'stall', 'wheelie']);
+const VARIED: ReadonlySet<string> = new Set(['foodcart', 'stall', 'wheelie', 'parasol', 'headstone', 'bigbin', 'container']);
 /** How many bits of what's been broken (not the benches, bins and the rest standing about) before the smallest stop being kept. */
 const MAX_PIECES = 1500;
 

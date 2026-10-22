@@ -326,6 +326,11 @@ export function artPalette(ctx: Ctx): Palette {
     park: lawn,
     garden: pattern(grass(96, '#4f8d3d', 'rgba(40,80,30,0.6)', 'rgba(150,200,100,0.35)', false, 4)),
     gardens: pattern(gardens(160)),
+    // A school's playground: tarmac, paler than a road's; its courts, darker (their lines painted on: see paint.ts).
+    schoolyard: pattern(asphalt(96, '#6b6c6e', 83)),
+    court: pattern(asphalt(64, '#545a5e', 89)),
+    // An industrial estate's yard: big concrete panels, stained.
+    works: pattern(slabs([142, 140, 134], 40, 80, 'rgba(50,50,46,0.28)', 97)),
     // A patio: big slabs, buff; a drive: block paving.
     patio: pattern(slabs([176, 164, 140], 20, 80, 'rgba(70,60,45,0.3)', 59)),
     drive: pattern(slabs([138, 112, 98], 6, 48, 'rgba(50,35,30,0.35)', 71)),

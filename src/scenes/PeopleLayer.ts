@@ -309,11 +309,12 @@ function ballTexture(scene: Phaser.Scene, kind: Kickabout['kind']): string {
   return key;
 }
 
-export function personTexture(scene: Phaser.Scene, look: number, pose: Pose, hivis = false): string {
-  const key = `person-${look % LOOKS}-${pose}${hivis ? '-hivis' : ''}`;
+export function personTexture(scene: Phaser.Scene, look: number, pose: Pose, hivis = false, lollipop = false): string {
+  const key = `person-${look % LOOKS}-${pose}${hivis ? '-hivis' : ''}${lollipop ? '-lollipop' : ''}`;
   const draw = (ctx: Ctx) => {
     person(ctx, look, pose);
     if (hivis) hiVis(ctx, pose);
+    if (lollipop) lollipopLady(ctx, pose);
   };
   if (pose === 'down') canvasTexture(scene, key, 16, 8, draw);
   else canvasTexture(scene, key, 10, 10, draw);
@@ -335,6 +336,27 @@ function hiVis(ctx: Ctx, pose: Pose): void {
   ctx.fillRect(cx - 0.3, cy - 2.4, 0.6, 4.8);
   ellipse(hx, cy, 1.35, 1.3, '#f4f4f0');
   ellipse(hx + 0.3, cy, 0.5, 1, '#dcdcd6');
+}
+
+/** A lollipop lady: her long white coat (a yellow band), her peaked cap, and her sign held out on its pole, its round face. */
+function lollipopLady(ctx: Ctx, pose: Pose): void {
+  if (pose === 'down') return;
+  const ellipse = (x: number, y: number, rx: number, ry: number, fill: string) => {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  ellipse(5, 5, 1.6, 2.8, '#f2f1e8');
+  ctx.fillStyle = '#e8d23a';
+  ctx.fillRect(4.4, 2.4, 0.6, 5.2);
+  ellipse(5.3, 5, 1.2, 1.2, '#f2f1e8');
+  ellipse(6.4, 5, 0.6, 1.1, '#1d1d1f');
+  // The pole, out in front; the sign at its top, white with its red ring (STOP: children).
+  ctx.fillStyle = '#d8dadc';
+  ctx.fillRect(6, 6.6, 3, 0.4);
+  ellipse(8.8, 6.8, 1.1, 1.1, '#d8312a');
+  ellipse(8.8, 6.8, 0.75, 0.75, '#f4f4f0');
 }
 
 /**
@@ -378,10 +400,11 @@ export class PeopleLayer {
       seen.add(p);
       const pose: Pose = p.mode === 'down' ? 'down' : p.mode === 'sit' ? 'sit' : p.speed < 2 ? 'stand' : p.step < 0.5 ? 'step0' : 'step1';
       const act = p.mode === 'perform' && p.act && p.act !== 'vendor' ? p.act : null;
-      const key = act ? performerTexture(this.scene, p.look, act, Math.floor(p.step * ACT_FRAMES[act]) % ACT_FRAMES[act]) : personTexture(this.scene, p.look, pose, p.hivis);
+      const key = act ? performerTexture(this.scene, p.look, act, Math.floor(p.step * ACT_FRAMES[act]) % ACT_FRAMES[act]) : personTexture(this.scene, p.look, pose, p.hivis, p.lollipop);
       let s = this.sprites.get(p);
       if (!s) {
-        s = this.scene.add.image(0, 0, key).setScale(SIZE / ART_SCALE);
+        // (A child, smaller.)
+        s = this.scene.add.image(0, 0, key).setScale((SIZE * (p.child ?? 1)) / ART_SCALE);
         this.sprites.set(p, s);
       } else if (s.texture.key !== key) s.setTexture(key);
       // Head height (lying down, the ground), and how high they've been thrown: up over the car, and a little bigger.

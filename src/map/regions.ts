@@ -14,7 +14,7 @@
  * it's in. Pure, so it's tested.
  */
 
-import type { BusRoute, BusStation, Controller, Crossing, GameMap, Market, Pts, RailStation, Service, Signal, TerrainData, TrainRoute } from './osm';
+import type { BusRoute, BusStation, Controller, Crossing, GameMap, Market, Place, Pts, RailStation, Service, Signal, TerrainData, TrainRoute } from './osm';
 import type { Area, Building, Ledge, Line, PaintMark, Prop, Road } from './osm';
 import type { Berth, FerryRoute } from './berths';
 import type { Store } from './stores';
@@ -52,6 +52,7 @@ export interface Tile {
   buildings: [number, Building][];
   ledges: [number, Ledge][];
   services: [number, Service][];
+  places: [number, Place][];
   stores: [number, Store][];
   markets: [number, Market][];
   /** Their bays' roads by id. */
@@ -75,7 +76,7 @@ export interface Tile {
 /** A region of the map: a GameMap of what's in it, its bounds, and what each thing in it is in the whole map (its id). */
 export interface RegionMap extends GameMap {
   region: { x0: number; y0: number; x1: number; y1: number };
-  ids: Record<'roads' | 'areas' | 'lines' | 'buildings' | 'ledges' | 'services' | 'stores' | 'markets' | 'busStations' | 'props' | 'crossings' | 'signals' | 'paint' | 'trees', number[]>;
+  ids: Record<'roads' | 'areas' | 'lines' | 'buildings' | 'ledges' | 'services' | 'places' | 'stores' | 'markets' | 'busStations' | 'props' | 'crossings' | 'signals' | 'paint' | 'trees', number[]>;
 }
 
 const STRIDE: Record<'trees' | 'dropped' | 'solar' | 'venues' | 'banks', number> = { trees: 4, dropped: 2, solar: 3, venues: 3, banks: 3 };
@@ -99,7 +100,7 @@ export function splitMap(map: GameMap): { index: MapIndex; tiles: Map<string, Ti
     const k = tileKey(i, j);
     let t = tiles.get(k);
     if (!t) {
-      t = { i, j, roads: [], areas: [], lines: [], buildings: [], ledges: [], services: [], stores: [], markets: [], busStations: [], props: [], crossings: [], signals: [], paint: [], trees: [], dropped: [], solar: [], venues: [], banks: [], berths: [] };
+      t = { i, j, roads: [], areas: [], lines: [], buildings: [], ledges: [], services: [], places: [], stores: [], markets: [], busStations: [], props: [], crossings: [], signals: [], paint: [], trees: [], dropped: [], solar: [], venues: [], banks: [], berths: [] };
       tiles.set(k, t);
     }
     return t;
@@ -107,7 +108,7 @@ export function splitMap(map: GameMap): { index: MapIndex; tiles: Map<string, Ti
   const clampI = (x: number) => Math.max(0, Math.min(cols - 1, Math.floor(x / TILE)));
   const clampJ = (y: number) => Math.max(0, Math.min(rows - 1, Math.floor(y / TILE)));
   /** Into every tile its bounds reach into. */
-  const spread = <T>(list: 'roads' | 'areas' | 'lines' | 'buildings' | 'ledges' | 'services' | 'stores' | 'markets' | 'busStations', id: number, item: T, rings: Pts[]) => {
+  const spread = <T>(list: 'roads' | 'areas' | 'lines' | 'buildings' | 'ledges' | 'services' | 'places' | 'stores' | 'markets' | 'busStations', id: number, item: T, rings: Pts[]) => {
     const [x0, y0, x1, y1] = bboxOf(rings);
     if (!Number.isFinite(x0)) return;
     for (let i = clampI(x0); i <= clampI(x1); i++) for (let j = clampJ(y0); j <= clampJ(y1); j++) (tile(i, j)[list] as [number, T][]).push([id, item]);
@@ -121,6 +122,7 @@ export function splitMap(map: GameMap): { index: MapIndex; tiles: Map<string, Ti
   map.buildings.forEach((b, id) => spread('buildings', id, b, b.rings));
   (map.ledges ?? []).forEach((l, id) => spread('ledges', id, l, [l.pts]));
   (map.services ?? []).forEach((s, id) => spread('services', id, s, s.rings));
+  (map.places ?? []).forEach((p, id) => spread('places', id, p, p.rings));
   (map.stores ?? []).forEach((s, id) => spread('stores', id, s, [s.park, [s.door[0], s.door[1], s.bay[0], s.bay[1]]]));
   (map.markets ?? []).forEach((m, id) => spread('markets', id, m, [m.ring]));
   (map.busStations ?? []).forEach((s, id) => spread('busStations', id, s, [s.bays.flatMap((b) => [b.x, b.y, ...b.platform])]));
@@ -210,7 +212,7 @@ export function assemble(index: MapIndex, unsorted: Tile[], bounds: { x0: number
 export function* assembleWork(index: MapIndex, unsorted: Tile[], bounds: { x0: number; y0: number; x1: number; y1: number }): Generator<void, RegionMap, void> {
   // (In a fixed order, whichever came first.)
   const tiles = [...unsorted].sort((a, b) => a.i - b.i || a.j - b.j);
-  const ids: RegionMap['ids'] = { roads: [], areas: [], lines: [], buildings: [], ledges: [], services: [], stores: [], markets: [], busStations: [], props: [], crossings: [], signals: [], paint: [], trees: [] };
+  const ids: RegionMap['ids'] = { roads: [], areas: [], lines: [], buildings: [], ledges: [], services: [], places: [], stores: [], markets: [], busStations: [], props: [], crossings: [], signals: [], paint: [], trees: [] };
   /** Each once, in id order (a pause after each tile's, and after sorting them). */
   function* gather<T>(list: keyof Tile): Generator<void, T[], void> {
     const all = new Map<number, T>();
@@ -230,6 +232,7 @@ export function* assembleWork(index: MapIndex, unsorted: Tile[], bounds: { x0: n
   const buildings = yield* gather<Building>('buildings');
   const ledges = yield* gather<Ledge>('ledges');
   const services = yield* gather<Service>('services');
+  const places = yield* gather<Place>('places');
   const stores = yield* gather<Store>('stores');
   const markets = yield* gather<Market>('markets');
   const props = yield* gather<Prop>('props');
@@ -309,6 +312,7 @@ export function* assembleWork(index: MapIndex, unsorted: Tile[], bounds: { x0: n
     railStations: index.railStations ?? [],
     busStations,
     services,
+    places,
     stores,
     markets,
     berths: tiles.flatMap((t) => t.berths),

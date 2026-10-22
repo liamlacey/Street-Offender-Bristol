@@ -1118,7 +1118,7 @@ export class Traffic {
     for (const space of spaces) {
       if (pause()) yield;
       if (this.rand() > space.taken) continue;
-      const kind = pick(this.rand, (Object.keys(VEHICLES) as VehicleKind[]).map((k) => [k, VEHICLES[k].parked * (space.length >= VEHICLES[k].length + 2 ? 1 : 0)]));
+      const kind = (space.kind as VehicleKind | undefined) ?? pick(this.rand, (Object.keys(VEHICLES) as VehicleKind[]).map((k) => [k, VEHICLES[k].parked * (space.length >= VEHICLES[k].length + 2 ? 1 : 0)]));
       if (!kind) continue;
       const v = this.make(kind, space.x, space.y, space.angle + (this.rand() < 0.5 && space.endOn ? Math.PI : 0), 0);
       v.mode = 'parked';

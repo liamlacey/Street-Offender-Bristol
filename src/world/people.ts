@@ -19,6 +19,7 @@ import { type TrolleyRow, trolleyRows } from './parking';
 import { PLAY_KINDS, PLAY_SCALE, type PlayKind } from './playgrounds';
 import { type Game, parkLifeWork } from './parkLife';
 import { siteLifeWork } from './sites';
+import { placesWork } from './places';
 import { type Act, pedestrianBusy, streetLifeWork } from './streetLife';
 import type { Light } from './lights';
 import { offsetLine } from './world';
@@ -292,6 +293,10 @@ export interface Person {
   jog?: boolean;
   /** At work on a building site: a hi-vis vest and a hard hat. */
   hivis?: boolean;
+  /** A child (how big, against a grown-up's 1): never hit, whatever comes at them (see `hitBy`). */
+  child?: number;
+  /** A lollipop lady (at a school, by the road): her white coat and her sign. */
+  lollipop?: boolean;
 }
 
 /** A vehicle as the people see it: where, which way, how big, how fast; a bus's stop. */
@@ -357,6 +362,9 @@ interface Spot {
   hivis?: boolean;
   /** On the brownfield: cutting across it, a dog with some. */
   waste?: boolean;
+  /** Children (how big); a lollipop lady (see places.ts). */
+  child?: number;
+  lollipop?: boolean;
 }
 
 /** Where a crossing's kerbs are (either side of the road, on the pavement), and how it works. */
@@ -685,6 +693,11 @@ export class People {
     for (const ring of sites.wastes) this.areas.push(ring);
     for (const w of sites.wanderers) this.addSpot({ x: w.x, y: w.y, angle: this.rand() * Math.PI * 2, weight: 0.8, group: false, waste: true });
     for (const g of sites.gulls) this.flocks.push({ x: g.x, y: g.y, birds: [], away: 0, gull: true });
+    // Round the places (see places.ts): the children in a school's playground, its teachers, the parents at its gate, its
+    // lollipop lady.
+    const places = yield* placesWork(map);
+    for (const ring of places.rings) this.areas.push(ring);
+    for (const sp of places.spots) this.addSpot({ ...sp });
     // Outside the shops, cafés and bars, on the pavement; at the sights, in groups.
     const v = map.venues ?? [];
     for (let i = 0; i + 2 < v.length; i += 3) {
@@ -1141,6 +1154,7 @@ export class People {
     if (area >= 0 && !s.group && (s.waste || this.rand() < 0.6)) {
       const p = this.make(s.x, s.y, 'wander');
       if (s.hivis) p.hivis = true;
+      this.dress(p, s);
       if (s.waste && this.rand() < 0.5) this.withDog(p);
       p.area = area;
       [p.tx, p.ty] = [s.x, s.y];
@@ -1152,9 +1166,23 @@ export class People {
       const a = (k / n) * Math.PI * 2 + this.rand() * 0.4;
       const p = this.make(s.x + Math.cos(a) * r, s.y + Math.sin(a) * r, 'stand');
       if (s.hivis) p.hivis = true;
+      this.dress(p, s);
       // A group faces in, to each other; on their own, the way the spot faces.
       p.angle = n > 1 ? a + Math.PI : s.angle + (this.rand() - 0.5) * 0.6;
       p.timer = 30 + this.rand() * 120;
+    }
+  }
+
+  /** Who someone at a spot is: a child (quicker on their feet, and more of them running about than standing), a lollipop lady. */
+  private dress(p: Person, s: Spot): void {
+    if (s.child) {
+      p.child = s.child;
+      p.pace *= 1.25;
+    }
+    if (s.lollipop) {
+      p.lollipop = true;
+      p.angle = s.angle;
+      p.timer = 600;
     }
   }
 
@@ -1607,8 +1635,9 @@ export class People {
       p.speed = 0;
       return;
     }
-    if (this.goTo(p, p.tx, p.ty, p.pace * 0.8, dt)) {
-      p.timer = this.rand() < 0.4 ? 3 + this.rand() * 15 : 0;
+    // (A child runs about, and hardly stops.)
+    if (this.goTo(p, p.tx, p.ty, p.pace * (p.child ? 1.7 : 0.8), dt)) {
+      p.timer = this.rand() < (p.child ? 0.15 : 0.4) ? (p.child ? 1 + this.rand() * 4 : 3 + this.rand() * 15) : 0;
       const ring = this.areas[p.area];
       for (let tries = 0; ring && tries < 10; tries++) {
         const a = this.rand() * Math.PI * 2;
@@ -1632,6 +1661,20 @@ export class People {
   /** Back to walking: onto the nearest walk within 15 m (or wandering about the park they're in; or standing a while longer). */
   private rejoin(p: Person): void {
     this.leaveGather(p);
+    // A child stays in the playground; the lollipop lady at her post.
+    if (p.child || p.lollipop) {
+      const area = p.child ? this.areas.findIndex((ring) => pointInRing(p.x, p.y, ring)) : -1;
+      if (area >= 0) {
+        p.mode = 'wander';
+        p.area = area;
+        [p.tx, p.ty] = [p.x, p.y];
+      } else {
+        p.mode = 'stand';
+        p.speed = 0;
+        p.timer = 30 + this.rand() * 60;
+      }
+      return;
+    }
     const near = this.inRoad(p.x, p.y, undefined, p.level) ? this.nearestWalk(p.x, p.y, 15 * M, false, p.level) : this.nearestWalk(p.x, p.y, 15 * M, true, p.level);
     if (near) {
       const [x, y, k, seg] = near;
@@ -1845,6 +1888,13 @@ export class People {
         const across = -rx * uy + ry * ux;
         if (Math.abs(along) > v.length / 2 + R || Math.abs(across) > v.width / 2 + R) continue;
         const rel = Math.hypot(v.vx - p.vx, v.vy - p.vy);
+        // A child is never hit: out from in front of it, whatever it is, and off running.
+        if (p.child) {
+          const out = this.outFrom(v, p.x, p.y, 0.3 * M);
+          if (out) [p.x, p.y] = [p.x + out[0], p.y + out[1]];
+          if (rel > 1.2 * M && p.mode !== 'flee') this.scare(p, v.x, v.y);
+          continue;
+        }
         // A bike brushes past (it's slowed for them, and weaves round): they're just nudged aside.
         if (v.bike) {
           const out = across >= 0 ? 1 : -1;

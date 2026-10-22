@@ -10,6 +10,7 @@ import { lineLength, pointAlong, subPolyline } from './world';
 import { footprints, onFootprints, streetLifeWork } from './streetLife';
 import { rectsOverlap } from './playgrounds';
 import { homesWork } from './homes';
+import { placesWork } from './places';
 import { type Work, drain } from './work.ts';
 
 /** A car park's bays: how wide, how deep, and the aisle between rows, px. */
@@ -17,6 +18,8 @@ export const BAY_WIDTH = 2.5 * 8;
 export const BAY_DEPTH = 5 * 8;
 /** The grid the car parks' bays are found in, px. */
 const LOT_CELL = 8 * 8;
+/** How far from an emergency service's station the street's kept clear of cars just parked along it, px. */
+const KEEP_CLEAR = 40 * 8;
 export const BAY_AISLE = 6 * 8;
 /** Bays along a street stop short of its ends (the junctions), px; parallel ones are this long. */
 export const BAYS_FROM_END = 8 * 8;
@@ -30,6 +33,8 @@ export interface Space {
   length: number;
   taken: number;
   endOn: boolean;
+  /** What's parked there, if it's always the one kind (a lorry at a loading bay). */
+  kind?: string;
 }
 
 /** The bays' lines (x0, y0, x1, y1, ...) and the bays between them. */
@@ -271,8 +276,6 @@ export function* parkingWork(map: GameMap): Work<Space[]> {
     out.push(...spaces.filter((s) => !shelters.includes(s) && free(s)));
     yield;
   }
-  // The drives in front of people's houses (see homes.ts).
-  for (const s of (yield* homesWork(map)).spaces) if (free(s)) out.push({ ...s });
   // (Not along the kerb where a car park's bays come right up to it; nor one over another, round a tight bend or a corner.)
   const lots = new Map<number, Space[]>();
   const cell = (x: number, y: number) => Math.floor(x / LOT_CELL) * 100003 + Math.floor(y / LOT_CELL);
@@ -287,6 +290,13 @@ export function* parkingWork(map: GameMap): Work<Space[]> {
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const s of lots.get(cell(b.x + i * LOT_CELL, b.y + j * LOT_CELL)) ?? []) if (Math.hypot(s.x - b.x, s.y - b.y) < BAY_DEPTH && rectsOverlap(box(s), box(b))) return false;
     return true;
   };
+  // The drives in front of people's houses (see homes.ts); at the places (see places.ts), a lorry backed up to a loading bay, a car
+  // at a lock-up garage. (Not over a car park's bays, nor each other.)
+  for (const s of [...(yield* homesWork(map)).spaces, ...(yield* placesWork(map)).spaces]) {
+    if (!free(s) || !clearOfLots(s)) continue;
+    keep(s);
+    out.push({ ...s });
+  }
   for (const r of map.roads) {
     if (r.lanes?.some((l) => l.kind === 'parking')) yield;
     for (const lane of r.lanes ?? []) {
@@ -295,6 +305,8 @@ export function* parkingWork(map: GameMap): Work<Space[]> {
       for (let k = 0; k + 1 < s.length; k += 2) {
         for (const b of streetBays(r, lane, s[k], s[k + 1]).spaces) {
           if (atBusStop(map, b.x, b.y) || !free(b) || !clearOfLots(b)) continue;
+          // (No one just parks outside a fire, police or ambulance station: the road's kept clear.)
+          if (lane.unmarked && (map.services ?? []).some((v) => Math.hypot(v.x - b.x, v.y - b.y) < KEEP_CLEAR)) continue;
           keep(b);
           out.push(b);
         }

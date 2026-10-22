@@ -7,6 +7,8 @@ import { parkingSpaces } from './parking';
 import { BUSY_STREET, footprints, onFootprints, pedestrianBusy, streetLife } from './streetLife';
 import { parkLife } from './parkLife';
 import { buildWorld } from './world';
+import { placesWork } from './places';
+import { drain } from './work.ts';
 
 /** (The middle of Bristol, round where you start: see src/test/central.ts.) */
 const map: GameMap = central();
@@ -49,7 +51,9 @@ describe('street life', () => {
     for (const s of life.stalls) for (const o of life.stalls) if (o !== s) expect(Math.hypot(o.x - s.x, o.y - s.y)).toBeGreaterThanOrEqual(3 * M - 0.5);
     const world = buildWorld(map);
     expect(world.loose.filter((l) => l.kind === 'stall').length).toBe(life.stalls.length);
-    expect(world.loose.filter((l) => l.kind === 'aboard').length).toBe(life.boards.length);
+    // (And the pubs' boards: see places.ts.)
+    const pubs = drain(placesWork(map)).things.filter((t) => t.kind === 'aboard').length;
+    expect(world.loose.filter((l) => l.kind === 'aboard').length).toBe(life.boards.length + pubs);
   });
 
   it("takes over the bays of a car park a market's held in (the Tobacco Factory's): no one parks under a stall", () => {

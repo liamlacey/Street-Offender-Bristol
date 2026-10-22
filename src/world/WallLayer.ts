@@ -20,6 +20,10 @@ const LOOK: Record<WallKind, { height: number; side: number; top: number; width:
   parapet: { height: 1 * 8, side: 0x857a6b, top: 0xb9ae99, width: 3, hidden: true },
   // A building site's Heras fencing: galvanised mesh, its top rail.
   heras: { height: 2 * 8, side: 0xaeb5ba, top: 0xd4d9dc, width: 0.9, mesh: true },
+  // A school's fence: green weld mesh.
+  mesh: { height: 1.8 * 8, side: 0x2f6b3a, top: 0x3f8a4c, width: 0.9, mesh: true },
+  // The prison's wall: tall, grey stone, its rounded coping (to stop anyone getting a grip).
+  prison: { height: 5.5 * 8, side: 0x7d7a74, top: 0xa6a299, width: 6 },
 };
 
 /**
