@@ -24,8 +24,17 @@ export function cushionsAcross(m: { width: number }): number[] {
   return m.width >= 6 * 8 ? [-m.width / 4, m.width / 4] : [0];
 }
 
+/** The humps by which square of the map they're in (each in those it reaches into), px. */
+const CELL = 32 * 8;
+
+/** Whether a point `across` the road from its middle is on one of its cushions. */
+function onCushion(width: number, across: number): boolean {
+  return width >= 6 * 8 ? Math.abs(across + width / 4) < CUSHION_WIDTH / 2 + 4 || Math.abs(across - width / 4) < CUSHION_WIDTH / 2 + 4 : Math.abs(across) < CUSHION_WIDTH / 2 + 4;
+}
+
 export class Humps {
   private readonly humps: (Omit<PaintMark, 'kind'> & { kind: HumpKind; ux: number; uy: number })[];
+  private readonly cells = new Map<number, Humps['humps']>();
 
   constructor(map: GameMap) {
     this.humps = (map.paint ?? [])
@@ -41,6 +50,17 @@ export class Humps {
         this.humps.push({ kind: 'step', x, y, angle: Math.atan2(uy, ux), width: r.width, ux, uy });
       }
     }
+    for (const h of this.humps) {
+      const reach = h.width / 2 + HUMP_LENGTH[h.kind];
+      for (let i = Math.floor((h.x - reach) / CELL); i <= Math.floor((h.x + reach) / CELL); i++) {
+        for (let j = Math.floor((h.y - reach) / CELL); j <= Math.floor((h.y + reach) / CELL); j++) {
+          const key = i * 100003 + j;
+          const list = this.cells.get(key);
+          if (list) list.push(h);
+          else this.cells.set(key, [h]);
+        }
+      }
+    }
   }
 
   /**
@@ -49,13 +69,17 @@ export class Humps {
    * slowed. Returns how hard (px/s of speed lost), 0 for none.
    */
   over(car: CarState, px: number, py: number): number {
-    for (const h of this.humps) {
+    // (Only those round where it is.)
+    const list = this.cells.get(Math.floor(car.x / CELL) * 100003 + Math.floor(car.y / CELL));
+    if (!list) return 0;
+    for (let k = 0; k < list.length; k++) {
+      const h = list[k];
       const before = (px - h.x) * h.ux + (py - h.y) * h.uy;
       const now = (car.x - h.x) * h.ux + (car.y - h.y) * h.uy;
       if (before > 0 === now > 0 || Math.abs(now) > HUMP_LENGTH[h.kind]) continue;
       const across = -(car.x - h.x) * h.uy + (car.y - h.y) * h.ux;
       if (Math.abs(across) > h.width / 2) continue;
-      if (h.kind === 'cushion' && !cushionsAcross(h).some((c) => Math.abs(across - c) < CUSHION_WIDTH / 2 + 4)) continue;
+      if (h.kind === 'cushion' && !onCushion(h.width, across)) continue;
       const speed = Math.hypot(car.vx, car.vy);
       const loss = Math.min(HARSHEST[h.kind], Math.max(0, (speed - GENTLE[h.kind]) / 1200));
       if (!loss) return 0;

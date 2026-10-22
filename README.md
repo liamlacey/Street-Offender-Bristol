@@ -43,6 +43,11 @@ npm run build    # production build into dist/
 npm run map      # rebuild the map from OpenStreetMap (see src/map/README.md)
 ```
 
+Add `?perf` to the address (e.g. `…/?perf`) for a read-out over the game of how smoothly it's
+running: frames a second, the longest frame in the last second and how many were over 25 ms,
+and the slowest parts of each frame (physics, traffic, people, trains, ground, buildings,
+props, sprites, Phaser's own step and rendering), each one's average and longest, ms.
+
 `example-code/` holds the code of an earlier game to borrow from (see its README).
 
 Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright),

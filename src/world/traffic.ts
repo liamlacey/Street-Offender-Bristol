@@ -71,6 +71,8 @@ export interface Vehicle extends Body {
   kind: VehicleKind;
   /** Which of its kind's COLOURS. */
   colour: number;
+  /** Time it's yet to be driven on for, s (out of sight, it's driven every other frame). */
+  owed?: number;
   /** Driving along a lane; knocked about (sliding to a stop); finding its way back into its lane; or parked. */
   mode: 'drive' | 'knocked' | 'rejoin' | 'parked' | 'reverse';
   /**
@@ -318,6 +320,8 @@ const YARD_SPEED = 5 * M;
 const DENSITY: Partial<Record<RoadKind, number>> = { trunk: 7, primary: 6, secondary: 4, tertiary: 2.6, street: 1 };
 const BUSIEST = 3;
 const CROWDED = 9;
+/** The squares the obstacles are looked up by, px. */
+const OBSTACLE_CELL = 24 * M;
 /** How many bikes ride along a cycle path each way, per 100 m. */
 const PATH_BIKES = 0.9;
 /** How fast each kind's driven, against the road's usual speed (before the driver's own pace). */
@@ -362,6 +366,34 @@ function bendsOf(p: Path, window: number): number[] {
 }
 
 /** The way along a path at a distance: [x, y, ux, uy]. */
+/** The same as pathAt, into `out` (x, y, ux, uy at `at`): nothing made, for the many points looked at each frame. */
+export function pathAtInto(p: Path, s: number, out: Float64Array, at: number): void {
+  const a = p.at;
+  const n = a.length;
+  if (n < 2) {
+    [out[at], out[at + 1], out[at + 2], out[at + 3]] = [p.pts[0], p.pts[1], 1, 0];
+    return;
+  }
+  const d = Math.max(0, Math.min(p.length, s));
+  let lo = 0;
+  let hi = n - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (a[mid] <= d) lo = mid;
+    else hi = mid;
+  }
+  const ax = p.pts[lo * 2];
+  const ay = p.pts[lo * 2 + 1];
+  const len = a[hi] - a[lo] || 1;
+  const t = (d - a[lo]) / len;
+  const ux = (p.pts[hi * 2] - ax) / len;
+  const uy = (p.pts[hi * 2 + 1] - ay) / len;
+  out[at] = ax + ux * len * t;
+  out[at + 1] = ay + uy * len * t;
+  out[at + 2] = ux;
+  out[at + 3] = uy;
+}
+
 export function pathAt(p: Path, s: number): [number, number, number, number] {
   const at = p.at;
   const n = at.length;
@@ -934,6 +966,13 @@ const CREEP = 3.5 * M;
 const BACK_IN = 0.9 * M;
 const BACK_ANGLE = 0.3;
 
+/** How far out of the view a vehicle has to be to be driven every other frame, px. */
+const OFF_VIEW = 30 * M;
+
+function outOf(view: TrafficView, x: number, y: number, pad: number): boolean {
+  return x < view.x0 - pad || x > view.x1 + pad || y < view.y0 - pad || y > view.y1 + pad;
+}
+
 export interface TrafficView {
   x0: number;
   y0: number;
@@ -965,6 +1004,9 @@ export class Traffic {
   private spawnTimer = 0;
   private started = false;
   private clock = 0;
+  /** Frames gone (for those out of sight, driven every other one); and the order they're driven in, this frame. */
+  private frame = 0;
+  private readonly order: Vehicle[] = [];
   private readonly byId = new Map<number, Vehicle>();
   private readonly parkedById = new Map<number, Vehicle>();
   /** The lanes along each edge each way, kerb first; who's been waiting a while to pull out at each junction. */
@@ -1763,6 +1805,96 @@ export class Traffic {
     v.level = v.route[0].level;
   }
 
+  /** The points looked at along the way ahead (see sampleAhead): x, y, level, distance on, for each; and how many numbers of it there are. */
+  private readonly samples = new Float64Array(4 * 128);
+  private sampled = 0;
+  private readonly at4 = new Float64Array(4);
+
+  /**
+   * Every 6 m along its way ahead, from just behind its front to `look` px
+   * past it (over from the middle of its lane, if it's out of it): walked
+   * along its route once, into the same buffer each time (nothing made).
+   */
+  private sampleAhead(v: Vehicle, front: number, look: number): Float64Array {
+    const out = this.samples;
+    let n = 0;
+    const [sx, sy] = v.side ? [Math.sin(v.angle) * v.side, -Math.cos(v.angle) * v.side] : [0, 0];
+    let k = 0;
+    let base = 0;
+    for (let d = front - 4; d <= front + look && n + 4 <= out.length; d += 6) {
+      let s = v.s + d;
+      let level: number;
+      if (s < 0) {
+        if (v.back) {
+          pathAtInto(v.back, v.back.length + s, this.at4, 0);
+          level = v.back.level;
+        } else {
+          pathAtInto(v.route[0], 0, this.at4, 0);
+          this.at4[0] += this.at4[2] * s;
+          this.at4[1] += this.at4[3] * s;
+          level = v.route[0].level;
+        }
+      } else {
+        // (On along the route from where the last point was.)
+        while (k < v.route.length - 1 && s - base > v.route[k].length) base += v.route[k++].length;
+        const p = v.route[k];
+        s -= base;
+        if (s <= p.length || k < v.route.length - 1) pathAtInto(p, s, this.at4, 0);
+        else {
+          pathAtInto(p, p.length, this.at4, 0);
+          this.at4[0] += this.at4[2] * (s - p.length);
+          this.at4[1] += this.at4[3] * (s - p.length);
+        }
+        level = p.level;
+      }
+      out[n] = this.at4[0] + sx;
+      out[n + 1] = this.at4[1] + sy;
+      out[n + 2] = level;
+      out[n + 3] = d - front;
+      n += 4;
+    }
+    this.sampled = n;
+    return out;
+  }
+
+  /** The obstacles by which square of the map they're in (made afresh each step: see update); and those in the squares within `reach` of a point. */
+  private obstacleCells = new Map<number, Obstacle[]>();
+  private obstacleCellFree: Obstacle[][] = [];
+  private readonly nearBuf: Obstacle[] = [];
+
+  private indexObstacles(obstacles: Obstacle[]): void {
+    for (const list of this.obstacleCells.values()) {
+      list.length = 0;
+      this.obstacleCellFree.push(list);
+    }
+    this.obstacleCells.clear();
+    for (const o of obstacles) {
+      const key = Math.floor(o.x / OBSTACLE_CELL) * 100003 + Math.floor(o.y / OBSTACLE_CELL);
+      let list = this.obstacleCells.get(key);
+      if (!list) {
+        list = this.obstacleCellFree.pop() ?? [];
+        this.obstacleCells.set(key, list);
+      }
+      list.push(o);
+    }
+  }
+
+  private obstaclesNear(obstacles: Obstacle[], x: number, y: number, reach: number): Obstacle[] {
+    // (Few about, or the index not made: all of them.)
+    if (!this.obstacleCells.size) return obstacles;
+    const out = this.nearBuf;
+    out.length = 0;
+    // (Anything long, a bus, reaches a little into the next square: looked for a square further round.)
+    const pad = reach + 20 * M;
+    for (let i = Math.floor((x - pad) / OBSTACLE_CELL); i <= Math.floor((x + pad) / OBSTACLE_CELL); i++) {
+      for (let j = Math.floor((y - pad) / OBSTACLE_CELL); j <= Math.floor((y + pad) / OBSTACLE_CELL); j++) {
+        const list = this.obstacleCells.get(i * 100003 + j);
+        if (list) for (let k = 0; k < list.length; k++) out.push(list[k]);
+      }
+    }
+    return out;
+  }
+
   /** The point `d` px on (or back) from where it is along its way. */
   private along(v: Vehicle, d: number): [number, number, number] {
     let s = v.s + d;
@@ -1836,10 +1968,24 @@ export class Traffic {
       if (lane?.giveWay && v.waiting > 4) this.waitingAt.set(lane.to, v);
     }
     const obstacles = this.obstacles(player);
+    this.indexObstacles(obstacles);
     this.sirens = this.vehicles.filter((v) => v.siren && v.mode === 'drive');
-    for (const v of [...this.vehicles]) {
+    this.frame++;
+    const order = this.order;
+    order.length = 0;
+    for (const v of this.vehicles) order.push(v);
+    for (const v of order) {
       try {
-        if (v.mode === 'drive') this.drive(v, dt, obstacles, light);
+        if (v.mode === 'drive') {
+          // Well out of sight, driving on: every other frame, for the two (no one sees the difference, and it's half the work).
+          const owed = (v.owed ?? 0) + dt;
+          if (!v.siren && (this.frame + v.id) % 2 && outOf(view, v.x, v.y, OFF_VIEW)) {
+            v.owed = owed;
+            continue;
+          }
+          v.owed = 0;
+          this.drive(v, owed, obstacles, light);
+        }
         else if (v.mode === 'knocked') this.slide(v, dt);
         else if (v.mode === 'rejoin') this.rejoin(v, dt, obstacles, view);
         else if (v.mode === 'reverse') this.reverse(v, dt, obstacles);
@@ -1878,12 +2024,11 @@ export class Traffic {
     let hold = GAP;
     let blocker: number | undefined;
     const front = v.length / 2;
-    // Points along the way ahead (and which level each is on: what's under a bridge isn't in the way of what's on it).
-    const samples: [number, number, number, number][] = [];
-    for (let d = front - 4; d <= front + look; d += 6) samples.push([...this.along(v, d), d - front]);
-    // Over from the middle of its lane (in a bus lane, out overtaking): it looks along where it is.
-    if (v.side) for (const p of samples) [p[0], p[1]] = [p[0] + Math.sin(v.angle) * v.side, p[1] - Math.cos(v.angle) * v.side];
-    for (const o of obstacles) {
+    // Points along the way ahead (and which level each is on: what's under a bridge isn't in the way of what's on it), as x, y, level, d.
+    const samples = this.sampleAhead(v, front, look);
+    const count = this.sampled;
+    const mine = laneOf(v);
+    for (const o of this.obstaclesNear(obstacles, v.x, v.y, look + 60)) {
       if (o.id === v.id) continue;
       if (Math.abs(o.x - v.x) > look + 60 || Math.abs(o.y - v.y) > look + 60) continue;
       // (A bus in its bay at a bus station is out of the way, its tail by the way round: till it starts backing out.)
@@ -1902,12 +2047,15 @@ export class Traffic {
       const oncoming = Math.cos(o.angle - v.angle) < -0.7;
       // Oncoming along another road: the other carriageway (two one-way roads drawn close where they join), not in the way.
       // (On a turn, the road it's turning onto.)
-      const theirs = o.id >= 0 ? (o as Vehicle).route.find((p) => p.lane)?.lane : undefined;
-      const mine = v.route.find((p) => p.lane)?.lane;
+      const theirs = o.id >= 0 ? laneOf(o as Vehicle) : undefined;
       // (Not one turning off it, though, or about to: it's coming across.)
       if (oncoming && theirs && mine && theirs.road !== mine.road && !this.turningAcross(o as Vehicle)) continue;
       const reach = oncoming ? (v.r + o.r) * 0.8 : v.r + o.r * 0.85;
-      for (const [x, y, level, d] of samples) {
+      for (let k = 0; k < count; k += 4) {
+        const x = samples[k];
+        const y = samples[k + 1];
+        const level = samples[k + 2];
+        const d = samples[k + 3];
         if (d >= gap) break;
         if (level !== o.level) continue;
         const t = Math.max(-end, Math.min(end, (x - o.x) * cx + (y - o.y) * cy));
@@ -1926,7 +2074,10 @@ export class Traffic {
       if (o.mode !== 'reverse' || !o.rev!.held || o === v) continue;
       const [b0, b1, b2, b3] = o.rev!.box;
       if (v.x < b0 - look - v.length || v.x > b2 + look + v.length || v.y < b1 - look - v.length || v.y > b3 + look + v.length || this.inZone(o.rev!, v)) continue;
-      for (const [x, y, , dd] of samples) {
+      for (let k = 0; k < count; k += 4) {
+        const x = samples[k];
+        const y = samples[k + 1];
+        const dd = samples[k + 3];
         if (dd >= gap) break;
         if (!this.inZone(o.rev!, { ...ZONE_PROBE, x, y, r: v.r }, 0.3 * M)) continue;
         gap = Math.max(0, dd - 0.5 * M);
@@ -3097,6 +3248,12 @@ export function spansNear(p: Path, x: number, y: number, r: number): [number, nu
     else spans.push([a, b]);
   }
   return spans;
+}
+
+/** The lane a vehicle's in (or turning into, the first on its way). */
+function laneOf(v: Vehicle): Lane | undefined {
+  for (let k = 0; k < v.route.length; k++) if (v.route[k].lane) return v.route[k].lane;
+  return undefined;
 }
 
 /** Picks one of some things by weight. */

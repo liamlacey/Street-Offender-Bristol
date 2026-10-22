@@ -422,6 +422,9 @@ export class People {
    * round (see `roundBlocks`). Set each frame.
    */
   blocks: Block[] = [];
+  /** You and the vehicles about; those of them to get out of the way of (kept from frame to frame). */
+  private readonly all: Mover[] = [];
+  private readonly danger: Mover[] = [];
   /** Where people can be (see `update`), as it was last given. */
   private walkable: (x: number, y: number, level: number) => boolean = () => true;
   /** The bus stops: where people wait (on the pavement by the stop), x, y. */
@@ -1340,10 +1343,18 @@ export class People {
     this.play(dt);
     this.kickabouts(dt);
     this.walkable = walkable;
-    const all = [player, ...movers];
+    // (Lists kept from frame to frame: no garbage.)
+    const all = this.all;
+    all.length = 0;
+    all.push(player);
+    for (const m of movers) all.push(m);
     this.walkDogs(dt, all);
     // Danger: you, going fast right by them (or along the pavement at them); and anything on a call, its siren going.
-    for (const m of [...(player.onFoot ? [] : [player]), ...movers.filter((o) => o.siren)]) {
+    const danger = this.danger;
+    danger.length = 0;
+    if (!player.onFoot) danger.push(player);
+    for (const m of movers) if (m.siren) danger.push(m);
+    for (const m of danger) {
       const pspeed = Math.hypot(m.vx, m.vy);
       const plevel = m.level ?? 0;
       for (const p of this.people) {

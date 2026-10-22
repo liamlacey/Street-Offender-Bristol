@@ -27,9 +27,14 @@ export interface TrafficDepths {
  * and shadow, standing on the hills, with its brake lights when it's slowing
  * and its indicators flashing before it turns.
  */
+/** At most this often a vehicle's damage is repainted, ms. */
+const REPAINT_EVERY = 250;
+
 export class TrafficLayer {
   /** Each one in view: its picture and shadow, and which version of its damage the picture shows. */
-  private readonly sprites = new Map<Vehicle, { body: Phaser.GameObjects.Image; shadow: Phaser.GameObjects.Image; shown: number }>();
+  private readonly sprites = new Map<Vehicle, { body: Phaser.GameObjects.Image; shadow: Phaser.GameObjects.Image; shown: number; painted: number }>();
+  /** Those drawn this frame (kept from frame to frame). */
+  private readonly seen = new Set<Vehicle>();
   private readonly lamps: [Phaser.GameObjects.Graphics, Phaser.GameObjects.Graphics];
 
   constructor(
@@ -53,7 +58,11 @@ export class TrafficLayer {
 
   update(view: Phaser.Geom.Rectangle, perspective: Perspective, level: number, time: number): void {
     const pad = 60;
-    const seen = new Set<Vehicle>();
+    const seen = this.seen;
+    seen.clear();
+    // (Damage is slow to paint: one vehicle's a frame at most, each at most a few times a second.)
+    let paints = 1;
+    const now = this.scene.time.now;
     for (const g of this.lamps) g.clear();
     // Up on a bridge, or at the end of one (driving on or off it, where the deck meets the road): drawn with the deck, over it.
     const up = (v: Vehicle) => v.level === 1 || this.atDeckEnd(v.x, v.y, v.length / 2 + 4);
@@ -68,11 +77,13 @@ export class TrafficLayer {
         if (!s) {
           const shadow = this.scene.add.image(0, 0, vehicleShadow(this.scene, v.kind)).setScale(1 / ART_SCALE).setTint(0x000000).setAlpha(0.33);
           const body = this.scene.add.image(0, 0, (v.bus ? busTexture(this.scene, v.kind, v.bus.colour, v.bus.ref) : vehicleTexture(this.scene, v.kind, v.colour, v.rider))).setScale(1 / ART_SCALE);
-          s = { body, shadow, shown: 0 };
+          s = { body, shadow, shown: 0, painted: -Infinity };
           this.sprites.set(v, s);
         }
         // Damaged: its own picture, with its dents and scratches.
-        if (v.wreck && v.wreck.version !== s.shown) {
+        if (v.wreck && v.wreck.version !== s.shown && paints > 0 && now - s.painted > REPAINT_EVERY) {
+          paints--;
+          s.painted = now;
           s.shown = v.wreck.version;
           const key = `vehicle-dented-${v.id}`;
           paintWreck(this.scene, key, { base: (v.bus ? busTexture(this.scene, v.kind, v.bus.colour, v.bus.ref) : vehicleTexture(this.scene, v.kind, v.colour)), length: VEHICLES[v.kind].length, width: VEHICLES[v.kind].width, mirror: bodyLayout(v.kind).mirror }, v.wreck);

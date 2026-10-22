@@ -4,6 +4,7 @@ import { HudScene } from './scenes/HudScene';
 import { LoadingScene } from './scenes/LoadingScene';
 import { MenuScene } from './scenes/MenuScene';
 import { TitleScene } from './scenes/TitleScene';
+import { watch } from './scenes/perfMeter';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -22,6 +23,9 @@ const game = new Phaser.Game({
   // (The loading screen over the game as it's set up.)
   scene: [TitleScene, GameScene, LoadingScene, HudScene, MenuScene],
 });
+
+// (`?perf` on the address: how smoothly it's running, over the game.)
+watch(game);
 
 // For poking at the game from the browser's console (and the screenshot scripts) while developing.
 if (import.meta.env.DEV) (window as unknown as { game: Phaser.Game }).game = game;

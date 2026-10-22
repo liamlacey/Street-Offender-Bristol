@@ -67,6 +67,7 @@ import { type Pose, PeopleLayer, SIZE as PERSON_SIZE, personTexture } from './Pe
 import { type Shape, STIFFNESS, type Wreck, hit as dentAt, newWreck, toBody, toWorld } from '../car/dents';
 import { paintWreck } from './dentArt';
 import { bodyLayout, busTexture, vehicleShadow, vehicleTexture } from './vehicleArt';
+import * as perf from './perfMeter';
 
 /** Physics runs at a fixed rate so handling feels the same at any frame rate. */
 const PHYSICS_DT = 1 / 120;
@@ -134,6 +135,8 @@ const WIND_X = Math.cos(0.35) * 0.9;
 const WIND_Y = Math.sin(0.35) * 0.9;
 /** How long a hop off a speed hump lasts, seconds. */
 const HOP_TIME = 0.35;
+/** At most this often your vehicle's damage is repainted, ms. */
+const REPAINT_EVERY = 250;
 /** How many bits of what's been broken (not the benches, bins and the rest standing about) before the smallest stop being kept. */
 const MAX_PIECES = 1500;
 
@@ -206,6 +209,11 @@ export class GameScene extends Phaser.Scene {
   private traffic!: Traffic;
   /** What you're driving's damage, and the version of it its picture shows. */
   private wreck: Wreck = newWreck();
+  /** When your vehicle's damage was last painted, ms. */
+  private paintedAt = -Infinity;
+  /** What the trains stop for, and what people get out of the way of, this frame (the same objects each frame). */
+  private readonly trainObstacles: Obstacle[] = [];
+  private readonly movers: Mover[] = [];
   /**
    * On foot (out of anything), or driving; and what you're driving: its kind
    * and colour (and a bus's route, for its picture). Your own car's `own`.
@@ -746,6 +754,7 @@ export class GameScene extends Phaser.Scene {
     if (next) this.enter(next, true);
     this.readInput();
     this.accumulator = Math.min(this.accumulator + dt, PHYSICS_DT * MAX_STEPS_PER_FRAME);
+    perf.start('physics');
     while (this.accumulator >= PHYSICS_DT) {
       this.accumulator -= PHYSICS_DT;
       this.prev = { x: this.car.x, y: this.car.y, heading: this.car.heading };
@@ -760,6 +769,7 @@ export class GameScene extends Phaser.Scene {
     this.updateSinking(dt);
     this.machines?.update(dt, this.machineBodies);
     this.updateLoose();
+    perf.stop('physics');
     this.updateTraffic(dt);
     this.hopLeft = Math.max(0, this.hopLeft - dt);
     this.drawCar();
@@ -769,7 +779,9 @@ export class GameScene extends Phaser.Scene {
     this.updateCamera(dt);
     this.updatePerspective();
     const view = this.cameras.main.worldView;
+    perf.start('ground');
     this.ground.update(view, this.perspective);
+    perf.stop('ground');
     this.skids.update(view, this.perspective);
     // A bridge is drawn over the car when it's underneath, and under it when it's on top.
     // (And under it at the end of a bridge you're driving onto or off, where the deck meets the road.)
@@ -805,7 +817,10 @@ export class GameScene extends Phaser.Scene {
       this.carSprite.setDepth(carDepth);
       this.carShadow.setDepth(carDepth - 0.1);
     }
+    perf.start('build');
     this.buildings.update(view, this.perspective, this.car.x, this.car.y);
+    perf.stop('build');
+    perf.start('props');
     // Before the trees: it moves the ones coming down.
     this.wreckage.update(view, this.perspective);
     this.updateTrees(view, dt);
@@ -813,12 +828,15 @@ export class GameScene extends Phaser.Scene {
     this.updateLights(view);
     this.wallLayer.update(view, this.perspective);
     this.ledgeLayer.update(view, this.perspective);
+    perf.stop('props');
+    perf.start('sprites');
     this.trafficLayer.update(view, this.perspective, this.level, this.time.now / 1000);
     this.boatLayer.update(view, this.perspective, this.time.now / 1000);
     this.trainLayer.update(view, this.perspective);
     this.ripples.update(view, this.perspective, dt);
     this.peopleLayer.update(view, this.perspective);
     this.updateStreet(dt);
+    perf.stop('sprites');
     const speed = Math.hypot(this.car.vx, this.car.vy);
     const kind = this.ride.kind;
     this.audio?.update({
@@ -1122,6 +1140,7 @@ export class GameScene extends Phaser.Scene {
     const car = this.car;
     // The game mustn't stop for the traffic: anything going wrong in it is logged, and the game goes on.
     try {
+      perf.start('traffic');
       this.traffic.update(
         dt,
         { x: car.x, y: car.y, heading: car.heading, vx: car.vx, vy: car.vy, level: this.level, length: this.carLength(), width: this.carWidth() },
@@ -1131,13 +1150,18 @@ export class GameScene extends Phaser.Scene {
     } catch (e) {
       console.error('traffic:', e);
     }
+    perf.stop('traffic');
     try {
       this.boats.update(dt);
     } catch (e) {
       console.error('boats:', e);
     }
+    perf.start('trains');
     this.updateTrains(dt);
+    perf.stop('trains');
+    perf.start('people');
     this.updatePeople(dt, controllers, signals, time);
+    perf.stop('people');
     // Boats knocked into each other, or into the side of the harbour; and cars knocked into the boats.
     for (const h of this.boats.hits) {
       this.dentBoat(h.a, h.x, h.y, h.impulse);
@@ -1185,7 +1209,7 @@ export class GameScene extends Phaser.Scene {
     }
     // Smoke from wrecked engines (yours too); car alarms beeping.
     const seen = (x: number, y: number) => x > view.left - 40 && x < view.right + 40 && y > view.top - 40 && y < view.bottom + 40;
-    for (const v of [...this.traffic.vehicles, ...this.traffic.parked]) {
+    for (const list of [this.traffic.vehicles, this.traffic.parked]) for (const v of list) {
       if (!seen(v.x, v.y)) continue;
       if ((v.broken || (v.limping && v.wreck && v.wreck.taken.front > 60)) && Math.random() < dt * (v.broken ? 9 : 4)) {
         this.effects.smokeAt(v.x + Math.cos(v.angle) * v.length * 0.35, v.y + Math.sin(v.angle) * v.length * 0.35);
@@ -1210,9 +1234,20 @@ export class GameScene extends Phaser.Scene {
   private updateTrains(dt: number): void {
     const view = this.cameras.main.worldView;
     const near = (x: number, y: number) => x > view.left - 900 && x < view.right + 900 && y > view.top - 900 && y < view.bottom + 900;
-    const obstacles: Obstacle[] = [{ x: this.car.x, y: this.car.y, r: this.carWidth() / 2 + 2, level: this.level }];
-    for (const v of [...this.traffic.vehicles, ...this.traffic.parked]) if (near(v.x, v.y)) obstacles.push({ x: v.x, y: v.y, r: v.r, level: v.level });
-    for (const p of this.people.people) if (p.mode !== 'down' && near(p.x, p.y)) obstacles.push({ x: p.x, y: p.y, r: 1.5, level: p.level });
+    // (The same objects each frame: no garbage.)
+    const obstacles = this.trainObstacles;
+    let n = 0;
+    const add = (x: number, y: number, r: number, level: number) => {
+      const o = (obstacles[n++] ??= { x: 0, y: 0, r: 0, level: 0 });
+      o.x = x;
+      o.y = y;
+      o.r = r;
+      o.level = level;
+    };
+    add(this.car.x, this.car.y, this.carWidth() / 2 + 2, this.level);
+    for (const list of [this.traffic.vehicles, this.traffic.parked]) for (const v of list) if (near(v.x, v.y)) add(v.x, v.y, v.r, v.level);
+    for (const p of this.people.people) if (p.mode !== 'down' && near(p.x, p.y)) add(p.x, p.y, 1.5, p.level);
+    obstacles.length = n;
     try {
       this.trains.update(dt, { x0: view.left, y0: view.top, x1: view.right, y1: view.bottom }, obstacles);
     } catch (e) {
@@ -1283,17 +1318,49 @@ export class GameScene extends Phaser.Scene {
     // You and the traffic, each on its level (what's up on a bridge is nowhere near those under it).
     // (On foot, or on a bike, you brush past people.)
     const player: Mover = { x: car.x, y: car.y, angle: car.heading, length: this.carLength(), width: this.carWidth(), vx: car.vx, vy: car.vy, id: -1, level: this.level, bike: this.onFoot || this.ride.kind === 'bike', onFoot: this.onFoot };
-    const movers: Mover[] = [];
+    // (The same objects each frame, filled in afresh: no garbage.)
+    const movers = this.movers;
+    let n = 0;
+    const mover = (x: number, y: number, angle: number, length: number, width: number, vx: number, vy: number, id: number, level: number): Mover => {
+      const m = (movers[n++] ??= { x: 0, y: 0, angle: 0, length: 0, width: 0, vx: 0, vy: 0, id: 0 });
+      m.x = x;
+      m.y = y;
+      m.angle = angle;
+      m.length = length;
+      m.width = width;
+      m.vx = vx;
+      m.vy = vy;
+      m.id = id;
+      m.level = level;
+      m.dwelling = m.bay = m.fresh = m.siren = m.bike = m.onFoot = m.train = undefined;
+      return m;
+    };
     // The trains' carriages (their doors open at a stop: see People's trains).
     for (const c of this.trains.carriages()) {
       if (Math.abs(c.x - car.x) > view.width + 400 || Math.abs(c.y - car.y) > view.height + 400) continue;
-      movers.push({ x: c.x, y: c.y, angle: c.angle, length: c.length, width: c.r * 2, vx: c.vx, vy: c.vy, id: c.id, level: c.level, ...(this.trains.dwelling(c.train) ? { dwelling: true, train: true, fresh: c.train.dwell > 0 && c.train.fresh } : { train: true }) });
+      const m = mover(c.x, c.y, c.angle, c.length, c.r * 2, c.vx, c.vy, c.id, c.level);
+      m.train = true;
+      if (this.trains.dwelling(c.train)) {
+        m.dwelling = true;
+        m.fresh = c.train.dwell > 0 && c.train.fresh;
+      }
     }
-    for (const v of [...this.traffic.vehicles, ...this.traffic.parked]) {
-      if (Math.abs(v.x - car.x) > view.width + 400 || Math.abs(v.y - car.y) > view.height + 400) continue;
-      if (v.mode === 'parked' && v.vx === 0 && v.vy === 0) continue;
-      movers.push({ x: v.x, y: v.y, angle: v.angle, length: v.length, width: v.r * 2, vx: v.mode === 'drive' ? Math.cos(v.angle) * v.speed : v.vx, vy: v.mode === 'drive' ? Math.sin(v.angle) * v.speed : v.vy, id: v.id, dwelling: !!v.bus && v.bus.dwell > 0, ...(v.bus?.bay && v.bus.dwell > 0 ? { bay: v.bus.bay.platform, fresh: (v.bus.stood ?? 0) < 1 } : {}), level: v.level, bike: v.kind === 'bike', ...(v.siren ? { siren: true } : {}) });
+    for (const list of [this.traffic.vehicles, this.traffic.parked]) {
+      for (const v of list) {
+        if (Math.abs(v.x - car.x) > view.width + 400 || Math.abs(v.y - car.y) > view.height + 400) continue;
+        if (v.mode === 'parked' && v.vx === 0 && v.vy === 0) continue;
+        const drive = v.mode === 'drive';
+        const m = mover(v.x, v.y, v.angle, v.length, v.r * 2, drive ? Math.cos(v.angle) * v.speed : v.vx, drive ? Math.sin(v.angle) * v.speed : v.vy, v.id, v.level);
+        m.dwelling = !!v.bus && v.bus.dwell > 0;
+        if (v.bus?.bay && v.bus.dwell > 0) {
+          m.bay = v.bus.bay.platform;
+          m.fresh = (v.bus.stood ?? 0) < 1;
+        }
+        m.bike = v.kind === 'bike';
+        if (v.siren) m.siren = true;
+      }
     }
+    movers.length = n;
     const light = (i: number) => (this.signalHeads[i]?.gone ? 'green' : lightAt(controllers[signals[i].controller], signals[i].controller, signals[i].group, time));
     // Open ground: not the water, not a building's (or a wall's) way; up on a bridge, its deck, inside the parapets.
     const walkable = (x: number, y: number, level: number) => {
@@ -1763,8 +1830,11 @@ export class GameScene extends Phaser.Scene {
       this.carShadow.setVisible(false);
       return;
     }
-    if (this.wreck.version !== this.wreckShown) {
+    // (Repainted at most a few times a second: it's slow, and a scrape along a wall dents it every frame.)
+    const now = this.time.now;
+    if (this.wreck.version !== this.wreckShown && (this.wreckShown < 0 || now - this.paintedAt > REPAINT_EVERY)) {
       this.wreckShown = this.wreck.version;
+      this.paintedAt = now;
       const k = VEHICLES[this.ride.kind];
       paintWreck(this, 'car-dented', { base: this.rideTexture(), length: k.length, width: k.width, mirror: this.rideShape().mirror }, this.wreck);
       this.carSprite.setTexture('car-dented');
