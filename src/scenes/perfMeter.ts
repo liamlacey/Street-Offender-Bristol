@@ -2,7 +2,7 @@
  * A read-out of how smoothly the game's running, turned on with `?perf` on
  * the address: frames a second, the longest frame (and how many were long),
  * and the slowest parts of the frame (each part's average and longest, ms),
- * over the last second. Drawn over the game (a line of text in the corner),
+ * over the last second. Drawn over the game (a few lines of text at the top),
  * changed once a second. Off, it costs nothing: `start` and `stop` return
  * at once.
  */
@@ -45,8 +45,10 @@ export function watch(game: Phaser.Game): void {
   box = document.createElement('div');
   Object.assign(box.style, {
     position: 'fixed',
-    left: '4px',
+    // (Top middle: clear of the pause button and RESET.)
+    left: '50%',
     top: '4px',
+    transform: 'translateX(-50%)',
     zIndex: '10',
     font: '10px/1.25 monospace',
     color: '#fff',
