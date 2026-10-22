@@ -52,6 +52,8 @@ describe('drops', () => {
     let [sx, sy] = [0, 0];
     for (let k = 0; k < ring.length; k += 2) [sx, sy] = [sx + ring[k], sy + ring[k + 1]];
     const [cx, cy] = [sx / (ring.length / 2), sy / (ring.length / 2)];
-    expect(all.near(cx, cy, 45 * M).filter((s) => s.drop >= 1.5 * M).length).toBeGreaterThan(5);
+    // (Its sides all round: how long they are, together.)
+    const sides = all.near(cx, cy, 45 * M).filter((s) => s.drop >= 1.5 * M);
+    expect(sides.reduce((l, s) => l + Math.hypot(s.bx - s.ax, s.by - s.ay), 0)).toBeGreaterThan(35 * M);
   });
 });
