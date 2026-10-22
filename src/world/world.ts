@@ -11,6 +11,7 @@ import type { Building, GameMap, LineKind, Prop, PropKind, Pts, Road } from '../
 import { Decks, waterOf } from './decks';
 import { trolleyRows } from './parking';
 import { streetLifeWork } from './streetLife';
+import { parkLifeWork } from './parkLife';
 import { playgroundsWork } from './playgrounds';
 import { Terrain } from './terrain';
 import type { DebrisKind, ThingKind, WallKind } from './damage';
@@ -73,6 +74,9 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
   seesaw: { r: 3, length: 38, invMass: 1.5 },
   springy: { r: 4.5, invMass: 3 },
 };
+
+/** Which of the food carts sells ice cream (see CARTS). */
+const ICE_CREAM = 2;
 
 /** A tree trunk's radius, px. */
 const TRUNK = 4;
@@ -604,6 +608,8 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   for (const c of life.carts) add('foodcart', c.x, c.y, c.angle, c.kind);
   for (const s of life.stalls) add('stall', s.x, s.y, s.angle - Math.PI / 2, s.kind);
   for (const b of life.boards) add('aboard', b.x, b.y, b.angle);
+  // The ice-cream carts in the parks (see parkLife.ts).
+  for (const c of (yield* parkLifeWork(map)).carts) add('foodcart', c.x, c.y, c.angle, ICE_CREAM);
   // What's in the playgrounds (see playgrounds.ts).
   for (const t of yield* playgroundsWork(map)) {
     const l = LOOSE[t.kind]!;

@@ -5,6 +5,7 @@ import { central } from '../test/central';
 import { type Mover, People } from './people';
 import { parkingSpaces } from './parking';
 import { BUSY_STREET, footprints, onFootprints, pedestrianBusy, streetLife } from './streetLife';
+import { parkLife } from './parkLife';
 import { buildWorld } from './world';
 
 /** (The middle of Bristol, round where you start: see src/test/central.ts.) */
@@ -33,7 +34,9 @@ describe('street life', () => {
     }
     // The carts are loose things (they're knocked about), where they stand.
     const world = buildWorld(map);
-    expect(world.loose.filter((l) => l.kind === 'foodcart').length).toBe(life.carts.length);
+    // (And the parks' ice-cream carts: see parkLife.ts.)
+    for (const c of life.carts) expect(world.loose.some((l) => l.kind === 'foodcart' && l.x === c.x && l.y === c.y)).toBe(true);
+    expect(world.loose.filter((l) => l.kind === 'foodcart').length).toBe(life.carts.length + parkLife(map).carts.length);
   });
 
   it("puts the shops' A-boards out on the busy streets, in front of them, and the market stalls in rows in St Nicholas Market", () => {

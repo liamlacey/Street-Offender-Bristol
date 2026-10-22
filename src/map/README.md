@@ -848,7 +848,7 @@ but the water and the buildings.
   way there keeps off the roads), or back.
 - **How many**: along each walk, for every 10 m, 1 on a quiet pavement, more on busier
   streets (0.7 + 0.25 × the road's `activity`, at most 4), 2.5 or more on a pedestrian street (see below),
-  0.9 on a footway, 0.3 on a cycleway; and the spots where they stand (below). Round the
+  0.9 on a footway (1.4 through a park or on a lawn), 0.3 on a cycleway; and the spots where they stand (below). Round the
   view (30 m beyond it) there are 0.5 people for each of those (at most 220), coming into
   being out of sight, gone 55 m beyond it.
 - **Where they stand** (in groups of 2 to 5, facing in, or on their own facing the way the
@@ -857,7 +857,8 @@ but the water and the buildings.
   sight, on the nearest walk within 30 m (4, always in groups); by the water, 1.5 m back
   from each mooring bollard and life ring, looking out over it (0.7); and in the parks,
   gardens, lawns, pitches, playgrounds and squares (at least 150 m²), one spot per 500 m²
-  (up to 30; 1.6 in a square, 0.8 elsewhere), half in groups, and many of those not in a
+  (up to 30), or per 300 m² on a park's, garden's or lawn's grass (up to 50; 1.6 in a
+  square, 1.1 in a park, 0.8 elsewhere), half in groups, and many of those not in a
   group wander about it instead (to somewhere 5 to 30 m away in it, a while there, on).
 - **Crossing**: walking past a crossing's kerb (on the pavement either side of it), half
   the time they cross: at one with lights, when all the traffic lights by it (within
@@ -923,6 +924,26 @@ but the water and the buildings.
   once they're off), round the roundabout (up to four, pushed round, slowing once
   they're off), down the slide and back up its ladder (4 s a go), on the climbing frame
   (up to five), in the sandpit, two on the seesaw, bouncing on a spring rider.
+- **Park life** (`src/world/parkLife.ts`), in the parks (`leisure=park`, `common`) and on
+  the playing fields (`leisure=pitch`):
+  - **Games** on the open grass (in it, not within 3 m of a building, 5 m of a road or
+    railway, 2 m of a path, not in anything else, a playground or a pond, nor under a
+    tree), with room all round (7 m for a kick-about, 9 m for a frisbee): one per
+    2,500 m² of park (at most 4), one on each playing field (always football). A
+    kick-about is four to seven in a ring 4 to 6 m across, a frisbee two (or three) 14 m
+    apart; they start out of sight, and play for one to four minutes. The ball's held a
+    moment (a football dribbled, 0.8 to 2.8 s), then passed to someone else in the game
+    (9 m/s along the ground, lofted a little) or the frisbee thrown (7 m/s, floating level
+    at about head height, then down), landing up to 1.6 m off; they run and get it.
+  - **Ice-cream carts**: a park of 4,000 m² or more has one (one of 40,000 m² or more, two, 120 m
+    apart), 2.6 m off the path through it nearest its middle, its serving side to the
+    path: a food cart (ice cream) like the street's, with its vendor and queue.
+  - **Pigeons** in a park of 3,000 m² or more: a flock on the open grass, near its middle.
+  - **Joggers and dog walkers**: walking along a path through a park (or across a lawn),
+    about one in five's out for a run (2.4 to 3.2 m/s) and three in ten of the rest have
+    a dog on a lead (a black Lab, a golden retriever, a border collie or a Jack Russell;
+    one in twenty along the street): at their heels, wandering from side to side, now
+    and then stopping to sniff about, never more than the lead's 2.2 m away.
 - **Busy pedestrian streets** (`src/world/streetLife.ts`): how busy each pedestrian street
   is, by the shops, cafés and the like within 25 m of it per 100 m (Broadmead, East Street,
   Corn Street, Cotham Hill: 15 to 50). Along each, 2.5 people per 10 m, plus 0.15 for each

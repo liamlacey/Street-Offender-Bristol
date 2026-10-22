@@ -1,5 +1,5 @@
 import type * as Phaser from 'phaser';
-import { type Bird, type Gather, LOOKS, type People, type Person, type Picnic } from '../world/people';
+import { type Bird, type Dog, type Gather, type Kickabout, LOOKS, type People, type Person, type Picnic } from '../world/people';
 import type { Act } from '../world/streetLife';
 import type { Perspective } from '../world/perspective';
 import { ART_SCALE, canvasTexture } from './art';
@@ -251,6 +251,62 @@ function pigeonTexture(scene: Phaser.Scene, pose: 'stand' | 'peck' | 'fly0' | 'f
   return key;
 }
 
+/** The dogs: a black Lab, a golden retriever, a border collie, a Jack Russell (smaller). From above, facing right, its legs one way then the other. */
+const DOGS: { body: string; patch: string; size: number }[] = [
+  { body: '#1e1b18', patch: '#2c2824', size: 1 },
+  { body: '#d9a45a', patch: '#e8be7a', size: 1 },
+  { body: '#232120', patch: '#f2efe8', size: 0.95 },
+  { body: '#f2efe8', patch: '#8a5a2e', size: 0.7 },
+];
+
+function dogTexture(scene: Phaser.Scene, look: number, frame: number): string {
+  const key = `dog-${look}-${frame}`;
+  canvasTexture(scene, key, 9, 6, (ctx) => {
+    const { body, patch, size } = DOGS[look % DOGS.length];
+    const ellipse = (x: number, y: number, rx: number, ry: number, fill: string) => {
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.ellipse(4.5 + (x - 4.5) * size, 3 + (y - 3) * size, rx * size, ry * size, 0, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    ellipse(4.8, 3.6, 3, 1.3, 'rgba(0,0,0,0.22)');
+    // Legs (paws peeking out), stepping.
+    const s = frame ? 0.5 : -0.5;
+    for (const [x, y] of [[6 + s, 1.7], [6 - s, 4.3], [2.8 - s, 1.8], [2.8 + s, 4.2]]) ellipse(x, y, 0.5, 0.4, body);
+    // Tail, body (a patch on its back), head and ears, nose.
+    ellipse(0.9, 3 + s * 0.6, 0.9, 0.3, body);
+    ellipse(4.2, 3, 2.7, 1.25, body);
+    ellipse(3.8, 3, 1.2, 0.8, patch);
+    ellipse(7.3, 3, 1.05, 0.95, body);
+    ellipse(6.9, 2.1, 0.5, 0.35, look === 1 ? '#c48a42' : body);
+    ellipse(6.9, 3.9, 0.5, 0.35, look === 1 ? '#c48a42' : body);
+    ellipse(8.3, 3, 0.35, 0.3, '#111');
+  });
+  return key;
+}
+
+/** A football (white, its black panels), or a frisbee (bright plastic). */
+function ballTexture(scene: Phaser.Scene, kind: Kickabout['kind']): string {
+  const key = `ball-${kind}`;
+  canvasTexture(scene, key, 4, 4, (ctx) => {
+    ctx.fillStyle = kind === 'football' ? '#f4f4f0' : '#ff5a1f';
+    ctx.beginPath();
+    ctx.arc(2, 2, kind === 'football' ? 1.1 : 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = kind === 'football' ? '#1d1d1f' : 'rgba(255,255,255,0.45)';
+    ctx.beginPath();
+    ctx.arc(2, 2, kind === 'football' ? 0.45 : 1, 0, Math.PI * 2);
+    ctx.fill();
+    if (kind === 'frisbee') {
+      ctx.fillStyle = '#ff5a1f';
+      ctx.beginPath();
+      ctx.arc(2, 2, 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+  return key;
+}
+
 export function personTexture(scene: Phaser.Scene, look: number, pose: Pose): string {
   const key = `person-${look % LOOKS}-${pose}`;
   if (pose === 'down') canvasTexture(scene, key, 16, 8, (ctx) => person(ctx, look, pose));
@@ -268,6 +324,8 @@ export class PeopleLayer {
   private readonly blankets = new Map<Picnic, Phaser.GameObjects.Image>();
   private readonly pitches = new Map<Gather, Phaser.GameObjects.Image>();
   private readonly birds = new Map<Bird, Phaser.GameObjects.Image>();
+  private readonly dogs = new Map<Dog, { dog: Phaser.GameObjects.Image; lead: Phaser.GameObjects.Image }>();
+  private readonly balls = new Map<Kickabout, { ball: Phaser.GameObjects.Image; shadow: Phaser.GameObjects.Image }>();
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -313,6 +371,62 @@ export class PeopleLayer {
       if (seen.has(p)) continue;
       s.destroy();
       this.sprites.delete(p);
+    }
+    // The dogs, on their leads (from the hand of whoever has them).
+    const walked = new Set<Dog>();
+    for (const p of seen) {
+      const d = p.dog;
+      if (!d) continue;
+      walked.add(d);
+      const key = dogTexture(this.scene, d.look, d.speed > 2 && d.step < 0.5 ? 1 : 0);
+      let im = this.dogs.get(d);
+      if (!im) {
+        canvasTexture(this.scene, 'lead', 2, 2, (ctx) => {
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, 2, 2);
+        });
+        im = { dog: this.scene.add.image(0, 0, key).setScale(SIZE / ART_SCALE), lead: this.scene.add.image(0, 0, 'lead').setOrigin(0, 0.5).setTint(0x2a2a2a) };
+        this.dogs.set(d, im);
+      } else if (im.dog.texture.key !== key) im.dog.setTexture(key);
+      const depth = p.level === 1 ? this.deckDepth(p.x, p.y) : this.depths.ground;
+      const low = perspective.lift(this.base(d.x, d.y, p.level) + 0.4 * 8);
+      const [dx, dy] = [perspective.x(d.x, low), perspective.y(d.y, low)];
+      im.dog.setPosition(dx, dy).setRotation(d.angle).setDepth(depth - 0.001);
+      const hand = perspective.lift(this.base(p.x, p.y, p.level) + 0.9 * 8);
+      const [hx, hy] = [perspective.x(p.x, hand), perspective.y(p.y, hand)];
+      // (To its collar, just behind its head.)
+      const [cx, cy] = [dx + Math.cos(d.angle) * 2.2, dy + Math.sin(d.angle) * 2.2];
+      im.lead.setPosition(hx, hy).setRotation(Math.atan2(cy - hy, cx - hx)).setDisplaySize(Math.max(0.1, Math.hypot(cx - hx, cy - hy)), 0.35).setDepth(depth - 0.0005);
+    }
+    for (const [d, im] of this.dogs) {
+      if (walked.has(d)) continue;
+      im.dog.destroy();
+      im.lead.destroy();
+      this.dogs.delete(d);
+    }
+    // The games' balls and frisbees: in the air (their shadows on the grass under them), or on the ground.
+    const played = new Set<Kickabout>();
+    for (const g of this.people.games) {
+      const b = g.ball;
+      if (b.x < view.left - pad || b.x > view.right + pad || b.y < view.top - pad || b.y > view.bottom + pad) continue;
+      if (!b.holder && !b.target && b.dur === 0 && !this.people.people.some((p) => p.game === g)) continue;
+      played.add(g);
+      let im = this.balls.get(g);
+      if (!im) {
+        const key = ballTexture(this.scene, g.kind);
+        im = { ball: this.scene.add.image(0, 0, key).setScale(SIZE / ART_SCALE), shadow: this.scene.add.image(0, 0, key).setScale(SIZE / ART_SCALE).setTint(0x000000).setAlpha(0.25) };
+        this.balls.set(g, im);
+      }
+      const ground = perspective.lift(this.base(b.x, b.y, 0) + 0.15 * 8);
+      const up = perspective.lift(this.base(b.x, b.y, 0) + 0.15 * 8 + b.z);
+      im.shadow.setPosition(perspective.x(b.x, ground) + b.z * 0.2, perspective.y(b.y, ground) + b.z * 0.25).setDepth(this.depths.ground - 0.002);
+      im.ball.setPosition(perspective.x(b.x, up), perspective.y(b.y, up)).setDepth(this.depths.ground + (b.z > 4 ? 0.001 : -0.001));
+    }
+    for (const [g, im] of this.balls) {
+      if (played.has(g)) continue;
+      im.ball.destroy();
+      im.shadow.destroy();
+      this.balls.delete(g);
     }
     // The picnics' blankets, on the grass under them.
     const spread = new Set<Picnic>();

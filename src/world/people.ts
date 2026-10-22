@@ -17,6 +17,7 @@ import { type GameMap, type Pts, VEHICLE_ROADS, pointInRing, ridgeAxis } from '.
 import { type Store, TROLLEY_GAP } from '../map/stores';
 import { type TrolleyRow, trolleyRows } from './parking';
 import { PLAY_KINDS, PLAY_SCALE, type PlayKind } from './playgrounds';
+import { type Game, parkLifeWork } from './parkLife';
 import { type Act, pedestrianBusy, streetLifeWork } from './streetLife';
 import type { Light } from './lights';
 import { offsetLine } from './world';
@@ -56,6 +57,13 @@ const RUN = 4.2 * M;
 /** At most this many about at once; and how many per unit of how busy it is round you (see `weight`). */
 const MOST = 220;
 const PER_WEIGHT = 0.5;
+/** How fast someone out for a run goes, px/s (each a little faster or slower). */
+const JOG = 2.8 * M;
+/** A dog's lead, px: it's never further than this from them. */
+const LEAD = 2.2 * M;
+/** How fast a football's passed, and a frisbee thrown, px/s; how high each goes (at the top of its flight), px. */
+const PASS = 9 * M;
+const THROW = 7 * M;
 /** Kept going this far beyond the view, px; gone beyond `FAR`. */
 const NEAR = 30 * M;
 const FAR = 55 * M;
@@ -71,7 +79,7 @@ const R = 0.3 * M;
 const SHOPPERS = 16;
 const HOLD = 0.85 * M;
 
-export type Mode = 'walk' | 'stand' | 'wander' | 'kerb' | 'cross' | 'queue' | 'board' | 'flee' | 'dive' | 'down' | 'sit' | 'shop' | 'perform' | 'vend' | 'join';
+export type Mode = 'walk' | 'stand' | 'wander' | 'kerb' | 'cross' | 'queue' | 'board' | 'flee' | 'dive' | 'down' | 'sit' | 'shop' | 'perform' | 'vend' | 'join' | 'game';
 
 /** A bench or picnic table (as the world has it: it can be knocked about, or smashed). */
 export interface Seat {
@@ -164,6 +172,45 @@ export interface Flock {
   away: number;
 }
 
+/**
+ * A game on the grass in a park (see parkLife.ts): a kick-about, or a
+ * frisbee thrown back and forth; and its ball (or frisbee): held, in the
+ * air from one player to another, or on the ground for whoever it was
+ * thrown to to run and get.
+ */
+export interface Kickabout {
+  kind: Game;
+  x: number;
+  y: number;
+  angle: number;
+  ball: {
+    x: number;
+    y: number;
+    /** How high it is, px. */
+    z: number;
+    from: [number, number];
+    to: [number, number];
+    /** How far through its flight it is, and how long that takes (0: not in the air), s. */
+    t: number;
+    dur: number;
+    holder: Person | null;
+    target: Person | null;
+    /** How long it's held (or dribbled) before it's passed on, s. */
+    hold: number;
+  };
+}
+
+/** A dog out on its lead with someone: where, which way, how fast, how far through its step; which dog; and sniffing something, a while. */
+export interface Dog {
+  x: number;
+  y: number;
+  angle: number;
+  speed: number;
+  step: number;
+  look: number;
+  sniff: number;
+}
+
 /** A picnic on the grass: its blanket (where, which way, which pattern), and how many are sitting round it. */
 export interface Picnic {
   x: number;
@@ -230,6 +277,12 @@ export interface Person {
   /** A performer's act (or a food cart's vendor), and where they're gathered (performing, selling, watching, queuing), or null. */
   act: Act | 'vendor' | null;
   gather: Gather | null;
+  /** Playing in a game on the grass (where they stand in it: tx, ty), or null. */
+  game: Kickabout | null;
+  /** Their dog, out on its lead, or null. */
+  dog: Dog | null;
+  /** Out for a run (in the park). */
+  jog?: boolean;
 }
 
 /** A vehicle as the people see it: where, which way, how big, how fast; a bus's stop. */
@@ -277,6 +330,8 @@ interface Walk {
   level: number;
   /** A cycle path (bikes come along it). */
   cycle?: boolean;
+  /** Through a park (joggers and dog walkers along it). */
+  park?: boolean;
 }
 
 /** Somewhere people stand: outside a shop, by the water, at a sight, in a square; in a group or not, facing which way. */
@@ -380,6 +435,8 @@ export class People {
 
   /** The benches and picnic tables people sit at, and the picnics on the grass. */
   private seats: Seat[];
+  /** Whether a point's in a park (or on a lawn): set as the walks are built. */
+  private inPark: (x: number, y: number) => boolean = () => false;
   /** What's in the playgrounds (some of the seats), and the time, s, for how they move. */
   private plays: Seat[] = [];
   private clock = 0;
@@ -396,6 +453,8 @@ export class People {
   readonly pitches: Gather[] = [];
   carts: Gather[] = [];
   readonly flocks: Flock[] = [];
+  /** The games on the grass in the parks. */
+  readonly games: Kickabout[] = [];
 
   constructor(
     private readonly map: GameMap,
@@ -426,6 +485,9 @@ export class People {
     const life = yield* streetLifeWork(this.map);
     for (const p of life.pitches) this.pitches.push({ kind: 'pitch', x: p.x, y: p.y, angle: p.angle, act: p.act, host: null });
     for (const f of life.flocks) this.flocks.push({ x: f.x, y: f.y, birds: [], away: 0 });
+    const park = yield* parkLifeWork(this.map);
+    for (const g of park.games) this.games.push({ ...g, ball: { x: g.x, y: g.y, z: 0, from: [g.x, g.y], to: [g.x, g.y], t: 0, dur: 0, holder: null, target: null, hold: 0 } });
+    for (const f of park.flocks) this.flocks.push({ x: f.x, y: f.y, birds: [], away: 0 });
     yield* this.buildWalks();
     yield* this.buildSpots();
     yield* this.buildCrossings();
@@ -516,6 +578,16 @@ export class People {
       if (piece.length) pieces.push(piece);
       for (const pts of pieces) if (pts.length >= 4 && lengthOf(pts) > 3 * M) this.addWalk(pts, busy, road, level);
     };
+    // (The parks: the paths through them are walked by joggers and dog walkers too.)
+    const parks = this.map.areas
+      .filter((a) => a.kind === 'park' || a.kind === 'grass' || a.kind === 'garden' || a.kind === 'pitch')
+      .map((a) => {
+        const ring = a.rings[0];
+        let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+        for (let i = 0; i + 1 < ring.length; i += 2) [x0, y0, x1, y1] = [Math.min(x0, ring[i]), Math.min(y0, ring[i + 1]), Math.max(x1, ring[i]), Math.max(y1, ring[i + 1])];
+        return { ring, x0, y0, x1, y1 };
+      });
+    this.inPark = (x, y) => parks.some((a) => x >= a.x0 && x <= a.x1 && y >= a.y0 && y <= a.y1 && pointInRing(x, y, a.ring));
     // Over the bridges too (a road bridge's pavements are decks of their own: see Decks), on their level.
     for (const [i, r] of roads.entries()) {
       if (pause()) yield;
@@ -533,14 +605,19 @@ export class People {
         if (r.width < 4 * M) add(r.pts, busy, -1, level);
         else for (const o of [-0.3, 0, 0.3]) add(o ? offsetLine(r.pts, r.width * o) : r.pts, busy / 2, -1, level);
       }
-      else if (r.kind === 'footway' || r.kind === 'steps' || r.kind === 'cycleway') add(r.pts, r.kind === 'cycleway' ? 0.3 : 0.9, r.kind === 'cycleway' ? -2 : -1, level);
+      else if (r.kind === 'footway' || r.kind === 'steps' || r.kind === 'cycleway') {
+        // (Through a park: busier.)
+        const i = Math.floor((r.pts.length / 2 - 1) / 2) * 2;
+        const park = r.kind !== 'steps' && this.inPark((r.pts[i] + r.pts[i + 2]) / 2, (r.pts[i + 1] + r.pts[i + 3]) / 2);
+        add(r.pts, r.kind === 'cycleway' ? 0.3 : park ? 1.4 : 0.9, r.kind === 'cycleway' ? (park ? -3 : -2) : park ? -4 : -1, level);
+      }
     }
   }
 
   private addWalk(pts: Pts, busy: number, road: number, level: number): void {
     const k = this.walks.length;
-    // (-2: a cycle path.)
-    this.walks.push({ pts, busy, road: Math.max(-1, road), level, ...(road === -2 ? { cycle: true } : {}) });
+    // (-2: a cycle path; -3, one through a park; -4, a footpath through a park.)
+    this.walks.push({ pts, busy, road: Math.max(-1, road), level, ...(road === -2 || road === -3 ? { cycle: true } : {}), ...(road === -3 || road === -4 ? { park: true } : {}) });
     const n = pts.length;
     for (const [end, x, y] of [[0, pts[0], pts[1]], [1, pts[n - 2], pts[n - 1]]] as const) {
       const list = this.ends.get(key(x, y)) ?? [];
@@ -571,12 +648,14 @@ export class People {
       const area = Math.abs(polyArea(ring));
       if (area < 150 * M * M) continue;
       this.areas.push(ring);
-      const count = Math.min(30, Math.round(area / (500 * M * M)) + 1);
+      // (A park's grass, busier than it was: one spot every 300 m².)
+      const lawn = a.kind === 'park' || a.kind === 'grass' || a.kind === 'garden';
+      const count = lawn ? Math.min(50, Math.round(area / (300 * M * M)) + 1) : Math.min(30, Math.round(area / (500 * M * M)) + 1);
       for (let k = 0, tries = 0; k < count && tries < count * 8; tries++) {
         const [x, y] = [x0 + this.rand() * (x1 - x0), y0 + this.rand() * (y1 - y0)];
         if (!pointInRing(x, y, ring)) continue;
         // A square's busier than a lawn.
-        this.addSpot({ x, y, angle: this.rand() * Math.PI * 2, weight: a.kind === 'plaza' ? 1.6 : 0.8, group: this.rand() < 0.55, grass: a.kind === 'park' || a.kind === 'grass' || a.kind === 'garden' });
+        this.addSpot({ x, y, angle: this.rand() * Math.PI * 2, weight: a.kind === 'plaza' ? 1.6 : a.kind === 'park' ? 1.1 : 0.8, group: this.rand() < 0.55, grass: lawn });
         k++;
       }
     }
@@ -784,6 +863,8 @@ export class People {
       trip: null,
       act: null,
       gather: null,
+      game: null,
+      dog: null,
     };
     // (Never in a vehicle standing there: gone again at once.)
     if (this.blocks.some((b) => Math.abs(b.x - x) < b.length && Math.abs(b.y - y) < b.length && bodyDist(b, x, y) < b.r + 0.3 * M)) p.gone = true;
@@ -798,7 +879,18 @@ export class People {
     const p = this.make(ax + (bx - ax) * t, ay + (by - ay) * t, 'walk');
     this.onto(p, k, seg, this.rand() < 0.5 ? 1 : -1);
     if (side !== undefined) p.side = side;
+    // In a park, some out for a run, and some walking the dog (and a few walking it along the street).
+    const walk = this.walks[k];
+    if (walk.park && !walk.cycle && side === undefined && this.rand() < 0.22) {
+      p.jog = true;
+      p.pace = JOG * (0.85 + this.rand() * 0.3);
+    } else if (!walk.cycle && this.rand() < (walk.park ? 0.3 : 0.05)) this.withDog(p);
     return p;
+  }
+
+  /** A dog on its lead with someone, at their heels. */
+  private withDog(p: Person): void {
+    p.dog = { x: p.x - Math.cos(p.angle) * 1.2 * M, y: p.y - Math.sin(p.angle) * 1.2 * M, angle: p.angle, speed: 0, step: 0, look: Math.floor(this.rand() * 4), sniff: 0 };
   }
 
   /** Puts someone onto a walk at a segment, heading one way along it (getting onto it at (x, y) first, if they're not on it). */
@@ -881,6 +973,7 @@ export class People {
     if (burst) this.fresh = false;
     for (let k = burst ? 10 : 1; k > 0; k--) this.shoppers(x0, y0, x1, y1, burst ? () => false : seen, burst);
     this.streetLife(x0, y0, x1, y1, seen, all);
+    this.parkGames(x0, y0, x1, y1, seen, all);
     // Waiting at the bus stops near the view.
     for (const [i, [sx, sy]] of this.stops.entries()) {
       if (sx < x0 || sx > x1 || sy < y0 || sy > y1 || seen(sx, sy)) continue;
@@ -910,6 +1003,12 @@ export class People {
     const areaAt = new Map(this.areas.map((r, k) => [ptsKey(r), k]));
     const storeAt = new Map(this.stores.map((st, k) => [`${st.door[0]},${st.door[1]}`, k]));
     const pitchAt = new Map(this.pitches.map((g) => [`${g.x},${g.y}`, g]));
+    // The games on the grass round the view, as they were (the same game, its ball where it was).
+    const gameAt = new Map(this.games.map((g) => [`${g.x},${g.y}`, g]));
+    for (const g of old.games) {
+      const mine = gameAt.get(`${g.x},${g.y}`);
+      if (mine && inside(g.x, g.y)) mine.ball = g.ball;
+    }
     // The pigeons round the view, as they were.
     const flockAt = new Map(this.flocks.map((f) => [`${f.x},${f.y}`, f]));
     for (const f of old.flocks) {
@@ -955,6 +1054,10 @@ export class People {
         if (g && p.gather.host === p) g.host = p;
         p.gather = g;
         if (!g && (p.mode === 'perform' || p.mode === 'stand')) lost = true;
+      }
+      if (p.game) {
+        p.game = gameAt.get(`${p.game.x},${p.game.y}`) ?? null;
+        if (!p.game && p.mode === 'game') lost = true;
       }
       if (p.picnic) picnics.add(p.picnic);
       this.people.push(p);
@@ -1174,6 +1277,8 @@ export class People {
   ): void {
     this.populate(view);
     this.play(dt);
+    this.kickabouts(dt);
+    this.walkDogs(dt);
     this.walkable = walkable;
     const all = [player, ...movers];
     // Danger: you, going fast right by them (or along the pavement at them); and anything on a call, its siren going.
@@ -1219,6 +1324,9 @@ export class People {
           break;
         case 'vend':
           this.vend(p);
+          break;
+        case 'game':
+          this.inGame(p, dt);
           break;
         case 'join':
           if (this.goTo(p, p.tx, p.ty, p.pace, dt)) {
@@ -1922,7 +2030,150 @@ export class People {
   }
 
   /** No longer at a pitch or a cart (gone, scared, knocked down, done): if they were its performer or vendor, it's free. */
+  /** Games starting on the grass near the view (out of sight): four to seven at a kick-about, two or three throwing a frisbee. */
+  private parkGames(x0: number, y0: number, x1: number, y1: number, seen: (x: number, y: number) => boolean, all: boolean): void {
+    for (const g of this.games) {
+      if (g.x < x0 || g.x > x1 || g.y < y0 || g.y > y1 || seen(g.x, g.y) || (!all && this.rand() > 0.05)) continue;
+      if (this.people.some((p) => p.game === g)) continue;
+      const football = g.kind === 'football';
+      const n = football ? 4 + Math.floor(this.rand() * 4) : 2 + (this.rand() < 0.3 ? 1 : 0);
+      const time = 60 + this.rand() * 180;
+      const players: Person[] = [];
+      for (let k = 0; k < n; k++) {
+        // Round in a ring (a kick-about), or either end of the throw (and one off to the side).
+        const [a, r] = football ? [g.angle + (k / n) * Math.PI * 2 + this.rand() * 0.4, (4 + this.rand() * 2) * M] : [g.angle + (k === 2 ? Math.PI / 2 : k * Math.PI), (k === 2 ? 5 : 7) * M];
+        const [x, y] = [g.x + Math.cos(a) * r, g.y + Math.sin(a) * r];
+        const p = this.make(x, y, 'game');
+        if (p.gone) continue;
+        Object.assign(p, { game: g, tx: x, ty: y, timer: time + this.rand() * 20, angle: a + Math.PI });
+        players.push(p);
+      }
+      const b = g.ball;
+      Object.assign(b, { holder: players[0] ?? null, target: null, dur: 0, hold: 1 + this.rand() });
+    }
+  }
+
+  /** Playing: chasing the ball (if it's theirs to get), holding it, or back to their place in the game, watching it. A while, then off. */
+  private inGame(p: Person, dt: number): void {
+    p.timer -= dt;
+    const g = p.game;
+    if (!g || p.timer < 0) return this.rejoin(p);
+    const b = g.ball;
+    if (b.holder === p) {
+      p.speed = 0;
+      return;
+    }
+    if (b.target === p) {
+      // After it: to where it's coming down (or where it is).
+      const [x, y] = b.dur > 0 ? b.to : [b.x, b.y];
+      this.goTo(p, x, y, RUN * 0.65, dt, 0.4 * M);
+      return;
+    }
+    if (this.goTo(p, p.tx, p.ty, p.pace, dt)) {
+      p.speed = 0;
+      let turn = Math.atan2(b.y - p.y, b.x - p.x) - p.angle;
+      turn -= Math.round(turn / (Math.PI * 2)) * Math.PI * 2;
+      p.angle += turn * Math.min(1, dt * 5);
+    }
+  }
+
+  /**
+   * The games' balls (and frisbees): held a moment (a football dribbled at
+   * their feet), then passed or thrown to someone else in the game, through
+   * the air, a little off; whoever it's to runs and gets it.
+   */
+  private kickabouts(dt: number): void {
+    const playing = new Map<Kickabout, Person[]>();
+    for (const p of this.people) if (p.game && p.mode === 'game') playing.set(p.game, [...(playing.get(p.game) ?? []), p]);
+    for (const g of this.games) {
+      const players = playing.get(g);
+      const b = g.ball;
+      if (!players) {
+        [b.holder, b.target] = [null, null];
+        if (b.dur > 0) [b.x, b.y, b.z, b.dur] = [b.to[0], b.to[1], 0, 0];
+        continue;
+      }
+      if (b.holder && !players.includes(b.holder)) b.holder = null;
+      if (b.target && !players.includes(b.target)) b.target = null;
+      const football = g.kind === 'football';
+      if (b.dur > 0) {
+        b.t += dt;
+        const k = Math.min(1, b.t / b.dur);
+        b.x = b.from[0] + (b.to[0] - b.from[0]) * k;
+        b.y = b.from[1] + (b.to[1] - b.from[1]) * k;
+        // A football along the ground, or lofted a little; a frisbee floating level, then down.
+        b.z = football ? 4 * k * (1 - k) * 0.5 * M : (1.1 + 0.5 * Math.sin(k * Math.PI) - 0.9 * k * k) * M;
+        if (k >= 1) [b.dur, b.z] = [0, 0];
+        continue;
+      }
+      const h = b.holder;
+      if (h) {
+        // At their feet (or in their hand), in front of them.
+        b.x = h.x + Math.cos(h.angle) * 0.45 * M;
+        b.y = h.y + Math.sin(h.angle) * 0.45 * M;
+        b.z = football ? 0 : 1 * M;
+        b.hold -= dt;
+        const others = players.filter((q) => q !== h);
+        if (b.hold > 0 || !others.length) continue;
+        const to = others[Math.floor(this.rand() * others.length)];
+        const [a, d] = [this.rand() * Math.PI * 2, this.rand() * 1.6 * M];
+        b.from = [b.x, b.y];
+        b.to = [to.x + Math.cos(a) * d, to.y + Math.sin(a) * d];
+        b.t = 0;
+        b.dur = Math.max(0.4, Math.hypot(b.to[0] - b.x, b.to[1] - b.y) / (football ? PASS : THROW));
+        h.angle = Math.atan2(b.to[1] - b.y, b.to[0] - b.x);
+        [b.holder, b.target] = [null, to];
+        continue;
+      }
+      // On the ground: whoever it was meant for (or whoever's nearest) gets it.
+      b.target ??= players.reduce((best, q) => (Math.hypot(q.x - b.x, q.y - b.y) < Math.hypot(best.x - b.x, best.y - b.y) ? q : best), players[0]);
+      const t = b.target;
+      if (Math.hypot(t.x - b.x, t.y - b.y) < 0.7 * M) {
+        [b.holder, b.target] = [t, null];
+        b.hold = football ? 0.8 + this.rand() * 2 : 0.5 + this.rand() * 1.2;
+        // Back to (near) where they were.
+        [t.tx, t.ty] = [t.tx + (t.x - t.tx) * 0.3, t.ty + (t.y - t.ty) * 0.3];
+      }
+    }
+  }
+
+  /** The dogs out on their leads: at their owner's heels (wandering from side to side), stopping to sniff about, never further than the lead. */
+  private walkDogs(dt: number): void {
+    for (const p of this.people) {
+      const d = p.dog;
+      if (!d) continue;
+      d.sniff -= dt;
+      const back = p.speed > 0.5 * M ? 1.3 * M : 0.9 * M;
+      const side = Math.sin(this.clock * 0.7 + p.id) * 0.8 * M;
+      const [ux, uy] = [Math.cos(p.angle), Math.sin(p.angle)];
+      const [tx, ty] = [p.x - ux * back - uy * side, p.y - uy * back + ux * side];
+      const far = Math.hypot(tx - d.x, ty - d.y);
+      if (far > 0.3 * M && !(d.sniff > 0 && Math.hypot(p.x - d.x, p.y - d.y) < LEAD * 0.8)) {
+        const speed = Math.min(far * 3, Math.max(p.speed * 1.4, 1.5 * M));
+        d.x += ((tx - d.x) / far) * Math.min(far, speed * dt);
+        d.y += ((ty - d.y) / far) * Math.min(far, speed * dt);
+        d.speed = speed;
+        let turn = Math.atan2(ty - d.y, tx - d.x) - d.angle;
+        turn -= Math.round(turn / (Math.PI * 2)) * Math.PI * 2;
+        d.angle += turn * Math.min(1, dt * 8);
+        d.step = (d.step + (dt * speed) / (0.35 * M)) % 1;
+      } else {
+        d.speed = 0;
+        if (d.sniff < -4 && this.rand() < dt * 0.4) d.sniff = 1.5 + this.rand() * 2.5;
+      }
+      // Pulled along on its lead.
+      const lead = Math.hypot(d.x - p.x, d.y - p.y);
+      if (lead > LEAD) [d.x, d.y] = [p.x + ((d.x - p.x) / lead) * LEAD, p.y + ((d.y - p.y) / lead) * LEAD];
+    }
+  }
+
   private leaveGather(p: Person): void {
+    if (p.game) {
+      const b = p.game.ball;
+      if (b.holder === p) b.holder = null;
+      if (b.target === p) b.target = null;
+      p.game = null;
+    }
     const g = p.gather;
     if (!g) return;
     if (g.host === p) g.host = null;
