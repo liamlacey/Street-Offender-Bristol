@@ -7,7 +7,7 @@
  * in the old games. Pure, so it's tested.
  */
 
-import { type CarInput, type CarState, type CarTuning, DEFAULT_TUNING } from './CarPhysics';
+import { type CarInput, type CarState, type CarTuning, DEFAULT_TUNING, type SurfaceGrip } from './CarPhysics';
 import type { VehicleKind } from '../world/traffic';
 
 const M = 8;
@@ -45,6 +45,22 @@ const TUNED: Record<VehicleKind, Partial<CarTuning>> = {
     descentSpeedGain: 1.6,
   },
 };
+
+/**
+ * How little the going and what it hits matter to it: your armoured truck's
+ * built for anything. `terrain`, how much of the grass's (the dirt's, the
+ * mud's) slip and drag it shrugs off; `people`, how much of the knock of
+ * hitting someone it feels, against an ordinary car's 1.
+ */
+export const RUGGED: Partial<Record<VehicleKind, { terrain: number; people: number }>> = {
+  own: { terrain: 0.9, people: 0.25 },
+};
+
+/** The grip it gets on a surface, as rugged as it is (see RUGGED). */
+export function surfaceFor(kind: VehicleKind, s: SurfaceGrip): SurfaceGrip {
+  const r = RUGGED[kind]?.terrain ?? 0;
+  return r ? { grip: s.grip + (1 - s.grip) * r, drag: s.drag + (1 - s.drag) * r } : s;
+}
 
 const tunings = new Map<VehicleKind, CarTuning>();
 

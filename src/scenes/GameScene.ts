@@ -51,7 +51,7 @@ import { ACTION_EVENT, HudScene, PAUSE_EVENT, RESET_EVENT, STREET_EVENT } from '
 import type { MenuData } from './MenuScene';
 import type { LoadingScene } from './LoadingScene';
 import { type Spot, jumpSpot } from '../world/overview';
-import { WALKER, stepWalker, tuningFor } from '../car/rides';
+import { RUGGED, WALKER, stepWalker, surfaceFor, tuningFor } from '../car/rides';
 import { SkidMarks } from './SkidMarks';
 import { TrafficLayer } from './TrafficLayer';
 import { COLOURS, Traffic, VEHICLES, type Vehicle, type VehicleKind, collideBodies } from '../world/traffic';
@@ -964,7 +964,7 @@ export class GameScene extends Phaser.Scene {
     this.surface = on ? deckSurface(on.deck.road) : this.surfaces.at(car.x, car.y);
     const [sx, sy] = on ? on.decks.slope(on.deck, on.along) : this.terrain.slope(car.x, car.y);
     const [px, py] = [car.x, car.y];
-    stepCar(car, this.input_, dt, SURFACE_GRIP[SURFACE_KIND[this.surface]], tuningFor(this.ride.kind), { x: sx, y: sy });
+    stepCar(car, this.input_, dt, surfaceFor(this.ride.kind, SURFACE_GRIP[SURFACE_KIND[this.surface]]), tuningFor(this.ride.kind), { x: sx, y: sy });
     // Over a speed hump: a jolt, and a little hop.
     if (this.level === 0) {
       const hump = this.humps.over(car, px, py);
@@ -1300,8 +1300,9 @@ export class GameScene extends Phaser.Scene {
       // What hit them (or went over them) loses some speed to it: you feel it.
       if (h.by === -1) {
         const [bvx, bvy] = [car.vx, car.vy];
-        // (Less, the heavier it is.)
-        const loss = h.loss * Math.sqrt(car.invMass ?? 1);
+        // (Less, the heavier it is; and in your armoured truck, hardly at all.)
+        const rugged = RUGGED[this.ride.kind]?.people ?? 1;
+        const loss = h.loss * Math.sqrt(car.invMass ?? 1) * rugged;
         car.vx *= 1 - loss;
         car.vy *= 1 - loss;
         if (h.how === 'hit') {
@@ -1313,13 +1314,13 @@ export class GameScene extends Phaser.Scene {
           if (lost > 6) this.dent(null, h.person.x, h.person.y, lost * 2.5);
           this.audio?.knock();
           this.audio?.crash(Math.min(120, lost * 2));
-          if (h.speed > 3 * 8) this.shake(0.16, Math.min(2.6, 0.5 + h.speed / 60));
+          if (h.speed > 3 * 8) this.shake(0.16 * rugged, Math.min(2.6, 0.5 + h.speed / 60) * rugged);
         } else {
           // A wheel over them: a thud and a lurch, like a hump.
           this.audio?.crash(Math.min(60, 12 + h.speed * 0.15));
-          this.hopPeak = Math.min(0.5, 0.15 + h.speed / 500);
+          this.hopPeak = Math.min(0.5, 0.15 + h.speed / 500) * rugged;
           this.hopLeft = HOP_TIME;
-          this.shake(0.07, Math.min(1.2, 0.3 + h.speed / 160));
+          this.shake(0.07 * rugged, Math.min(1.2, 0.3 + h.speed / 160) * rugged);
         }
       } else {
         const v = h.by === undefined ? undefined : this.traffic.vehicles.find((o) => o.id === h.by);

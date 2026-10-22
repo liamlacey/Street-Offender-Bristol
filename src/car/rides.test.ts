@@ -1,17 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { NO_INPUT, createCar, stepCar, carHull, CAR_LENGTH } from './CarPhysics';
-import { WALKER, stepWalker, tuningFor } from './rides';
+import { NO_INPUT, SURFACE_GRIP, createCar, stepCar, carHull, CAR_LENGTH } from './CarPhysics';
+import { RUGGED, WALKER, stepWalker, surfaceFor, tuningFor } from './rides';
 import { VEHICLES } from '../world/traffic';
 import { STIFFNESS } from './dents';
 import { THINGS, WALLS, breaks, treeToughness } from '../world/damage';
 
-const run = (kind: Parameters<typeof tuningFor>[0], seconds: number) => {
+const run = (kind: Parameters<typeof tuningFor>[0], seconds: number, on: keyof typeof SURFACE_GRIP = 'road') => {
   const car = createCar();
-  for (let t = 0; t < seconds; t += 1 / 120) stepCar(car, { ...NO_INPUT, throttle: 1 }, 1 / 120, undefined, tuningFor(kind));
+  for (let t = 0; t < seconds; t += 1 / 120) stepCar(car, { ...NO_INPUT, throttle: 1 }, 1 / 120, surfaceFor(kind, SURFACE_GRIP[on]), tuningFor(kind));
   return Math.hypot(car.vx, car.vy);
 };
 
 describe('what you can drive', () => {
+  it('your armoured truck goes over the grass, the dirt and the mud nearly as easily as the road (an ordinary car, not); and hardly feels hitting someone', () => {
+    const road = run('own', 20);
+    for (const on of ['grass', 'dirt', 'mud'] as const) expect(run('own', 20, on)).toBeGreaterThan(road * 0.85);
+    expect(run('hatch', 20, 'grass')).toBeLessThan(run('hatch', 20) * 0.6);
+    expect(surfaceFor('own', SURFACE_GRIP.grass).grip).toBeGreaterThan(0.9);
+    expect(RUGGED.own!.people).toBeLessThan(0.5);
+    expect(RUGGED.hatch).toBeUndefined();
+  });
+
   it('handles as it would: a bus slower than a car, a bike quick off the mark but slow flat out', () => {
     expect(run('bus', 3)).toBeLessThan(run('hatch', 3) * 0.6);
     expect(run('own', 20)).toBeGreaterThan(run('van', 20));

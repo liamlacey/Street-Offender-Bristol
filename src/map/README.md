@@ -901,7 +901,8 @@ but the water and the buildings.
   a good part of its speed to it (12% plus 16% for every 40 m/s, at most 30%). Your car
   feels it: its front's dented where they were hit (as by any knock, by 2.5 × the speed
   it lost), it's twisted round towards the side they were hit on (the speed lost there,
-  off its middle), and there's a thump and a jolt. Then it goes on over them (below). Faster than 6.7 m/s (15 mph) and they stay down;
+  off its middle), and there's a thump and a jolt (in your armoured truck, a quarter of
+  all that: it hardly notices). Then it goes on over them (below). Faster than 6.7 m/s (15 mph) and they stay down;
   slower, they're up in 2.5 to 4.5 s and on their way.
 - **Driven over**: someone lying there isn't knocked again: the vehicle goes over them,
   each axle (a third of its length in from each end) bumping over them as it reaches
