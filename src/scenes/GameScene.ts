@@ -420,6 +420,7 @@ export class GameScene extends Phaser.Scene {
     this.zoom = this.restZoom();
     cam.setZoom(this.zoom);
     cam.centerOn(this.car.x, this.car.y);
+    freshView(cam);
     this.updatePerspective();
     this.ground.update(cam.worldView, this.perspective, true);
     const v0 = cam.worldView;
@@ -939,7 +940,8 @@ export class GameScene extends Phaser.Scene {
       .then((region) => {
         this.enter(region, false);
         this.putDown(exactly(region.map));
-        this.ground.update(this.cameras.main.worldView, this.perspective, true);
+        // (The ground where you are now, all of it, before you see it: not where you were.)
+        this.ground.update(freshView(this.cameras.main), this.perspective, true);
         this.scene.stop('loading');
         this.ready = true;
       })
@@ -968,6 +970,7 @@ export class GameScene extends Phaser.Scene {
     [this.lookX, this.lookY, this.lookVX, this.lookVY, this.pace] = [0, 0, 0, 0, 0];
     const cam = this.cameras.main;
     cam.centerOn(to.x, to.y);
+    freshView(cam);
     this.updatePerspective();
     const v = cam.worldView;
     this.traffic.refill();
@@ -2291,4 +2294,14 @@ interface Shown {
 /** Whether (x, y) is in (or just round) the view. */
 function x0y0Seen(view: Phaser.Geom.Rectangle, x: number, y: number): boolean {
   return x > view.left - 40 && x < view.right + 40 && y > view.top - 40 && y < view.bottom + 40;
+}
+
+/**
+ * A camera's view of the world, where it's looking now: it's only worked
+ * out as the camera's drawn, so after it's moved (put down somewhere else)
+ * it's where it was till then.
+ */
+function freshView(cam: Phaser.Cameras.Scene2D.Camera): Phaser.Geom.Rectangle {
+  const [w, h] = [cam.width / cam.zoomX, cam.height / cam.zoomY];
+  return cam.worldView.setTo(cam.scrollX + cam.width / 2 - w / 2, cam.scrollY + cam.height / 2 - h / 2, w, h);
 }
