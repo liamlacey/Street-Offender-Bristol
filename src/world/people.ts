@@ -1073,6 +1073,27 @@ export class People {
     return this.nextId;
   }
 
+  /**
+   * How far (and which way) to step something at (x, y) to be clear of a
+   * vehicle (`room` px clear of its side), or null if it's clear already: an
+   * animal's never under one.
+   */
+  private outFrom(m: Mover, x: number, y: number, room: number): [number, number] | null {
+    const half = m.length / 2 + room;
+    if (Math.abs(x - m.x) > half + m.width || Math.abs(y - m.y) > half + m.width) return null;
+    const [c, s] = [Math.cos(m.angle), Math.sin(m.angle)];
+    const [a, b] = [(x - m.x) * c + (y - m.y) * s, -(x - m.x) * s + (y - m.y) * c];
+    const [hl, hw] = [m.length / 2 + room, m.width / 2 + room];
+    if (Math.abs(a) >= hl || Math.abs(b) >= hw) return null;
+    // Out the nearer side (or end).
+    if (hw - Math.abs(b) <= hl - Math.abs(a)) {
+      const d = (Math.sign(b) || 1) * hw - b;
+      return [-s * d, c * d];
+    }
+    const d = (Math.sign(a) || 1) * hl - a;
+    return [c * d, s * d];
+  }
+
   /** Someone (or a group) at a spot, standing about; in a park or square, some wander off about it. */
   private atSpot(s: Spot): void {
     // On the grass in a park: a picnic, now and then: a blanket, and two to five sitting round it.
@@ -1278,9 +1299,9 @@ export class People {
     this.populate(view);
     this.play(dt);
     this.kickabouts(dt);
-    this.walkDogs(dt);
     this.walkable = walkable;
     const all = [player, ...movers];
+    this.walkDogs(dt, all);
     // Danger: you, going fast right by them (or along the pavement at them); and anything on a call, its siren going.
     for (const m of [...(player.onFoot ? [] : [player]), ...movers.filter((o) => o.siren)]) {
       const pspeed = Math.hypot(m.vx, m.vy);
@@ -2137,11 +2158,38 @@ export class People {
     }
   }
 
-  /** The dogs out on their leads: at their owner's heels (wandering from side to side), stopping to sniff about, never further than the lead. */
-  private walkDogs(dt: number): void {
+  /**
+   * The dogs out on their leads: at their owner's heels (wandering from side
+   * to side), stopping to sniff about, never further than the lead. Anything
+   * coming at them and they're out of its way at once, to the side (the lead
+   * let go of, if need be): a dog's never hit.
+   */
+  private walkDogs(dt: number, all: Mover[]): void {
     for (const p of this.people) {
       const d = p.dog;
       if (!d) continue;
+      // Something coming (or about to run them down, or there): off to the side of its way, fast.
+      let away: [number, number] | null = null;
+      for (const m of all) {
+        if ((m.level ?? 0) !== p.level || Math.abs(m.x - d.x) > 14 * M || Math.abs(m.y - d.y) > 14 * M) continue;
+        const sp = Math.hypot(m.vx, m.vy);
+        const [ux, uy] = sp > 0.2 * M ? [m.vx / sp, m.vy / sp] : [Math.cos(m.angle), Math.sin(m.angle)];
+        const [rx, ry] = [d.x - m.x, d.y - m.y];
+        const along = rx * ux + ry * uy;
+        const side = -rx * uy + ry * ux;
+        if (along > -m.length / 2 && along < m.length / 2 + sp * 1.3 + 0.5 * M && Math.abs(side) < m.width / 2 + 1.2 * M) away = [-uy * (Math.sign(side) || 1), ux * (Math.sign(side) || 1)];
+      }
+      if (away) {
+        const speed = 7 * M;
+        d.x += away[0] * speed * dt;
+        d.y += away[1] * speed * dt;
+        d.angle = Math.atan2(away[1], away[0]);
+        d.speed = speed;
+        d.step = (d.step + (dt * speed) / (0.35 * M)) % 1;
+        d.sniff = 0;
+        this.clearOfAll(d, all, p.level, 0.4 * M);
+        continue;
+      }
       d.sniff -= dt;
       const back = p.speed > 0.5 * M ? 1.3 * M : 0.9 * M;
       const side = Math.sin(this.clock * 0.7 + p.id) * 0.8 * M;
@@ -2164,7 +2212,22 @@ export class People {
       // Pulled along on its lead.
       const lead = Math.hypot(d.x - p.x, d.y - p.y);
       if (lead > LEAD) [d.x, d.y] = [p.x + ((d.x - p.x) / lead) * LEAD, p.y + ((d.y - p.y) / lead) * LEAD];
+      this.clearOfAll(d, all, p.level, 0.4 * M);
     }
+  }
+
+  /** An animal (a dog, a pigeon on the ground) stepped clear of every vehicle on its level, whatever else: it's never under one. */
+  private clearOfAll(a: { x: number; y: number }, all: Mover[], level: number, room: number): boolean {
+    let moved = false;
+    for (const m of all) {
+      if ((m.level ?? 0) !== level) continue;
+      const out = this.outFrom(m, a.x, a.y, room);
+      if (!out) continue;
+      a.x += out[0];
+      a.y += out[1];
+      moved = true;
+    }
+    return moved;
   }
 
   private leaveGather(p: Person): void {
@@ -2218,9 +2281,12 @@ export class People {
           if (b.timer > 3.5) f.birds.splice(i, 1);
           continue;
         }
-        if (threat) {
+        // (Anything at all right by it, however slowly it's coming: it's off, never under it.)
+        const by = all.find((m) => (m.level ?? 0) === 0 && this.outFrom(m, b.x, b.y, 1 * M));
+        const from = by ? [by.x, by.y] : threat;
+        if (from) {
           // Up and away from it (each its own way, more or less).
-          const a = Math.atan2(b.y - threat[1], b.x - threat[0]) + (this.rand() - 0.5) * 1.6;
+          const a = Math.atan2(b.y - from[1], b.x - from[0]) + (this.rand() - 0.5) * 1.6;
           const v = (5 + this.rand() * 3) * M;
           Object.assign(b, { flying: true, timer: 0, angle: a, vx: Math.cos(a) * v, vy: Math.sin(a) * v, peck: false });
           continue;

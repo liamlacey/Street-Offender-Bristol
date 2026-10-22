@@ -824,6 +824,9 @@ rack's stands (the same each time for the same rack); knocked over, they fall wi
 
 ## People
 
+The animals (the dogs, the pigeons) are never hit: they always get out of the way. Only
+the people can be (all of them adults: there are no children).
+
 **Where they go** (worked out when the map's built: `venues`): the businesses counted for
 the traffic (shops, cafés, bars and the like: each one's node, or its outline's middle),
 and the sights (`tourism=attraction/museum/gallery/viewpoint/artwork/aquarium/zoo/
@@ -943,7 +946,10 @@ but the water and the buildings.
     about one in five's out for a run (2.4 to 3.2 m/s) and three in ten of the rest have
     a dog on a lead (a black Lab, a golden retriever, a border collie or a Jack Russell;
     one in twenty along the street): at their heels, wandering from side to side, now
-    and then stopping to sniff about, never more than the lead's 2.2 m away.
+    and then stopping to sniff about, never more than the lead's 2.2 m away. Never hit:
+    anything on its level coming at it (its path, the next 1.3 s of it, within 1.2 m of
+    its side) and it darts off to that side at 7 m/s, the lead let go of; and whatever
+    else, it's kept 0.4 m clear of every vehicle.
 - **Busy pedestrian streets** (`src/world/streetLife.ts`): how busy each pedestrian street
   is, by the shops, cafés and the like within 25 m of it per 100 m (Broadmead, East Street,
   Corn Street, Cotham Hill: 15 to 50). Along each, 2.5 people per 10 m, plus 0.15 for each
@@ -981,7 +987,8 @@ but the water and the buildings.
     then, side-stepping anyone walking right by. Anything coming at them faster than
     1.5 m/s within 7 m (or slower, within 3.5 m), or anyone running near, and they're all
     up and away (5 to 8 m/s, climbing), gone in 3.5 s; back 40 s to 2 minutes later, out
-    of sight.
+    of sight. Never hit: one with anything within 1 m of it, however slowly it's coming,
+    is up and away too.
 - **Market stalls** at the open-air markets (`amenity=marketplace`, not a building: St
   Nicholas Market, the Harbourside Market, Temple Quay Market, the Tobacco Factory Market,
   Whiteladies Road Farmers' Market, Bristol Fruit Market; kept as `markets` when the map's

@@ -74,4 +74,32 @@ describe('park life', () => {
     expect(runners.length).toBeGreaterThan(5);
     expect(Math.min(...runners.map((p) => p.pace))).toBeGreaterThan(Math.max(...along.filter((p) => !p.jog).map((p) => p.pace)));
   });
+
+  it("never lets an animal be hit: a dog's out of the way of a car coming at it, and the pigeons are off even from one creeping up", () => {
+    const world = buildWorld(map);
+    const people = new People(map, { rand: seeded(3), seats: world.loose });
+    const view = { x0: 150, y0: 150, x1: 1450, y1: 1050 };
+    people.populate(view, true);
+    // Someone walking their dog along the path; a car coming straight down it at them (25 mph), and through.
+    const walker = (people as unknown as { walker(k: number, seg: number, t: number): (typeof people.people)[number] }).walker(0, 0, 0.5);
+    walker.dog ??= { x: walker.x, y: walker.y, angle: 0, speed: 0, step: 0, look: 0, sniff: 0 };
+    const dog = walker.dog;
+    const car: Mover = { x: walker.x - 40 * M, y: walker.y, angle: 0, length: 4.4 * M, width: 1.8 * M, vx: 11 * M, vy: 0, id: 7 };
+    const under = (x: number, y: number, m: Mover) => Math.abs(x - m.x) < m.length / 2 && Math.abs(y - m.y) < m.width / 2;
+    for (let t = 0; t < 8; t += 1 / 30) {
+      car.x += car.vx / 30;
+      people.update(1 / 30, view, car, [], () => 'green', () => true);
+      expect(under(dog.x, dog.y, car)).toBe(false);
+    }
+    // A car creeping onto the pigeons (a crawl: no danger to anyone): they're off before it's on them.
+    const flock = people.flocks[0];
+    // (They come while it's out of sight.)
+    for (let k = 0; k < 8; k++) flock.birds.push({ x: flock.x + (k % 4) * M, y: flock.y + (k > 3 ? M : -M), z: 0, angle: 0, vx: 0, vy: 0, timer: 1, peck: true, flying: false });
+    const creep: Mover = { x: flock.x - 12 * M, y: flock.y, angle: 0, length: 4.4 * M, width: 1.8 * M, vx: 0.2 * M, vy: 0, id: 8 };
+    for (let t = 0; t < 120; t += 1 / 30) {
+      creep.x += creep.vx / 30;
+      people.update(1 / 30, view, creep, [], () => 'green', () => true);
+      for (const b of flock.birds) if (!b.flying) expect(under(b.x, b.y, creep)).toBe(false);
+    }
+  });
 });
