@@ -8,6 +8,7 @@
 import { type Area, type GameMap, type Lane, type Pts, type Road, pointInRing, ridgeAxis } from '../map/osm';
 import { lineLength, pointAlong, subPolyline } from './world';
 import { footprints, onFootprints, streetLifeWork } from './streetLife';
+import { rectsOverlap } from './playgrounds';
 import { type Work, drain } from './work.ts';
 
 /** A car park's bays: how wide, how deep, and the aisle between rows, px. */
@@ -75,6 +76,8 @@ export function carParkBays(map: GameMap, a: Area): Bays {
   const through = nearby.filter((r) => r.kind !== 'footway' && r.kind !== 'steps' && r.pts.some((v, k) => k % 2 === 0 && v > x0 - 80 && v < x1 + 80 && r.pts[k + 1] > y0 - 80 && r.pts[k + 1] < y1 + 80));
   const onRoad = (x: number, y: number, own: Road | null) => through.some((r) => r !== own && distanceTo(x, y, r.pts) < r.width / 2);
   if (aisles.length) {
+    // The bays laid so far (middle, which way, half deep, half wide): none laid over another (where aisles meet, or one bends).
+    const laid: [number, number, number, number, number][] = [];
     for (const r of aisles) {
       const p = r.pts;
       for (let k = 0; k + 3 < p.length; k += 2) {
@@ -84,20 +87,23 @@ export function carParkBays(map: GameMap, a: Area): Bays {
         const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
         const [nx, ny] = [-uy, ux];
         for (const side of [-1, 1]) {
-          let last = -Infinity;
-          for (let d = BAY_WIDTH / 2; d <= len - BAY_WIDTH / 2; d += BAY_WIDTH) {
-            const [px, py] = [ax + ux * d, ay + uy * d];
-            const [sx, sy] = [px + nx * side * (r.width / 2), py + ny * side * (r.width / 2)];
-            const [ex, ey] = [sx + nx * side * BAY_DEPTH, sy + ny * side * BAY_DEPTH];
+          // Each bay: from the line before it to the line at d, out from the aisle's edge.
+          for (let d = BAY_WIDTH * 1.5; d <= len - BAY_WIDTH / 2; d += BAY_WIDTH) {
+            const line = (at: number) => {
+              const [px, py] = [ax + ux * at, ay + uy * at];
+              const [sx, sy] = [px + nx * side * (r.width / 2), py + ny * side * (r.width / 2)];
+              return [sx, sy, sx + nx * side * BAY_DEPTH, sy + ny * side * BAY_DEPTH];
+            };
+            const [a, b] = [line(d - BAY_WIDTH), line(d)];
             // Only bays that are in the car park (not out over its edge, or a building), and not out on another road.
-            if (!inside(ex, ey) || !inside(sx, sy) || onRoad(ex, ey, r) || onRoad((sx + ex) / 2, (sy + ey) / 2, r)) continue;
-            lines.push(sx, sy, ex, ey);
-            // A bay between this line and the last.
-            if (d - last < BAY_WIDTH * 1.01) {
-              const [cx, cy] = [sx + nx * side * (BAY_DEPTH / 2) - ux * (BAY_WIDTH / 2), sy + ny * side * (BAY_DEPTH / 2) - uy * (BAY_WIDTH / 2)];
-              spaces.push({ x: cx, y: cy, angle: Math.atan2(ny * side, nx * side), length: BAY_DEPTH, taken: CAR_PARK_TAKEN, endOn: true });
-            }
-            last = d;
+            if (![a, b].every(([sx, sy, ex, ey]) => inside(sx, sy) && inside(ex, ey) && !onRoad(ex, ey, r) && !onRoad((sx + ex) / 2, (sy + ey) / 2, r))) continue;
+            const [cx, cy] = [(a[0] + a[2] + b[0] + b[2]) / 4, (a[1] + a[3] + b[1] + b[3]) / 4];
+            const angle = Math.atan2(ny * side, nx * side);
+            const bay: [number, number, number, number, number] = [cx, cy, angle, BAY_DEPTH / 2 - 1, BAY_WIDTH / 2 - 1];
+            if (laid.some((o) => Math.abs(o[0] - cx) < 2 * BAY_DEPTH && Math.abs(o[1] - cy) < 2 * BAY_DEPTH && rectsOverlap(o, bay))) continue;
+            laid.push(bay);
+            lines.push(...a, ...b);
+            spaces.push({ x: cx, y: cy, angle, length: BAY_DEPTH, taken: CAR_PARK_TAKEN, endOn: true });
           }
         }
       }

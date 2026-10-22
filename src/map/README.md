@@ -211,7 +211,8 @@ the left side's traffic goes the way's way, the right side's against it).
 - **Car parks** (`amenity=parking`): bays 2.5 m wide and 5 m deep along both sides
   of each aisle mapped through one (`service=parking_aisle`); where none's mapped,
   double rows of them with 6 m aisles between, lined up with its longest side. Only
-  bays wholly inside its outline, and none out on a road through it.
+  bays wholly inside its outline, none out on a road through it, and none over another
+  (where aisles meet, one branches off another, or an aisle bends: the first laid stays).
 - **Lane lines**: the centre line of a two-way road, and a dashed line between each
   lane each way where `lanes`, `lanes:forward` or `lanes:backward` say there's more
   than one (a one-way road wide enough for two and untagged gets one line); none
