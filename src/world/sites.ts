@@ -99,6 +99,11 @@ export interface SiteLife {
   wanderers: { x: number; y: number }[];
 }
 
+/** How many spots a site's things are tried in, at most, laid out over it; and tried for each thing. */
+const SPOTS = 12_000;
+const PUT_TRIES = 3_000;
+const SOLID_CELL = 16 * M;
+
 const cache = new WeakMap<GameMap, SiteLife>();
 
 /** What's on a map's building sites and brownfield (worked out once for each). */
@@ -143,10 +148,38 @@ export function* siteLifeWork(map: GameMap): Work<SiteLife> {
     const overlaps = (b: { x0: number; y0: number; x1: number; y1: number }) => b.x1 > box.x0 && b.x0 < box.x1 && b.y1 > box.y0 && b.y0 < box.y1;
     const near = { solid: solid.filter(overlaps), roads: roads.filter(overlaps), water: water.filter(overlaps), trees: trees.filter(([x, y]) => x > box.x0 - M && x < box.x1 + M && y > box.y0 - M && y < box.y1 + M) };
     const inside = (x: number, y: number) => a.rings.every((r, i) => pointInRing(x, y, r) === (i === 0));
-    const inBuilding = (x: number, y: number) => near.solid.some((b) => within(x, y, b) && pointInRing(x, y, b.pts));
+    // (The buildings by the 16 m squares they're in: a big site has hundreds round it.)
+    const solidCells = new Map<number, typeof near.solid>();
+    for (const b of near.solid) {
+      for (let i = Math.floor(b.x0 / SOLID_CELL); i <= Math.floor(b.x1 / SOLID_CELL); i++) {
+        for (let j = Math.floor(b.y0 / SOLID_CELL); j <= Math.floor(b.y1 / SOLID_CELL); j++) {
+          const k = i * 100003 + j;
+          const list = solidCells.get(k);
+          if (list) list.push(b);
+          else solidCells.set(k, [b]);
+        }
+      }
+    }
+    const inBuilding = (x: number, y: number) => (solidCells.get(Math.floor(x / SOLID_CELL) * 100003 + Math.floor(y / SOLID_CELL)) ?? []).some((b) => within(x, y, b) && pointInRing(x, y, b.pts));
     const onRoad = (x: number, y: number, pad: number) => near.roads.some((r) => within(x, y, r) && distanceTo(x, y, r.pts) < r.half + pad);
+    // (The trees by the 16 m squares they're in, too: there can be thousands round a big site.)
+    const treeCells = new Map<number, [number, number][]>();
+    for (const t of near.trees) {
+      const k = Math.floor(t[0] / SOLID_CELL) * 100003 + Math.floor(t[1] / SOLID_CELL);
+      const list = treeCells.get(k);
+      if (list) list.push(t);
+      else treeCells.set(k, [t]);
+    }
+    const byTree = (x: number, y: number) => {
+      for (let i = Math.floor((x - M) / SOLID_CELL); i <= Math.floor((x + M) / SOLID_CELL); i++) {
+        for (let j = Math.floor((y - M) / SOLID_CELL); j <= Math.floor((y + M) / SOLID_CELL); j++) {
+          for (const [tx, ty] of treeCells.get(i * 100003 + j) ?? []) if (Math.hypot(tx - x, ty - y) < 1 * M) return true;
+        }
+      }
+      return false;
+    };
     const open = (x: number, y: number) =>
-      inside(x, y) && !inBuilding(x, y) && !onRoad(x, y, 1 * M) && !near.water.some((b) => within(x, y, b) && pointInRing(x, y, b.pts)) && !near.trees.some(([tx, ty]) => Math.hypot(tx - x, ty - y) < 1 * M);
+      inside(x, y) && !inBuilding(x, y) && !byTree(x, y) && !onRoad(x, y, 1 * M) && !near.water.some((b) => within(x, y, b) && pointInRing(x, y, b.pts));
     let seed = hash(ring[0], ring[1]) || 1;
     const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const { ux, uy } = ridgeAxis(ring);
@@ -171,7 +204,10 @@ export function* siteLifeWork(map: GameMap): Work<SiteLife> {
     /** Somewhere for something this big: the first of the spots tried (in the order given) where it fits, clear of the rest. */
     const put = (kind: SiteKind | TipKind, spots: [number, number][], turn: () => number, apart = 0.8 * M): Thing<never> | null => {
       const [len, wide] = SITE_SIZE[kind];
+      // (Not every spot, on a big site: enough to find somewhere if there is anywhere.)
+      let tries = 0;
       for (const [x, y] of spots) {
+        if (++tries > PUT_TRIES) break;
         const angle = turn();
         const [cx, cy] = [Math.cos(angle), Math.sin(angle)];
         const [hl, hw] = [len / 2, wide / 2];
@@ -184,12 +220,16 @@ export function* siteLifeWork(map: GameMap): Work<SiteLife> {
       }
       return null;
     };
-    // Spots inside it, a metre apart, tried in an order of their own; and those near its edge (within `reach`), nearest the gate first.
+    // Spots inside it, a metre apart (further on a big one: no more than about SPOTS of them), tried in an order of their own; and
+    // those near its edge (within `reach`), nearest the gate first.
     const grid: [number, number][] = [];
-    for (let x = box.x0 + M; x < box.x1; x += M) for (let y = box.y0 + M; y < box.y1; y += M) if (inside(x, y)) grid.push([x, y]);
+    const step = Math.max(M, Math.ceil(Math.sqrt(area / SPOTS) / M) * M);
+    for (let x = box.x0 + M; x < box.x1; x += step) for (let y = box.y0 + M; y < box.y1; y += step) if (inside(x, y)) grid.push([x, y]);
     const shuffled = grid.map((p) => [p, hash(p[0], p[1])] as const).sort((p, q) => p[1] - q[1]).map(([p]) => p);
     const edgeDist = (x: number, y: number) => distanceTo(x, y, edge);
-    const byEdge = (reach: number) => shuffled.filter(([x, y]) => edgeDist(x, y) < reach);
+    // (Each spot's distance from the edge, worked out once.)
+    const fromEdge = new Map(shuffled.map((p) => [p, edgeDist(p[0], p[1])]));
+    const byEdge = (reach: number) => shuffled.filter((p) => fromEdge.get(p)! < reach);
     if (!site) {
       life.wastes.push(ring);
       // Fly-tipped: in piles, inside its edge on the side nearest a road first (or anywhere along its edge, if there's no road near), then about it.
@@ -271,7 +311,7 @@ export function* siteLifeWork(map: GameMap): Work<SiteLife> {
     // A tower crane over a big one, in the middle of it (its mast's foot clear of everything).
     const [cx, cy] = centroid(ring);
     if (area >= CRANE_SITE) {
-      const spot = shuffled.filter(([x, y]) => open(x, y) && edgeDist(x, y) > 8 * M).sort((p, q) => Math.hypot(p[0] - cx, p[1] - cy) - Math.hypot(q[0] - cx, q[1] - cy))[0];
+      const spot = shuffled.filter((p) => fromEdge.get(p)! > 8 * M && open(p[0], p[1])).sort((p, q) => Math.hypot(p[0] - cx, p[1] - cy) - Math.hypot(q[0] - cx, q[1] - cy))[0];
       if (spot) {
         life.cranes.push({ x: r1(spot[0]), y: r1(spot[1]), angle: +(rand() * Math.PI * 2).toFixed(3) });
         placed.push([spot[0], spot[1], 0, 2 * M, 2 * M]);
@@ -288,18 +328,20 @@ export function* siteLifeWork(map: GameMap): Work<SiteLife> {
       if (t) life.things.push(t);
     }
     // The machines, out in the middle.
-    const middle = shuffled.filter(([x, y]) => edgeDist(x, y) > 4 * M);
+    const middle = shuffled.filter((p) => fromEdge.get(p)! > 4 * M);
     for (const kind of [...(area >= DIGGER_SITE ? ['digger'] : []), ...(area >= DUMPER_SITE ? ['dumper'] : [])] as SiteKind[]) {
       const t = put(kind, middle, () => rand() * Math.PI * 2, 2 * M);
       if (t) life.things.push(t);
     }
     // Where the workers stand about.
     const workers = Math.min(WORKERS, Math.max(1, Math.floor(area / PER_WORKER)));
+    let here = life.workers.filter((w) => inside(w.x, w.y)).length;
     for (const [x, y] of middle) {
-      if (life.workers.filter((w) => inside(w.x, w.y)).length >= workers) break;
+      if (here >= workers) break;
       if (!open(x, y) || placed.some((o) => Math.hypot(o[0] - x, o[1] - y) < Math.max(o[3], o[4]) + 1.5 * M)) continue;
       if (life.workers.some((w) => Math.hypot(w.x - x, w.y - y) < 6 * M)) continue;
       life.workers.push({ x: r1(x), y: r1(y) });
+      here++;
     }
   }
   cache.set(map, life);
