@@ -69,6 +69,9 @@ export interface Deck {
   y0: number;
   x1: number;
   y1: number;
+  /** A tunnel's: how far its mouth goes in at each end, px (see tunnelMouth). */
+  mouth0?: number;
+  mouth1?: number;
   /** The stretches along it (from, to, px) where it's up off the ground, once worked out. */
   raised?: [number, number][];
 }
@@ -83,6 +86,44 @@ export function waterOf(map: Pick<GameMap, 'areas'>): (x: number, y: number) => 
       return { rings: a.rings, box: [x0, y0, x1, y1] };
     });
   return (x, y) => waters.some((w) => x >= w.box[0] && x <= w.box[2] && y >= w.box[1] && y <= w.box[3] && w.rings.filter((r) => pointInRing(x, y, r)).length % 2 === 1);
+}
+
+const mouths = new WeakMap<Road, [number, number]>();
+
+/**
+ * How far into a tunnel its mouth goes at each end (`end` 0 its start, 1
+ * its end), px: up to DECK_END, but short of any road or path over it
+ * there (a tunnel's end mapped just beyond the road it goes under: its
+ * mouth, and the way into it, aren't out on the road). A metre at least.
+ */
+export function tunnelMouth(tunnel: Road, end: 0 | 1, roads: Road[]): number {
+  let had = mouths.get(tunnel);
+  if (!had) {
+    const p = tunnel.pts;
+    const length = lineLength(p);
+    const reach = Math.min(length, DECK_END);
+    const over = (x0: number, y0: number, x1: number, y1: number) =>
+      roads.filter((r) => {
+        if (r === tunnel || r.tunnel || r.bridge || r.kind === 'rail' || r.kind === 'steps') return false;
+        const pad = r.width / 2 + PAVEMENT + 8;
+        let [a, b, c, d] = [Infinity, Infinity, -Infinity, -Infinity];
+        for (let i = 0; i + 1 < r.pts.length; i += 2) [a, b, c, d] = [Math.min(a, r.pts[i]), Math.min(b, r.pts[i + 1]), Math.max(c, r.pts[i]), Math.max(d, r.pts[i + 1])];
+        return c + pad > x0 && a - pad < x1 && d + pad > y0 && b - pad < y1;
+      });
+    had = [0, 1].map((e) => {
+      const [x, y] = e ? [p[p.length - 2], p[p.length - 1]] : [p[0], p[1]];
+      const near = over(x - reach, y - reach, x + reach, y + reach);
+      // In from the end, half a metre at a time, to the edge of whatever's over it (and its pavements).
+      for (let a = 0; a <= reach; a += 4) {
+        const [px, py] = pointAlong(p, e ? length - a : a);
+        const hit = near.some((r) => nearestAlong(r.pts, px, py).distance < r.width / 2 + (r.pavement ? PAVEMENT : 0) + 2);
+        if (hit) return Math.max(8, a - 4);
+      }
+      return reach;
+    }) as [number, number];
+    mouths.set(tunnel, had);
+  }
+  return had[end];
 }
 
 /** Where a point is along a polyline (its distance along) and how far from it. */
@@ -174,6 +215,7 @@ export class Decks {
       const p = d.road.pts;
       d.open0 = !touches(p[0], p[1], d);
       d.open1 = !touches(p[p.length - 2], p[p.length - 1], d);
+      if (tunnels) [d.mouth0, d.mouth1] = [tunnelMouth(d.road, 0, roads), tunnelMouth(d.road, 1, roads)];
     }
   }
 
@@ -252,7 +294,7 @@ export class Decks {
     if (level === this.level) return on ? this.level : 0;
     if (!on) return 0;
     const { deck, along } = on;
-    if (!((deck.open0 && along < DECK_END) || (deck.open1 && along > deck.length - DECK_END))) return 0;
+    if (!((deck.open0 && along < (deck.mouth0 ?? DECK_END)) || (deck.open1 && along > deck.length - (deck.mouth1 ?? DECK_END)))) return 0;
     return this.meets(deck, along, x, y) ? this.level : 0;
   }
 

@@ -15,7 +15,7 @@ import { drawCarParks, drawHumps, drawLaneFills, drawLanes, drawPaint } from './
 import { newCanvas } from './canvas';
 import { Surface, surfacePaint } from './surface';
 import { type ChunkIndex, lineLength, offsetLine, pointAlong, shadowOffset, subPolyline } from './world';
-import { type Deck, type DeckEdges, Decks, waterOf } from './decks';
+import { type Deck, type DeckEdges, Decks, tunnelMouth, waterOf } from './decks';
 import { Terrain } from './terrain';
 
 type Ctx = CanvasRenderingContext2D;
@@ -349,7 +349,8 @@ function drawPortals(ctx: Ctx, r: Road, all: Road[]): void {
   const joined = (x: number, y: number) => all.some((o) => o !== r && o.tunnel && [0, o.pts.length - 2].some((k) => Math.hypot(o.pts[k] - x, o.pts[k + 1] - y) < 2));
   for (const [end, x, y] of [[0, p[0], p[1]], [1, p[n - 2], p[n - 1]]] as const) {
     if (joined(x, y)) continue;
-    const into = Math.min(length, 5 * 8);
+    // (Short of a road over it, at a tunnel mapped just beyond the road it goes under.)
+    const into = Math.min(length, 5 * 8, tunnelMouth(r, end, all));
     const mouth = end ? subPolyline(p, length - into, length) : subPolyline(p, 0, into);
     if (mouth.length < 4) continue;
     ctx.lineCap = 'butt';

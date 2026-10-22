@@ -4,7 +4,7 @@ import bristol from '../map/bristol.json';
 import { buildingLook, clipHalfPlane, hatch, parseColour } from './buildingLook';
 import { Surface, SurfaceGrid, surfacePaint } from './surface';
 import { CHUNK, buildWorld, buildingWalls, chunkKey, cutWall, lineLength, pointAlong, shadowOffset, subPolyline } from './world';
-import { DECK_END, Decks, SHADOW_HEIGHT } from './decks';
+import { DECK_END, Decks, SHADOW_HEIGHT, tunnelMouth } from './decks';
 import { nearestOnSegment } from '../physics/collisions';
 
 const map = bristol as unknown as GameMap;
@@ -320,6 +320,20 @@ describe('Decks', () => {
     const high = new Decks([road, { ...side, deck: Array(51).fill(40) }], () => 0);
     expect(lines(high)).toHaveLength(4);
     expect(high.over(400, 46)).toBeNull();
+  });
+
+  it("doesn't take you down into a tunnel from a road over it, where the tunnel's mapped to end just beyond the road (Clifton Down's, under Whiteladies Road)", () => {
+    // A railway tunnel ending at x = 0, coming from the west; a road 10 m wide (pavements either side) over it, its middle 6 m in from the tunnel's end.
+    const tunnel: Road = { kind: 'rail', width: 3.8 * 8, pts: [-800, 0, 0, 0], tunnel: true };
+    const road: Road = { kind: 'primary', width: 80, pts: [-48, -400, -48, 400], pavement: 'both' };
+    const tunnels = new Decks([tunnel, road], () => 0, () => false, true);
+    // Driving along the road over it: still on the ground.
+    for (let y = -40; y <= 40; y += 4) expect(tunnels.levelAt(0, -48, y)).toBe(0);
+    expect(tunnels.levelAt(0, -12, 0)).toBe(0);
+    // From the track beyond the road, at its mouth: in.
+    expect(tunnels.levelAt(0, -3, 0)).toBe(2);
+    expect(tunnelMouth(tunnel, 1, [tunnel, road])).toBeLessThanOrEqual(8);
+    expect(tunnelMouth(tunnel, 0, [tunnel, road])).toBe(DECK_END);
   });
 
   it('has its tunnels a level of their own (2): in only at a portal, walled all along, from the ground at one end to the ground at the other', () => {

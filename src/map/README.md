@@ -535,7 +535,11 @@ Walkway under the railway's bridge) under it.
 In and out only at its ends (its portals, where it meets the track in the open: an end
 on into more tunnel is a joint); walled both sides all along it (unbreakable, as rock
 is); its floor from the ground's height at one portal to the other's. On the surface,
-each portal is drawn: its dark mouth going in (5 m of it), under a stone arch. Down in
+each portal is drawn: its dark mouth going in (5 m of it), under a stone arch. The
+mouth (and the way in, 8 m of it) stops short of any road or path over the tunnel (its
+pavements too, and a quarter of a metre more; a metre in at least): a tunnel mapped to end
+just beyond the road it goes under (Clifton Down's, under Whiteladies Road) is gone into
+from the track, not from the road. Down in
 one, everything above is in the dark (82%) and the tunnel's drawn over it, lit (sooty
 walls, a lamp every 12 m with its pool of light), you in it; and the trains down there
 with you. Only the trains go in them.
