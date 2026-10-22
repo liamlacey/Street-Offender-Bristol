@@ -44,6 +44,8 @@ const JOIN_RAIL = 4.5 * 8;
 /** How far apart two decks side by side can be and be joined. */
 const joinOf = (a: Deck, b: Deck) => (a.road.kind === 'rail' && b.road.kind === 'rail' ? JOIN_RAIL : JOIN);
 const LEVEL = 1.5 * 8;
+/** A deck's end is a way on only where it's within this of the ground's height, px (not where it's over you, a short bridge you're driving under). */
+const MEETS = 1.5 * 8;
 
 /** One side of a deck: a parapet along it, or the gap to the deck beside it paved over (`gap` px wide, out along `nx`, `ny`). */
 export interface DeckEdges {
@@ -250,8 +252,13 @@ export class Decks {
     if (level === this.level) return on ? this.level : 0;
     if (!on) return 0;
     const { deck, along } = on;
-    if ((deck.open0 && along < DECK_END) || (deck.open1 && along > deck.length - DECK_END)) return this.level;
-    return 0;
+    if (!((deck.open0 && along < DECK_END) || (deck.open1 && along > deck.length - DECK_END))) return 0;
+    return this.meets(deck, along, x, y) ? this.level : 0;
+  }
+
+  /** Whether a deck's level with the ground at (x, y), `along` it (a bridge's, that is: a tunnel's always taken to be). */
+  private meets(deck: Deck, along: number, x: number, y: number): boolean {
+    return this.level === 2 || Math.abs(this.height(deck, along) - this.ground(x, y)) < MEETS;
   }
 
   /**
@@ -287,7 +294,7 @@ export class Decks {
         const [rx, ry] = [x - ex, y - ey];
         const along = rx * ux + ry * uy;
         const across = Math.abs(rx * uy - ry * ux);
-        if (across <= deck.half + 4 && along > -reach && along < DECK_END + reach) return true;
+        if (across <= deck.half + 4 && along > -reach && along < DECK_END + reach && this.meets(deck, ex === p[0] && ey === p[1] ? along : deck.length - along, x, y)) return true;
       }
     }
     return false;

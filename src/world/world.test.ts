@@ -245,6 +245,18 @@ describe('Decks', () => {
     expect(decks.levelAt(1, 900, 0)).toBe(0);
   });
 
+  it('a short bridge, driven under: you stay under it, and it\'s drawn over you, even within DECK_END of its ends', () => {
+    // A railway bridge 12 m long over a road in a cutting: the road 5 m below its deck.
+    const short: Road = { kind: 'rail', width: 32, pts: [0, 0, 96, 0], bridge: true, deck: [0, 0, 0, 0, 0, 0, 0] };
+    const cutting = new Decks([short], (x, y) => (Math.abs(y) < 16 && x > 8 && x < 88 ? -40 : 0));
+    expect(cutting.levelAt(0, 48, 0)).toBe(0);
+    expect(cutting.levelAt(0, 20, 0)).toBe(0);
+    expect(cutting.atEnd(48, 0, 20)).toBe(false);
+    // But at its very end, level with the ground: on.
+    expect(cutting.levelAt(0, 4, 0)).toBe(1);
+    expect(cutting.atEnd(-4, 0, 20)).toBe(true);
+  });
+
   it('follows the height the LIDAR measured along it, meeting the ground at its ends', () => {
     // An arched footbridge 64 px long over level ground: up 16 px in the middle, measured every 16 px, a little off at the ends.
     const arch: Road = { kind: 'footway', width: 24, pts: [0, 0, 64, 0], bridge: true, deck: [2, 10, 16, 10, 2] };
