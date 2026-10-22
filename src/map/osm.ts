@@ -30,6 +30,9 @@ export type AreaKind =
   | 'field'
   /** Allotments (`landuse=allotments`): plots of vegetables and soil, sheds, paths between. */
   | 'allotments'
+  /** A house's patio, behind it; and its drive, in front (see src/world/homes.ts: worked out as the map's made ready, not in it). */
+  | 'patio'
+  | 'drive'
   /** Where people live (`landuse=residential`): their gardens and yards, between and behind the houses, under all else. */
   | 'gardens'
   | 'flowerbed'
@@ -492,7 +495,20 @@ export type PropKind =
   | 'carpet'
   | 'burntcar'
   | 'tent'
-  | 'campfire';
+  | 'campfire'
+  // In people's gardens (see src/world/homes.ts).
+  | 'wheelie'
+  | 'recyclebox'
+  | 'gardenset'
+  | 'shed'
+  | 'trampoline'
+  | 'washline'
+  | 'bbq'
+  | 'pushbike'
+  | 'paddling'
+  | 'greenhouse'
+  | 'playhouse'
+  | 'plantpot';
 
 export interface Prop {
   kind: PropKind;
@@ -1146,6 +1162,8 @@ export function areaKind(tags: Tags): AreaKind | null {
 /** Where an area sits in the drawing order (later on top). */
 export const AREA_ORDER: Record<AreaKind, number> = {
   gardens: -1,
+  patio: 5,
+  drive: 6,
   field: 0,
   allotments: 1,
   wood: 0,

@@ -977,6 +977,37 @@ but the water and the buildings.
     anything on its level coming at it (its path, the next 1.3 s of it, within 1.2 m of
     its side) and it darts off to that side at 7 m/s, the lead let go of; and whatever
     else, it's kept 0.4 m clear of every vehicle.
+- **Homes** (`src/world/homes.ts`; worked out as each region's made ready, not in the
+  map): the houses are the buildings tagged `house`, `terrace`, `semidetached_house`,
+  `detached`, `bungalow` or `residential`, and untagged ones (`building=yes`) of 25 to
+  220 m² where people live (`landuse=residential`). Each faces its nearest street (a
+  residential street up to a trunk road, within 45 m; the one of its four sides most
+  towards it, unless it's turned more than about 53° away, when it's left be). From
+  its front, out to the road and its pavement, a path, another house (half way to it)
+  or ground that isn't garden (car parks, water, squares, pitches, ...): its front
+  garden, if it's 1.2 m or more (at most 12 m). From its back, the same: its back
+  garden, if it's 2.5 m or more (at most 25 m), half way to the house behind. Each as
+  wide as the house. In them:
+  - Along the front (by the pavement), a low brick wall (0.9 m), a hedge (1.1 m) or a
+    picket fence (1 m), the same down each side of a street; a 1 m gap for the gate,
+    and between the front gardens the same. Round the back gardens, 1.8 m fences (or
+    2 m hedges, now and then a wall): on one side of each (the house next door puts up
+    the other; and on that side too where there's no house next door), and along the
+    back, once where two back gardens meet. All of it knocked down like any wall.
+  - A drive (block paving, 3 m wide, at one side), most fronts 5 m deep or more on a
+    house 5.5 m wide or more that isn't a terrace; a car parked on it, nose in, 70% of
+    the time (a parking space like any other: see Parked cars). A gap in the wall for it.
+  - Out the front: one to three wheelie bins (black, green, blue or brown) by the wall,
+    half the time a recycling box, now and then a plant pot by the door.
+  - Out the back: a patio (buff slabs, up to 3 m deep along the back of the house) in
+    three in four gardens 6 m deep or more, a table and four chairs on most, a
+    barbecue on some; a shed at the far end of about half those 7 m deep or more; and
+    by chance, about the garden: a rotary washing line (45%), a trampoline (a quarter
+    of those 9 m deep and 4.5 m wide), a greenhouse (15% of those 10 m deep), a kids'
+    playhouse, a paddling pool, a bike lying on the grass, plant pots. Each is loose:
+    knocked about, and smashed (a greenhouse to glass, a shed to planks, a bin split)
+    if it's hit hard enough, leaving its wreck.
+  - The same every time, from where each house is.
 - **Building sites and brownfield** (`src/world/sites.ts`; drawn bare earth, and
   rough ground: patchy rank grass and weeds over earth, gravel and bits of rubble):
   - A building site (150 m² or more) is fenced all round with Heras panels (2 m steel

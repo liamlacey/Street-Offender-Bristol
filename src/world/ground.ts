@@ -56,6 +56,8 @@ export function surfacePalette(): Palette {
     park: s(Surface.Grass),
     garden: s(Surface.Grass),
     gardens: s(Surface.Grass),
+    patio: s(Surface.Pavement),
+    drive: s(Surface.Road),
     field: s(Surface.Dirt),
     allotments: s(Surface.Dirt),
     flowerbed: s(Surface.Mud),

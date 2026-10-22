@@ -137,6 +137,8 @@ const WIND_Y = Math.sin(0.35) * 0.9;
 const HOP_TIME = 0.35;
 /** At most this often your vehicle's damage is repainted, ms. */
 const REPAINT_EVERY = 250;
+/** The loose things with more than one look (which, by their `variant`). */
+const VARIED: ReadonlySet<string> = new Set(['foodcart', 'stall', 'wheelie']);
 /** How many bits of what's been broken (not the benches, bins and the rest standing about) before the smallest stop being kept. */
 const MAX_PIECES = 1500;
 
@@ -265,6 +267,8 @@ export class GameScene extends Phaser.Scene {
   private machines: SiteMachines | null = null;
   private machineBodies: LooseProp[] = [];
   private looseByChunk = new Map<string, number[]>();
+  /** Which chunk each loose thing's in the index under (by its place in `loose`). */
+  private readonly looseChunk: string[] = [];
   private effects!: CarEffects;
   private skids!: SkidMarks;
   private audio: CarAudio | null = null;
@@ -1726,7 +1730,8 @@ export class GameScene extends Phaser.Scene {
     const dt = 1 / 60;
     // The trolleys being pushed about: kept where they are in the index (now and then).
     if (++this.looseFrames % 15 === 0 && this.people.pushing()) this.reindexLoose();
-    for (const { body } of this.loose) {
+    for (let i = 0; i < this.loose.length; i++) {
+      const { body } = this.loose[i];
       if (!body.moved || body.gone) continue;
       stepBody(body, dt, 3);
       collideBodyWithStatic(body, this.posts[body.level]);
@@ -1751,19 +1756,38 @@ export class GameScene extends Phaser.Scene {
         body.vx = body.vy = body.spin = 0;
         // Settled, wherever it ended up: it's still loose for the next time it's hit.
         body.moved = false;
-        this.reindexLoose();
+        this.relocateLoose(i);
       }
     }
   }
 
   private reindexLoose(): void {
     this.looseByChunk.clear();
+    this.looseChunk.length = 0;
     this.loose.forEach(({ body }, i) => {
       const key = chunkKey(Math.floor(body.x / CHUNK), Math.floor(body.y / CHUNK));
+      this.looseChunk[i] = key;
       const list = this.looseByChunk.get(key);
       if (list) list.push(i);
       else this.looseByChunk.set(key, [i]);
     });
+  }
+
+  /** One loose thing's come to rest (or been put down): in the index under where it is now (there are tens of thousands of them). */
+  private relocateLoose(i: number): void {
+    const { body } = this.loose[i];
+    const key = chunkKey(Math.floor(body.x / CHUNK), Math.floor(body.y / CHUNK));
+    const was = this.looseChunk[i];
+    if (was === key) return;
+    if (was !== undefined) {
+      const list = this.looseByChunk.get(was);
+      const at = list ? list.indexOf(i) : -1;
+      if (at >= 0) list!.splice(at, 1);
+    }
+    this.looseChunk[i] = key;
+    const list = this.looseByChunk.get(key);
+    if (list) list.push(i);
+    else this.looseByChunk.set(key, [i]);
   }
 
   private updateSinking(dt: number): void {
@@ -1938,10 +1962,7 @@ export class GameScene extends Phaser.Scene {
       .setRotation(d.angle)
       .setDepth(level === 1 ? DEPTH.onDeck : DEPTH.props);
     this.loose.push({ body, image });
-    const key = chunkKey(Math.floor(d.x / CHUNK), Math.floor(d.y / CHUNK));
-    const list = this.looseByChunk.get(key);
-    if (list) list.push(this.loose.length - 1);
-    else this.looseByChunk.set(key, [this.loose.length - 1]);
+    this.relocateLoose(this.loose.length - 1);
   }
 
   /** What showed a knocked-down post goes: a lamp, a traffic light's head, a beacon (a tree's crown falls instead). */
@@ -2118,7 +2139,7 @@ export class GameScene extends Phaser.Scene {
         l.parts = undefined;
       } else
         l.image ??= this.add
-          .image(body.x, body.y, ((key) => (body.wrecked ? wreckTexture(this, key) : key))(body.kind === 'foodcart' || body.kind === 'stall' ? `${TEX.prop(body.kind)}-${body.variant ?? 0}` : body.home ? TEX.prop(body.kind as PropKind) : TEX.debris(body.kind as DebrisKind)))
+          .image(body.x, body.y, ((key) => (body.wrecked ? wreckTexture(this, key) : key))(VARIED.has(body.kind) ? `${TEX.prop(body.kind)}-${body.variant ?? 0}` : body.home ? TEX.prop(body.kind as PropKind) : TEX.debris(body.kind as DebrisKind)))
           .setScale((PLAY.has(body.kind) ? PLAY_SCALE : 1) / ART_SCALE)
           .setDepth(body.level === 1 ? DEPTH.onDeck : DEPTH.props);
       const image = l.image;

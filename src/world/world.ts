@@ -14,6 +14,7 @@ import { streetLifeWork } from './streetLife';
 import { parkLifeWork } from './parkLife';
 import { playgroundsWork } from './playgrounds';
 import { CRANE_HEIGHT, siteLifeWork } from './sites';
+import { homesWork } from './homes';
 import { Terrain } from './terrain';
 import type { DebrisKind, ThingKind, WallKind } from './damage';
 import { type Work, drain, every } from './work.ts';
@@ -97,7 +98,25 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
   burntcar: { r: 7.5, length: 35, invMass: 0.6 },
   tent: { r: 6, length: 18, invMass: 8 },
   campfire: { r: 5.5, invMass: 0.5 },
+  // In people's gardens (see homes.ts): wheelie bins and a recycling box, light, sent flying; a table and chairs; a shed and a
+  // greenhouse (heavier, shoved and smashed); a trampoline (big, light); a rotary washing line (its pole); a barbecue; a bike;
+  // a paddling pool, full of water; a kids' playhouse; a plant pot.
+  wheelie: { r: 2.6, invMass: 9 },
+  recyclebox: { r: 2, invMass: 14 },
+  gardenset: { r: 6.5, invMass: 3 },
+  shed: { r: 7, length: 19, invMass: 0.9 },
+  trampoline: { r: 12.5, invMass: 2 },
+  washline: { r: 1.5, invMass: 4 },
+  bbq: { r: 2.6, invMass: 6 },
+  pushbike: { r: 2, length: 13, invMass: 10 },
+  paddling: { r: 7, invMass: 1.5 },
+  greenhouse: { r: 7.5, length: 20, invMass: 1.2 },
+  playhouse: { r: 5.5, invMass: 3 },
+  plantpot: { r: 2, invMass: 8 },
 };
+
+/** The maps whose gardens' drives and patios have been put in with their areas. */
+const withHomes = new WeakSet<GameMap>();
 
 /** Which of the food carts sells ice cream (see CARTS). */
 const ICE_CREAM = 2;
@@ -543,6 +562,13 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   };
   yield;
 
+  // People's gardens (see homes.ts): their drives and patios on the ground (with the map's own areas, once).
+  const homes = yield* homesWork(map);
+  if (!withHomes.has(map)) {
+    withHomes.add(map);
+    for (const pts of homes.drives) map.areas.push({ kind: 'drive', rings: [pts] });
+    for (const pts of homes.patios) map.areas.push({ kind: 'patio', rings: [pts] });
+  }
   const ground: Wall[] = [];
   const deck: Wall[] = [];
   const addRing = (to: Wall[], ring: Pts, r: number, closed: boolean, level: number, kind?: WallKind, height?: number) => {
@@ -586,6 +612,8 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
     addRing(level ? deck : ground, line.pts, r, false, level, line.kind as WallKind, line.height);
     if (pause()) yield;
   }
+  // The gardens' walls, fences and hedges (see homes.ts).
+  for (const l of homes.lines) addRing(ground, l.pts, LINE_THICKNESS[l.kind]!, false, 0, l.kind, l.height);
   // The building sites' fences (Heras panels: see sites.ts).
   for (const run of (yield* siteLifeWork(map)).fences) addRing(ground, run, 0.6, false, 0, 'heras');
   // The edge of the map.
@@ -648,6 +676,12 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   for (const c of sites.cranes) {
     posts[0].push({ x: c.x, y: c.y, r: POST_RADIUS.crane!, thing: 'crane', index: fixed.length });
     fixed.push({ kind: 'crane', x: c.x, y: c.y, angle: c.angle, height: CRANE_HEIGHT, tower: true, level: 0 });
+  }
+  // What's in the gardens (see homes.ts).
+  for (const t of homes.things) {
+    const l = LOOSE[t.kind]!;
+    const p = { kind: t.kind, x: t.x, y: t.y };
+    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: t.angle, spin: 0, moved: false, level: 0, home: homeOf(p), ...(t.variant === undefined ? {} : { variant: t.variant }) });
   }
   // What's in the playgrounds (see playgrounds.ts).
   for (const t of yield* playgroundsWork(map)) {

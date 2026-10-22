@@ -9,6 +9,7 @@ import { type Area, type GameMap, type Lane, type Pts, type Road, pointInRing, r
 import { lineLength, pointAlong, subPolyline } from './world';
 import { footprints, onFootprints, streetLifeWork } from './streetLife';
 import { rectsOverlap } from './playgrounds';
+import { homesWork } from './homes';
 import { type Work, drain } from './work.ts';
 
 /** A car park's bays: how wide, how deep, and the aisle between rows, px. */
@@ -270,6 +271,8 @@ export function* parkingWork(map: GameMap): Work<Space[]> {
     out.push(...spaces.filter((s) => !shelters.includes(s) && free(s)));
     yield;
   }
+  // The drives in front of people's houses (see homes.ts).
+  for (const s of (yield* homesWork(map)).spaces) if (free(s)) out.push({ ...s });
   // (Not along the kerb where a car park's bays come right up to it; nor one over another, round a tight bend or a corner.)
   const lots = new Map<number, Space[]>();
   const cell = (x: number, y: number) => Math.floor(x / LOT_CELL) * 100003 + Math.floor(y / LOT_CELL);

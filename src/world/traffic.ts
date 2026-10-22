@@ -579,12 +579,14 @@ export function* lanesWork(map: GameMap, paths = false, joins: Join[] = []): Wor
       // (Less, on a street too narrow for them and a lane each way: they're half up the kerb.)
       const squeeze = Math.min(1, Math.max(0, r.width - 2 * 2.3 * M) / Math.max(1e-6, parked(r, 1) + parked(r, -1)));
       const right = r.oneway ? -r.width / 2 : ((parked(r, dir === 1 ? -1 : 1) - parked(r, dir)) / 2) * squeeze;
-      const resLeft = Math.min(reserved(dir), Math.max(0, left - right - count * 2.6 * M));
+      const resLeft = Math.min(reserved(dir), Math.max(0, left - right - count * 2.3 * M));
       const resRight = r.oneway ? Math.min(reserved(-1), Math.max(0, left - right - resLeft - count * 2.6 * M)) : 0;
       const each = Math.min(LANE * 1.4, (left - right - resLeft - resRight) / count);
       for (let index = 0; index < count; index++) {
         // On a narrow two-way street, over to the kerb, room to pass (no nearer it than a car's half width and a little).
-        const offset = Math.max(left - resLeft - (index + 0.5) * each, r.oneway || count > 1 ? -Infinity : Math.min(left - resLeft - 1.1 * M, left * 0.6));
+        // (Over to the parked cars, if there are any, no nearer them than a van's or an ambulance's half width.)
+        const kerb = parked(r, dir) ? 1.25 * M : 1.1 * M;
+        const offset = Math.max(left - resLeft - (index + 0.5) * each, r.oneway || count > 1 ? -Infinity : Math.min(left - resLeft - kerb, left * 0.6));
         const pts = dir === 1 ? offsetLine(middle, offset) : reversed(offsetLine(middle, -offset));
         const path = makePath(pts.map(round1), r.bridge ? 1 : 0);
         path.bends = bendsOf(path, 8 * M);

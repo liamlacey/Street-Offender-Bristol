@@ -294,24 +294,14 @@ function wasteland(size: number): HTMLCanvasElement {
 
 /**
  * People's gardens and yards, behind and between the houses: lawns, a little
- * rougher and darker than a park's, with patios and paths of slabs, beds of
- * soil and the odd shrub.
+ * rougher and darker than a park's, with beds of soil and the odd shrub (their
+ * patios and drives are drawn over them: see homes.ts).
  */
 function gardens(size: number): HTMLCanvasElement {
   return tile(size, (ctx, rand) => {
     ctx.fillStyle = '#517f3a';
     ctx.fillRect(0, 0, size, size);
     speckle(ctx, rand, size, size * 4, ['rgba(40,75,28,0.6)', 'rgba(140,180,90,0.35)'], 1.1);
-    // Patios and paths: patches of slabs.
-    for (let i = 0; i < size / 40; i++) {
-      const [x, y, w, h] = [rand() * size, rand() * size, 10 + rand() * 18, 8 + rand() * 14];
-      const v = Math.floor(rand() * 20);
-      ctx.fillStyle = `rgb(${150 + v},${144 + v},${132 + v})`;
-      ctx.fillRect(x, y, w, h);
-      ctx.fillStyle = 'rgba(60,56,50,0.25)';
-      for (let k = 0; k < w; k += 6) ctx.fillRect(x + k, y, 0.6, h);
-      for (let k = 0; k < h; k += 6) ctx.fillRect(x, y + k, w, 0.6);
-    }
     // Beds of soil, and shrubs.
     for (let i = 0; i < size / 32; i++) {
       ctx.fillStyle = 'rgba(94,72,48,0.8)';
@@ -336,6 +326,9 @@ export function artPalette(ctx: Ctx): Palette {
     park: lawn,
     garden: pattern(grass(96, '#4f8d3d', 'rgba(40,80,30,0.6)', 'rgba(150,200,100,0.35)', false, 4)),
     gardens: pattern(gardens(160)),
+    // A patio: big slabs, buff; a drive: block paving.
+    patio: pattern(slabs([176, 164, 140], 20, 80, 'rgba(70,60,45,0.3)', 59)),
+    drive: pattern(slabs([138, 112, 98], 6, 48, 'rgba(50,35,30,0.35)', 71)),
     field: pattern(field(128)),
     allotments: pattern(allotments(128)),
     flowerbed: pattern(flowerbed(64)),

@@ -894,6 +894,161 @@ export function createArt(scene: Phaser.Scene): void {
       ctx.fill();
     });
   }
+  // In people's gardens (see src/world/homes.ts), from above, along x.
+  // Wheelie bins, each council's colour: their lids, hinged at the back, the handle.
+  ['#26282b', '#2f6b34', '#2d5c9a', '#6b4a2e'].forEach((colour, v) => {
+    canvasTexture(scene, `${TEX.prop('wheelie')}-${v}`, 7, 6, (ctx) => {
+      shade(ctx, 6.2, 5.2);
+      roundRect(ctx, 0, 0, 6, 5, 0.5, colour);
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(0.6, 0.6, 4.4, 3.8);
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(0, 0, 0.7, 5);
+    });
+  });
+  // A recycling box: green, open, full of tins and paper.
+  canvasTexture(scene, TEX.prop('recyclebox'), 6, 5, (ctx) => {
+    shade(ctx, 5, 4);
+    roundRect(ctx, 0, 0, 4.8, 3.6, 0.4, '#2e7d3a');
+    ctx.fillStyle = '#1f5a28';
+    ctx.fillRect(0.5, 0.5, 3.8, 2.6);
+    for (const [x, y, c] of [[1.2, 1.2, '#d8d8d2'], [2.6, 1.6, '#c0392b'], [3.4, 1, '#e8e2c8'], [1.8, 2.3, '#9aa0a6']] as [number, number, string][]) circle(ctx, x, y, 0.5, c);
+  });
+  // A garden table and four chairs: a round white table, its parasol's hole, green chairs round it.
+  canvasTexture(scene, TEX.prop('gardenset'), 16, 16, (ctx) => {
+    for (const [x, y] of [[7.5, 1.6], [7.5, 13.4], [1.6, 7.5], [13.4, 7.5]]) {
+      circle(ctx, x + 0.6, y + 0.6, 1.7, 'rgba(0,0,0,0.2)');
+      roundRect(ctx, x - 1.6, y - 1.6, 3.2, 3.2, 0.8, '#3d6b3a');
+    }
+    circle(ctx, 8.2, 8.2, 4.4, 'rgba(0,0,0,0.22)');
+    circle(ctx, 7.5, 7.5, 4.4, '#ecebe4');
+    circle(ctx, 7.5, 7.5, 0.6, '#9a9a94');
+  });
+  // A shed: felt roof, its ridge along it, a little window at one end.
+  canvasTexture(scene, TEX.prop('shed'), 21, 16, (ctx) => {
+    shade(ctx, 20, 15);
+    roundRect(ctx, 0, 0, 19.2, 14.4, 0.4, '#3a3d40');
+    ctx.fillStyle = '#2d3033';
+    ctx.fillRect(0, 7.2, 19.2, 7.2);
+    ctx.fillStyle = '#4a4e52';
+    ctx.fillRect(0, 6.8, 19.2, 0.8);
+    ctx.fillStyle = '#7a5a38';
+    ctx.fillRect(0, 0, 0.8, 14.4);
+    ctx.fillRect(18.4, 0, 0.8, 14.4);
+  });
+  // A trampoline: its black mat, the blue pad round it, the safety net's poles.
+  canvasTexture(scene, TEX.prop('trampoline'), 27, 27, (ctx) => {
+    circle(ctx, 13.8, 13.8, 12.8, 'rgba(0,0,0,0.2)');
+    circle(ctx, 12.8, 12.8, 12.8, '#2f6fb5');
+    circle(ctx, 12.8, 12.8, 10.6, '#1a1b1d');
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 0.4;
+    for (const r of [4, 7.5]) {
+      ctx.beginPath();
+      ctx.arc(12.8, 12.8, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      circle(ctx, 12.8 + Math.cos(a) * 12, 12.8 + Math.sin(a) * 12, 0.7, '#d8dadc');
+    }
+  });
+  // A rotary washing line: its arms and lines (a square web), some washing pegged out.
+  canvasTexture(scene, TEX.prop('washline'), 22, 22, (ctx) => {
+    ctx.strokeStyle = 'rgba(220,220,214,0.85)';
+    ctx.lineWidth = 0.3;
+    for (const r of [3, 6, 9]) ctx.strokeRect(11 - r, 11 - r, r * 2, r * 2);
+    ctx.strokeStyle = '#9ea2a6';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(1.5, 1.5);
+    ctx.lineTo(20.5, 20.5);
+    ctx.moveTo(20.5, 1.5);
+    ctx.lineTo(1.5, 20.5);
+    ctx.stroke();
+    const rand = seeded(17);
+    const colours = ['#e8e4dc', '#c0392b', '#2d5c9a', '#f2c94c', '#7d4ea8', '#e8e4dc'];
+    for (let k = 0; k < 7; k++) {
+      const r = [6, 9][k % 2];
+      const side = Math.floor(rand() * 4);
+      const t = -r + 1 + rand() * (r * 2 - 3);
+      const [x, y] = side === 0 ? [11 + t, 11 - r] : side === 1 ? [11 + r, 11 + t] : side === 2 ? [11 + t, 11 + r] : [11 - r, 11 + t];
+      ctx.fillStyle = colours[k % colours.length];
+      if (side % 2) ctx.fillRect(x - 0.6, y, 1.2, 2.2);
+      else ctx.fillRect(x, y - 0.6, 2.2, 1.2);
+    }
+    circle(ctx, 11, 11, 1, '#6a6e72');
+  });
+  // A barbecue: a black kettle, its lid's vent; a bag of charcoal by it.
+  canvasTexture(scene, TEX.prop('bbq'), 8, 6, (ctx) => {
+    circle(ctx, 3.2, 3.2, 2.5, 'rgba(0,0,0,0.22)');
+    circle(ctx, 2.8, 2.8, 2.5, '#1c1d1f');
+    circle(ctx, 2.4, 2.3, 0.8, '#45484c');
+    roundRect(ctx, 5.4, 1.4, 2, 3, 0.3, '#3a5f8a');
+  });
+  // A bike, left lying: its wheels, frame and bars.
+  canvasTexture(scene, TEX.prop('pushbike'), 14, 6, (ctx) => {
+    ctx.strokeStyle = '#1d1e20';
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(1, 2.7);
+    ctx.lineTo(5, 2.7);
+    ctx.moveTo(8.6, 2.7);
+    ctx.lineTo(12.8, 2.7);
+    ctx.stroke();
+    ctx.strokeStyle = '#c0392b';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(3, 2.7);
+    ctx.lineTo(11, 2.7);
+    ctx.stroke();
+    ctx.fillStyle = '#2a2b2e';
+    ctx.fillRect(10.4, 0.4, 0.8, 4.6);
+    roundRect(ctx, 4.4, 1.9, 2.2, 1.6, 0.5, '#1d1e20');
+  });
+  // A paddling pool: inflatable, blue, the water in it.
+  canvasTexture(scene, TEX.prop('paddling'), 16, 16, (ctx) => {
+    circle(ctx, 8.1, 8.1, 7.2, 'rgba(0,0,0,0.18)');
+    circle(ctx, 7.5, 7.5, 7.2, '#3b8fd6');
+    circle(ctx, 7.5, 7.5, 5.6, '#8fd0ee');
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillRect(4.5, 5, 3, 0.5);
+    ctx.fillRect(8, 9, 2.4, 0.5);
+  });
+  // A greenhouse: glass panes on an aluminium frame, tomatoes inside.
+  canvasTexture(scene, TEX.prop('greenhouse'), 21, 17, (ctx) => {
+    shade(ctx, 20, 16);
+    roundRect(ctx, 0, 0, 20, 15.2, 0.3, '#4f7d44');
+    ctx.fillStyle = 'rgba(200,225,230,0.55)';
+    ctx.fillRect(0, 0, 20, 15.2);
+    ctx.strokeStyle = '#d4d8da';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(0.25, 0.25, 19.5, 14.7);
+    ctx.beginPath();
+    for (let x = 4; x < 20; x += 4) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 15.2);
+    }
+    ctx.moveTo(0, 7.6);
+    ctx.lineTo(20, 7.6);
+    ctx.stroke();
+    for (const [x, y] of [[3, 3.5], [8, 4], [13, 3], [16, 11], [6, 11.5]]) circle(ctx, x, y, 0.6, '#d0402a');
+  });
+  // A kids' playhouse: plastic, its red roof's ridge, a yellow chimney.
+  canvasTexture(scene, TEX.prop('playhouse'), 13, 13, (ctx) => {
+    shade(ctx, 12, 12);
+    roundRect(ctx, 0, 0, 11.2, 11.2, 0.6, '#d8402e');
+    ctx.fillStyle = '#b8321f';
+    ctx.fillRect(0, 5.6, 11.2, 5.6);
+    roundRect(ctx, 7.4, 1.6, 2, 2, 0.3, '#f2c94c');
+  });
+  // A plant pot: terracotta, something growing in it.
+  canvasTexture(scene, TEX.prop('plantpot'), 5, 5, (ctx) => {
+    circle(ctx, 2.4, 2.4, 2, 'rgba(0,0,0,0.2)');
+    circle(ctx, 2, 2, 2, '#b8643a');
+    circle(ctx, 2, 2, 1.4, '#3f7a2e');
+    circle(ctx, 1.6, 1.6, 0.6, '#5c9a3a');
+  });
   // A tower crane's foot: its concrete base, the mast's corner legs.
   canvasTexture(scene, `${TEX.prop('crane')}-tower`, 32, 32, (ctx) => {
     roundRect(ctx, 4, 4, 24, 24, 1, '#9e9a91');

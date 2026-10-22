@@ -6,8 +6,12 @@ import { Surface, SurfaceGrid, surfacePaint } from './surface';
 import { CHUNK, buildWorld, buildingWalls, chunkKey, cutWall, lineLength, pointAlong, shadowOffset, subPolyline } from './world';
 import { DECK_END, Decks, SHADOW_HEIGHT, tunnelMouth } from './decks';
 import { nearestOnSegment } from '../physics/collisions';
+import { HOME_KINDS } from './homes';
 
 const map = bristol as unknown as GameMap;
+/** The whole map's world (made once: it takes a while). */
+let whole: ReturnType<typeof buildWorld> | undefined;
+const wholeWorld = () => (whole ??= buildWorld(map));
 
 describe('the Bristol map', () => {
   it('has the Cathedral, its towers, and the harbour', () => {
@@ -27,7 +31,7 @@ describe('the Bristol map', () => {
 });
 
 describe('buildWorld', () => {
-  const world = buildWorld(map);
+  const world = wholeWorld();
 
   it('walls in every solid building and the edge of the map', () => {
     const solid = map.buildings.filter((b) => b.solid);
@@ -45,8 +49,8 @@ describe('buildWorld', () => {
     expect(world.walls[0].filter((w) => !w.kind).length).toBeGreaterThan(1000);
   });
 
-  it('makes benches, bins, picnic tables, grit bins, planters, blocks, trolleys, food carts, market stalls, A-boards, playground things, and the things on the building sites and brownfield loose, and lamp posts and trees fixed', () => {
-    expect(world.loose.every((l) => ['bench', 'bin', 'picnic', 'gritbin', 'planter', 'block', 'trolley', 'foodcart', 'stall', 'aboard', 'swings', 'slide', 'roundabout', 'climbframe', 'sandpit', 'seesaw', 'springy', 'cabin', 'portaloo', 'skip', 'pallet', 'pipes', 'digger', 'dumper', 'mattress', 'sofa', 'tyres', 'binbags', 'fridge', 'drum', 'cone', 'woodpallet', 'washer', 'carpet', 'burntcar', 'tent', 'campfire'].includes(l.kind))).toBe(true);
+  it('makes benches, bins, picnic tables, grit bins, planters, blocks, trolleys, food carts, market stalls, A-boards, playground things, the things on the building sites and brownfield, and the things in the gardens loose, and lamp posts and trees fixed', () => {
+    expect(world.loose.every((l) => ['bench', 'bin', 'picnic', 'gritbin', 'planter', 'block', 'trolley', 'foodcart', 'stall', 'aboard', 'swings', 'slide', 'roundabout', 'climbframe', 'sandpit', 'seesaw', 'springy', 'cabin', 'portaloo', 'skip', 'pallet', 'pipes', 'digger', 'dumper', 'mattress', 'sofa', 'tyres', 'binbags', 'fridge', 'drum', 'cone', 'woodpallet', 'washer', 'carpet', 'burntcar', 'tent', 'campfire', ...HOME_KINDS].includes(l.kind))).toBe(true);
     // The heavy ones are hard to shift.
     expect(world.loose.find((l) => l.kind === 'block')!.invMass).toBeLessThan(1);
     expect(world.loose.length).toBeGreaterThan(100);
@@ -205,7 +209,7 @@ describe('archways', () => {
   });
 
   it('opens Bristol\'s buildings where its archways go under them', () => {
-    const world = buildWorld(map);
+    const world = wholeWorld();
     const passages = map.roads.filter((r) => r.passage && r.kind === 'service');
     expect(passages.length).toBeGreaterThan(5);
     // A point along each archway's road, inside its building: no wall right across the way.
@@ -213,13 +217,15 @@ describe('archways', () => {
     for (const p of passages) {
       const [x, y] = pointAlong(p.pts, lineLength(p.pts) / 2);
       const blocked = world.walls[0].some((w) => {
+        if (Math.min(w.ax, w.bx) > x + 4 || Math.max(w.ax, w.bx) < x - 4 || Math.min(w.ay, w.by) > y + 4 || Math.max(w.ay, w.by) < y - 4) return false;
         const [nx, ny] = nearestOnSegment(x, y, w);
         return Math.hypot(nx - x, ny - y) < 4;
       });
       if (!blocked) open++;
     }
     expect(open / passages.length).toBeGreaterThan(0.8);
-  });
+    // (The whole map's world takes a while to make.)
+  }, 120_000);
 });
 
 describe('Decks', () => {
