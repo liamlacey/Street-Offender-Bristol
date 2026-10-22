@@ -937,7 +937,7 @@ but the water and the buildings.
     street have one out on the street in front of them, 0.6 m in from its edge on their
     side, along it (none within 3 m of another). Loose and light: easily knocked flying,
     and split to splinters.
-  - **Pigeons** (drawn bigger than life, more so than the people, so they can be seen): 5 to 12, pecking about within 2.5 m or so, walking a few steps now and
+  - **Pigeons**: 5 to 12, pecking about within 2.5 m or so, walking a few steps now and
     then, side-stepping anyone walking right by. Anything coming at them faster than
     1.5 m/s within 7 m (or slower, within 3.5 m), or anyone running near, and they're all
     up and away (5 to 8 m/s, climbing), gone in 3.5 s; back 40 s to 2 minutes later, out

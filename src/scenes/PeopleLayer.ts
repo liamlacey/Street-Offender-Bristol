@@ -362,8 +362,7 @@ export class PeopleLayer {
         const key = pigeonTexture(this.scene, pose);
         let im = this.birds.get(b);
         if (!im) {
-          // (Bigger than life, as the people are, and more so: they're small.)
-          im = this.scene.add.image(0, 0, key).setScale((SIZE * 1.7) / ART_SCALE);
+          im = this.scene.add.image(0, 0, key).setScale(SIZE / ART_SCALE);
           this.birds.set(b, im);
         } else if (im.texture.key !== key) im.setTexture(key);
         const lift = perspective.lift(this.base(b.x, b.y, 0) + 0.2 * 8 + b.z);
