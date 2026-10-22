@@ -174,6 +174,7 @@ const AREAS: Partial<Record<AreaKind, string>> = {
   forecourt: '#cfc9bd',
   yard: '#c4beb2',
   dirt: '#cdbb98',
+  brownfield: '#b5b28c',
   pier: '#b9ab92',
   pontoon: '#b9ab92',
   slipway: '#b9ab92',

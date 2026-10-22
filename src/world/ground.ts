@@ -62,6 +62,7 @@ export function surfacePalette(): Palette {
     plaza: s(Surface.Pavement),
     parking: s(Surface.Road),
     dirt: s(Surface.Dirt),
+    brownfield: s(Surface.Dirt),
     water: s(Surface.Deep),
     pool: s(Surface.Pool),
     pier: s(Surface.Pavement),

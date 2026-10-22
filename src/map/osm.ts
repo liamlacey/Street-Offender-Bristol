@@ -32,7 +32,10 @@ export type AreaKind =
   | 'play'
   | 'plaza'
   | 'parking'
+  /** A building site (`landuse=construction`): bare earth. */
   | 'dirt'
+  /** Cleared or derelict land (`landuse=brownfield`): rough ground, overgrown. */
+  | 'brownfield'
   | 'water'
   | 'pool'
   | 'pier'
@@ -441,7 +444,20 @@ export type PropKind =
   | 'climbframe'
   | 'sandpit'
   | 'seesaw'
-  | 'springy';
+  | 'springy'
+  // On the building sites, and dumped on the brownfield (see src/world/sites.ts).
+  | 'cabin'
+  | 'portaloo'
+  | 'skip'
+  | 'pallet'
+  | 'pipes'
+  | 'digger'
+  | 'dumper'
+  | 'mattress'
+  | 'sofa'
+  | 'tyres'
+  | 'binbags'
+  | 'fridge';
 
 export interface Prop {
   kind: PropKind;
@@ -451,6 +467,8 @@ export interface Prop {
   angle?: number;
   /** How tall, px: a crane. */
   height?: number;
+  /** A tower crane on a building site (not the harbour's): its jib turning slowly. */
+  tower?: boolean;
 }
 
 export interface Crossing {
@@ -1077,7 +1095,8 @@ export function areaKind(tags: Tags): AreaKind | null {
   if (tags.leisure === 'park' || tags.leisure === 'common') return 'park';
   if (tags.leisure === 'garden') return 'garden';
   if (['grass', 'meadow', 'village_green', 'recreation_ground', 'cemetery'].includes(tags.landuse) || tags.natural === 'grassland' || tags.amenity === 'grave_yard') return 'grass';
-  if (tags.landuse === 'construction' || tags.landuse === 'brownfield') return 'dirt';
+  if (tags.landuse === 'construction') return 'dirt';
+  if (tags.landuse === 'brownfield') return 'brownfield';
   if (tags.amenity === 'fuel' && !tags.building) return 'forecourt';
   if (tags.amenity === 'parking' && !tags.building && tags.parking !== 'underground' && tags.parking !== 'multi-storey') return 'parking';
   if (tags['area:highway'] === 'service') return 'yard';
@@ -1093,6 +1112,7 @@ export const AREA_ORDER: Record<AreaKind, number> = {
   garden: 3,
   pitch: 4,
   dirt: 4,
+  brownfield: 4,
   plaza: 5,
   parking: 6,
   play: 7,
@@ -1292,15 +1312,41 @@ export function sidewalkAlong(road: Pts, width: number, side: 1 | -1, sidewalks:
       samples++;
       const px = ax + ux * d + nx * (width / 2 + 1.2 * PX_PER_METRE);
       const py = ay + uy * d + ny * (width / 2 + 1.2 * PX_PER_METRE);
-      if (sidewalks.some((w) => nearParallel(w, px, py, ux, uy))) along++;
+      if (nearParallel(sidewalkIndex(sidewalks), px, py, ux, uy)) along++;
     }
   }
   return samples > 0 && along / samples >= SIDEWALK_ALONG;
 }
 
-function nearParallel(w: Pts, x: number, y: number, ux: number, uy: number): boolean {
-  for (let i = 0; i + 3 < w.length; i += 2) {
-    const [ax, ay, bx, by] = [w[i], w[i + 1], w[i + 2], w[i + 3]];
+/** The footpaths' segments, by which 16 m square they come near (within SIDEWALK_NEAR): looked up, not gone through, for each point along each road. */
+const SIDEWALK_CELL = 16 * PX_PER_METRE;
+const sidewalkIndexes = new WeakMap<Pts[], { length: number; cells: Map<string, number[][]> }>();
+
+function sidewalkIndex(sidewalks: Pts[]): Map<string, number[][]> {
+  const had = sidewalkIndexes.get(sidewalks);
+  if (had && had.length === sidewalks.length) return had.cells;
+  const cells = new Map<string, number[][]>();
+  for (const w of sidewalks) {
+    for (let i = 0; i + 3 < w.length; i += 2) {
+      const seg = [w[i], w[i + 1], w[i + 2], w[i + 3]];
+      const [x0, x1] = [Math.min(seg[0], seg[2]) - SIDEWALK_NEAR, Math.max(seg[0], seg[2]) + SIDEWALK_NEAR];
+      const [y0, y1] = [Math.min(seg[1], seg[3]) - SIDEWALK_NEAR, Math.max(seg[1], seg[3]) + SIDEWALK_NEAR];
+      for (let cx = Math.floor(x0 / SIDEWALK_CELL); cx <= Math.floor(x1 / SIDEWALK_CELL); cx++) {
+        for (let cy = Math.floor(y0 / SIDEWALK_CELL); cy <= Math.floor(y1 / SIDEWALK_CELL); cy++) {
+          const key = `${cx},${cy}`;
+          const list = cells.get(key);
+          if (list) list.push(seg);
+          else cells.set(key, [seg]);
+        }
+      }
+    }
+  }
+  sidewalkIndexes.set(sidewalks, { length: sidewalks.length, cells });
+  return cells;
+}
+
+function nearParallel(cells: Map<string, number[][]>, x: number, y: number, ux: number, uy: number): boolean {
+  for (const [ax, ay, bx, by] of cells.get(`${Math.floor(x / SIDEWALK_CELL)},${Math.floor(y / SIDEWALK_CELL)}`) ?? []) {
     const len = Math.hypot(bx - ax, by - ay);
     if (!len) continue;
     const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / (len * len)));

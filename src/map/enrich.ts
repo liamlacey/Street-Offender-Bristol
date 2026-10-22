@@ -7,7 +7,7 @@
  */
 
 import { type HeightGrid, type Raster, bestShift, findTrees, heightAt, heightGrid, quantile, sample } from './lidar.ts';
-import { DECK_STEP, type GameMap, type Ledge, Projection, type Road, type Pts, type TerrainData, VEHICLE_ROADS, pointInRing, ridgeAxis, ringArea } from './osm.ts';
+import { DECK_STEP, type GameMap, type Ledge, Projection, type Road, type Pts, type TerrainData, VEHICLE_ROADS, ridgeAxis, ringArea } from './osm.ts';
 import { toNationalGrid } from './osgb.ts';
 import { Cuts } from '../world/terrain.ts';
 
@@ -648,7 +648,7 @@ function fillGaps(z: Float32Array, cols: number, rows: number, region?: Int32Arr
 }
 
 /** Points every `step` px inside some rings (filled even-odd). */
-function pointsInside(rings: Pts[], step: number): [number, number][] {
+export function pointsInside(rings: Pts[], step: number): [number, number][] {
   const out: [number, number][] = [];
   const outer = rings[0];
   let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
@@ -658,9 +658,17 @@ function pointsInside(rings: Pts[], step: number): [number, number][] {
     y0 = Math.min(y0, outer[i + 1]);
     y1 = Math.max(y1, outer[i + 1]);
   }
+  // Row by row: where each ring's edges cross the row (as pointInRing has it), and the points between every other pair of crossings.
+  const edges: [number, number, number, number][] = [];
+  for (const r of rings) for (let i = 0, n = r.length, j = n - 2; i < n; j = i, i += 2) edges.push([r[i], r[i + 1], r[j], r[j + 1]]);
   for (let y = y0 + step / 2; y < y1; y += step) {
-    for (let x = x0 + step / 2; x < x1; x += step) {
-      if (rings.filter((r) => pointInRing(x, y, r)).length % 2 === 1) out.push([x, y]);
+    const xs: number[] = [];
+    for (const [xi, yi, xj, yj] of edges) if (yi > y !== yj > y) xs.push(((xj - xi) * (y - yi)) / (yj - yi) + xi);
+    xs.sort((a, b) => a - b);
+    // A point's inside where an odd number of crossings lie beyond it (x < crossing).
+    for (let x = x0 + step / 2, k = 0; x < x1; x += step) {
+      while (k < xs.length && xs[k] <= x) k++;
+      if ((xs.length - k) % 2 === 1) out.push([x, y]);
     }
   }
   return out;

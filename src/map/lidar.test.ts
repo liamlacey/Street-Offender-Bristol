@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { countSteps, deckProfile, findBanks, findLedges, findShelters, mergeRasters, roofShape, shiftRaster, underBridges, wallHeights } from './enrich';
+import { countSteps, deckProfile, findBanks, findLedges, findShelters, mergeRasters, pointsInside, roofShape, shiftRaster, underBridges, wallHeights } from './enrich';
 import { type HeightGrid, type Raster, bestShift, findTrees, parseWcsText, quantile, sample } from './lidar';
 import { toNationalGrid } from './osgb';
-import { type GameMap, type Line, type Road, paving } from './osm';
+import { type GameMap, type Line, type Road, paving, pointInRing } from './osm';
 
 describe('toNationalGrid', () => {
   it('lands within a few metres of the Ordnance Survey\'s own worked example', () => {
@@ -254,5 +254,22 @@ describe('walls, shelters, steps and banks from the LIDAR', () => {
     expect(findLedges(bank, raster((e) => 30 - e * 0.4), toGrid)).toBe(0);
     expect(findLedges(bank, flat, toGrid)).toBe(0);
     expect(bank.ledges).toBeUndefined();
+  });
+});
+
+describe('points inside rings', () => {
+  it('are those pointInRing has inside (holes, and all), row by row', () => {
+    let seed = 11;
+    const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let n = 0; n < 30; n++) {
+      // A jagged ring round a middle, and a hole in it.
+      const ring = (cx: number, cy: number, r: number, k: number) => Array.from({ length: k }, (_, i) => [cx + Math.cos((i / k) * Math.PI * 2) * r * (0.5 + rand()), cy + Math.sin((i / k) * Math.PI * 2) * r * (0.5 + rand())]).flat();
+      const rings = [ring(100, 100, 80, 5 + Math.floor(rand() * 20)), ring(100, 100, 20, 6)];
+      const want: [number, number][] = [];
+      for (let y = Math.min(...rings[0].filter((_, i) => i % 2)) + 2; y < Math.max(...rings[0].filter((_, i) => i % 2)); y += 4) {
+        for (let x = Math.min(...rings[0].filter((_, i) => i % 2 === 0)) + 2; x < Math.max(...rings[0].filter((_, i) => i % 2 === 0)); x += 4) if (rings.filter((r) => pointInRing(x, y, r)).length % 2 === 1) want.push([x, y]);
+      }
+      expect(pointsInside(rings, 4)).toEqual(want);
+    }
   });
 });

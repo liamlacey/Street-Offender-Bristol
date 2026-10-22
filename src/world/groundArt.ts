@@ -216,6 +216,35 @@ function soil(size: number): HTMLCanvasElement {
   }, 13);
 }
 
+/** Brownfield: rough ground, left: patchy, rank grass and weeds over bare earth, gravel and bits of rubble. */
+function wasteland(size: number): HTMLCanvasElement {
+  return tile(size, (ctx, rand) => {
+    ctx.fillStyle = '#7e7a52';
+    ctx.fillRect(0, 0, size, size);
+    // Bare patches of earth and hardcore.
+    for (let i = 0; i < size / 10; i++) {
+      ctx.fillStyle = rand() < 0.6 ? 'rgba(134,112,79,0.75)' : 'rgba(150,146,134,0.6)';
+      ctx.beginPath();
+      ctx.ellipse(rand() * size, rand() * size, 4 + rand() * 10, 3 + rand() * 7, rand() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    speckle(ctx, rand, size, size * 3, ['#5f5c38', '#9a9468', '#6f5a3d', '#a8a49a'], 1.3);
+    // Clumps of weeds and long grass.
+    for (let i = 0; i < size / 4; i++) {
+      const [x, y, r] = [rand() * size, rand() * size, 1.5 + rand() * 3.5];
+      ctx.fillStyle = rand() < 0.5 ? 'rgba(74,98,44,0.8)' : 'rgba(110,122,62,0.8)';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Bits of brick and concrete.
+    for (let i = 0; i < size / 8; i++) {
+      ctx.fillStyle = rand() < 0.5 ? '#9a5a42' : '#b4b0a6';
+      ctx.fillRect(rand() * size, rand() * size, 1 + rand() * 1.5, 1 + rand());
+    }
+  }, 29);
+}
+
 /** The ground's look, with patterns made for the given context. */
 export function artPalette(ctx: Ctx): Palette {
   const pattern = (canvas: HTMLCanvasElement) => ctx.createPattern(canvas, 'repeat')!;
@@ -232,6 +261,7 @@ export function artPalette(ctx: Ctx): Palette {
     plaza: pattern(slabs([182, 172, 156], 24, 96, 'rgba(70,62,50,0.3)', 3)),
     parking: pattern(asphalt(64, '#56585b', 10)),
     dirt: pattern(soil(64)),
+    brownfield: pattern(wasteland(128)),
     water: pattern(water(128, '#2b5c78', 'rgba(150,200,225,0.35)', 12)),
     pool: pattern(water(64, '#4c9fc4', 'rgba(220,245,255,0.5)', 14)),
     pier: pattern(planks(64)),
