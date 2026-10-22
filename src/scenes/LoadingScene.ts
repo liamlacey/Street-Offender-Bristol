@@ -18,7 +18,11 @@ export class LoadingScene extends Phaser.Scene {
     [this.done, this.label] = [0, ''];
     this.draw();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.draw, this);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, this.draw, this));
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.draw, this);
+      // (Gone with the scene: not to be written on before it's made again, next time it's shown.)
+      [this.bar, this.text] = [undefined, undefined];
+    });
   }
 
   /** How far it's got (0 to 1), and what it's doing now. */
@@ -29,7 +33,12 @@ export class LoadingScene extends Phaser.Scene {
 
   /** Something's gone wrong setting up. */
   failed(): void {
-    this.text?.setText('Something went wrong: tap to try again').setColor('#f2c94c');
+    // (Not up yet: shown when it is.)
+    if (!this.text) {
+      this.events.once(Phaser.Scenes.Events.CREATE, () => this.failed());
+      return;
+    }
+    this.text.setText('Something went wrong: tap to try again').setColor('#f2c94c');
     this.input.once('pointerdown', () => window.location.reload());
   }
 
