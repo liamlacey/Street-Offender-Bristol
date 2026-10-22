@@ -130,6 +130,53 @@ function grass(size: number, base: string, dark: string, light: string, stripes:
   );
 }
 
+/** A field of crops, in rows a metre apart, over its earth. */
+function field(size: number): HTMLCanvasElement {
+  return tile(size, (ctx, rand) => {
+    ctx.fillStyle = '#7c6a44';
+    ctx.fillRect(0, 0, size, size);
+    speckle(ctx, rand, size, size * 2, ['#6a5a38', '#8e7c54'], 1.2);
+    for (let y = 2; y < size; y += 8) {
+      ctx.fillStyle = 'rgba(112,140,58,0.9)';
+      ctx.fillRect(0, y, size, 4);
+      ctx.fillStyle = 'rgba(150,170,80,0.5)';
+      for (let x = 0; x < size; x += 3) if (rand() < 0.5) ctx.fillRect(x, y + rand() * 3, 2, 1.5);
+    }
+  }, 61);
+}
+
+/** Allotments: plots side by side, each of rows of vegetables, bare soil or grass; a shed or two; grass paths between. */
+function allotments(size: number): HTMLCanvasElement {
+  return tile(size, (ctx, rand) => {
+    ctx.fillStyle = '#5c8a3e';
+    ctx.fillRect(0, 0, size, size);
+    const [w, h] = [size / 4, size / 2];
+    for (let px = 0; px < size; px += w) {
+      for (let py = 0; py < size; py += h) {
+        const [x, y] = [px + 2, py + 2];
+        const kind = rand();
+        ctx.fillStyle = kind < 0.25 ? '#6b8f45' : '#6e5638';
+        ctx.fillRect(x, y, w - 4, h - 4);
+        if (kind >= 0.25) {
+          // Rows of something growing.
+          const green = rand() < 0.5 ? '#4f7f34' : '#7da848';
+          for (let k = y + 3; k < y + h - 6; k += 5) {
+            ctx.fillStyle = green;
+            for (let q = x + 2; q < x + w - 6; q += 3) if (rand() < 0.8) ctx.fillRect(q, k, 2, 2);
+          }
+        }
+        // A shed, now and then.
+        if (rand() < 0.3) {
+          ctx.fillStyle = rand() < 0.5 ? '#7a6a58' : '#5d6b4c';
+          ctx.fillRect(x + w - 14, y + h - 14, 9, 8);
+          ctx.fillStyle = 'rgba(0,0,0,0.25)';
+          ctx.fillRect(x + w - 14, y + h - 6, 9, 2);
+        }
+      }
+    }
+  }, 67);
+}
+
 function flowerbed(size: number): HTMLCanvasElement {
   return tile(size, (ctx, rand) => {
     ctx.fillStyle = '#4e3a2a';
@@ -245,6 +292,40 @@ function wasteland(size: number): HTMLCanvasElement {
   }, 29);
 }
 
+/**
+ * People's gardens and yards, behind and between the houses: lawns, a little
+ * rougher and darker than a park's, with patios and paths of slabs, beds of
+ * soil and the odd shrub.
+ */
+function gardens(size: number): HTMLCanvasElement {
+  return tile(size, (ctx, rand) => {
+    ctx.fillStyle = '#517f3a';
+    ctx.fillRect(0, 0, size, size);
+    speckle(ctx, rand, size, size * 4, ['rgba(40,75,28,0.6)', 'rgba(140,180,90,0.35)'], 1.1);
+    // Patios and paths: patches of slabs.
+    for (let i = 0; i < size / 40; i++) {
+      const [x, y, w, h] = [rand() * size, rand() * size, 10 + rand() * 18, 8 + rand() * 14];
+      const v = Math.floor(rand() * 20);
+      ctx.fillStyle = `rgb(${150 + v},${144 + v},${132 + v})`;
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = 'rgba(60,56,50,0.25)';
+      for (let k = 0; k < w; k += 6) ctx.fillRect(x + k, y, 0.6, h);
+      for (let k = 0; k < h; k += 6) ctx.fillRect(x, y + k, w, 0.6);
+    }
+    // Beds of soil, and shrubs.
+    for (let i = 0; i < size / 32; i++) {
+      ctx.fillStyle = 'rgba(94,72,48,0.8)';
+      ctx.fillRect(rand() * size, rand() * size, 12 + rand() * 16, 3 + rand() * 3);
+    }
+    for (let i = 0; i < size / 10; i++) {
+      ctx.fillStyle = rand() < 0.5 ? 'rgba(46,86,34,0.9)' : 'rgba(64,104,42,0.9)';
+      ctx.beginPath();
+      ctx.arc(rand() * size, rand() * size, 1.5 + rand() * 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }, 53);
+}
+
 /** The ground's look, with patterns made for the given context. */
 export function artPalette(ctx: Ctx): Palette {
   const pattern = (canvas: HTMLCanvasElement) => ctx.createPattern(canvas, 'repeat')!;
@@ -254,6 +335,9 @@ export function artPalette(ctx: Ctx): Palette {
     grass: lawn,
     park: lawn,
     garden: pattern(grass(96, '#4f8d3d', 'rgba(40,80,30,0.6)', 'rgba(150,200,100,0.35)', false, 4)),
+    gardens: pattern(gardens(160)),
+    field: pattern(field(128)),
+    allotments: pattern(allotments(128)),
     flowerbed: pattern(flowerbed(64)),
     wood: pattern(grass(96, '#3a6a2c', 'rgba(25,55,20,0.7)', 'rgba(110,150,70,0.3)', false, 6)),
     pitch: pattern(grass(128, '#4f9a3c', 'rgba(40,90,30,0.5)', 'rgba(150,210,100,0.3)', true, 8)),

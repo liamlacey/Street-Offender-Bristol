@@ -175,6 +175,20 @@ describe('road markings', () => {
     expect(roadLanes({ 'parking:lane:right': 'perpendicular', 'parking:lane:right:perpendicular': 'street_side' }, false, 64)).toBeUndefined();
   });
 
+  it("parks cars along a residential street's kerb where it doesn't say (one side; both, if it's wide), unmarked", () => {
+    const one = roadLanes({ highway: 'residential', name: 'Seaton Road' }, false, 7 * 8)!;
+    expect(one).toHaveLength(1);
+    expect(one[0]).toMatchObject({ kind: 'parking', bays: 'parallel', unmarked: true, width: 16 });
+    // The same side each time.
+    expect(roadLanes({ highway: 'residential', name: 'Seaton Road' }, false, 7 * 8)).toEqual(one);
+    expect(roadLanes({ highway: 'residential' }, false, 10 * 8)!.map((l) => l.side).sort()).toEqual([-1, 1]);
+    // Not where it says there's none, nor one too narrow, one-way, or a main road.
+    expect(roadLanes({ highway: 'residential', 'parking:both': 'no' }, false, 7 * 8)).toBeUndefined();
+    expect(roadLanes({ highway: 'residential' }, false, 5 * 8)).toBeUndefined();
+    expect(roadLanes({ highway: 'residential', oneway: 'yes' }, true, 7 * 8)).toBeUndefined();
+    expect(roadLanes({ highway: 'primary' }, false, 10 * 8)).toBeUndefined();
+  });
+
   it('cuts the stretches lanes are painted along round junctions, and drops what is too short to paint', () => {
     // 100 m of road, a junction 30 m along (cut 6 m either side): 24 m kept before it, 64 m after; 4 m cut out of the end.
     expect(cutSpans([0, 800], [[192, 288], [768, 800]])).toEqual([0, 192, 288, 768]);
@@ -208,6 +222,9 @@ describe('the harbour', () => {
   it('tells a floating pontoon from a pier on legs', () => {
     expect(areaKind({ man_made: 'pier', floating: 'yes' })).toBe('pontoon');
     expect(areaKind({ man_made: 'pier' })).toBe('pier');
+    expect(areaKind({ landuse: 'residential' })).toBe('gardens');
+    expect(areaKind({ landuse: 'farmland' })).toBe('field');
+    expect(areaKind({ landuse: 'allotments' })).toBe('allotments');
     expect(areaKind({ man_made: 'pier', floating: 'no' })).toBe('pier');
     expect(areaKind({ amenity: 'fuel' })).toBe('forecourt');
   });

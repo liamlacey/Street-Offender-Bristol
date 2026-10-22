@@ -14,6 +14,8 @@ import { type Work, drain } from './work.ts';
 /** A car park's bays: how wide, how deep, and the aisle between rows, px. */
 export const BAY_WIDTH = 2.5 * 8;
 export const BAY_DEPTH = 5 * 8;
+/** The grid the car parks' bays are found in, px. */
+const LOT_CELL = 8 * 8;
 export const BAY_AISLE = 6 * 8;
 /** Bays along a street stop short of its ends (the junctions), px; parallel ones are this long. */
 export const BAYS_FROM_END = 8 * 8;
@@ -268,12 +270,32 @@ export function* parkingWork(map: GameMap): Work<Space[]> {
     out.push(...spaces.filter((s) => !shelters.includes(s) && free(s)));
     yield;
   }
+  // (Not along the kerb where a car park's bays come right up to it; nor one over another, round a tight bend or a corner.)
+  const lots = new Map<number, Space[]>();
+  const cell = (x: number, y: number) => Math.floor(x / LOT_CELL) * 100003 + Math.floor(y / LOT_CELL);
+  const keep = (s: Space) => {
+    const k = cell(s.x, s.y);
+    if (!lots.has(k)) lots.set(k, []);
+    lots.get(k)!.push(s);
+  };
+  for (const s of out) keep(s);
+  const box = (s: Space): [number, number, number, number, number] => [s.x, s.y, s.angle, s.length / 2 - 1, (s.endOn ? BAY_WIDTH : 2 * 8) / 2 - 1];
+  const clearOfLots = (b: Space) => {
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const s of lots.get(cell(b.x + i * LOT_CELL, b.y + j * LOT_CELL)) ?? []) if (Math.hypot(s.x - b.x, s.y - b.y) < BAY_DEPTH && rectsOverlap(box(s), box(b))) return false;
+    return true;
+  };
   for (const r of map.roads) {
     if (r.lanes?.some((l) => l.kind === 'parking')) yield;
     for (const lane of r.lanes ?? []) {
       if (lane.kind !== 'parking') continue;
       const s = r.laneSpans ?? [];
-      for (let k = 0; k + 1 < s.length; k += 2) out.push(...streetBays(r, lane, s[k], s[k + 1]).spaces.filter((b) => !atBusStop(map, b.x, b.y) && free(b)));
+      for (let k = 0; k + 1 < s.length; k += 2) {
+        for (const b of streetBays(r, lane, s[k], s[k + 1]).spaces) {
+          if (atBusStop(map, b.x, b.y) || !free(b) || !clearOfLots(b)) continue;
+          keep(b);
+          out.push(b);
+        }
+      }
     }
   }
   return out;

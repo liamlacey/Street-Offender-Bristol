@@ -573,9 +573,12 @@ export function* lanesWork(map: GameMap, paths = false, joins: Join[] = []): Wor
     for (const dir of [1, -1] as const) {
       const count = dir === 1 ? ahead : against;
       if (count < 1) continue;
-      // Across the road from its left edge (as this way goes) to the middle (or the right edge, one-way).
+      // Across the road from its left edge (as this way goes) to the middle (or the right edge, one-way). (Two-way, with cars parked
+      // along one side, or more along one than the other: the middle of what's left between them, as drivers keep to.)
       const left = r.width / 2;
-      const right = r.oneway ? -r.width / 2 : 0;
+      // (Less, on a street too narrow for them and a lane each way: they're half up the kerb.)
+      const squeeze = Math.min(1, Math.max(0, r.width - 2 * 2.3 * M) / Math.max(1e-6, parked(r, 1) + parked(r, -1)));
+      const right = r.oneway ? -r.width / 2 : ((parked(r, dir === 1 ? -1 : 1) - parked(r, dir)) / 2) * squeeze;
       const resLeft = Math.min(reserved(dir), Math.max(0, left - right - count * 2.6 * M));
       const resRight = r.oneway ? Math.min(reserved(-1), Math.max(0, left - right - resLeft - count * 2.6 * M)) : 0;
       const each = Math.min(LANE * 1.4, (left - right - resLeft - resRight) / count);
@@ -814,6 +817,18 @@ function withJoins(pts: Pts, joins: Join[]): Pts {
     for (const j of joins.filter((j) => j.seg === s && j.t > 0 && j.t < 1).sort((a, b) => a.t - b.t)) out.push(j.px, j.py);
   }
   return out;
+}
+
+/** Whether something's a car parked in its bay, by the kerb (not knocked out of it, nor one of the emergency services', parked a little out into the road). */
+function atKerb(o: Obstacle): boolean {
+  if (o.id < 0) return false;
+  const v = o as Vehicle;
+  return v.mode === 'parked' && !!v.space && v.post === undefined && Math.hypot(v.x - v.space.x, v.y - v.space.y) <= 0.5 * M;
+}
+
+/** How deep the parking along a road's side is (+ its left, as it's drawn), px. */
+function parked(r: Road, side: 1 | -1): number {
+  return (r.lanes ?? []).filter((l) => l.side === side && l.kind === 'parking').reduce((w, l) => Math.max(w, l.width), 0);
 }
 
 /**
@@ -2010,9 +2025,9 @@ export class Traffic {
   private obstacles(player: Player): Obstacle[] {
     const out: Obstacle[] = [{ id: -1, x: player.x, y: player.y, angle: player.heading, r: player.width / 2, length: player.length, vx: player.vx, vy: player.vy, level: player.level }, ...this.pedestrians];
     for (const v of this.vehicles) out.push(v);
-    // Parked cars are by the kerb, out of the way: only those that have been knocked out of their bays count (and the emergency
-    // services', parked a little out into the road: they're gone round).
-    for (const v of this.parked) if (v.mode !== 'parked' || !v.space || v.post !== undefined || Math.hypot(v.x - v.space.x, v.y - v.space.y) > 0.5 * M) out.push(v);
+    // The parked cars too: by the kerb, they're out of the way of what's in its lane (see `drive`), but not of anything out of
+    // it, overtaking or going round (or one on a call, weaving through).
+    for (const v of this.parked) out.push(v);
     return out;
   }
 
@@ -2031,6 +2046,8 @@ export class Traffic {
     for (const o of this.obstaclesNear(obstacles, v.x, v.y, look + 60)) {
       if (o.id === v.id) continue;
       if (Math.abs(o.x - v.x) > look + 60 || Math.abs(o.y - v.y) > look + 60) continue;
+      // (A car parked in its bay is no matter to one in its lane: only to one out of it.)
+      if (atKerb(o) && !v.passing && !v.siren) continue;
       // (A bus in its bay at a bus station is out of the way, its tail by the way round: till it starts backing out.)
       if (o.id >= 0 && (o as Vehicle).bus?.bay && ((o as Vehicle).mode === 'reverse' ? (o as Vehicle).rev!.s === 0 : (o as Vehicle).bus!.dwell > 0)) continue;
       // Waiting for each other: the one that's in front goes (it can't be in the way of the one behind it); side by side, the one with the right of way.
@@ -2575,7 +2592,7 @@ export class Traffic {
         if (!next.some((r) => distToLine(this.roadPts[r], px, py) <= this.roadWidths[r] / 2 + PAVED - v.r * 0.5)) return false;
       }
       const t = Math.max(0, d) / speed;
-      for (const o of obstacles) {
+      for (const o of this.obstaclesNear(obstacles, px, py, 30 * M)) {
         if (o.id === v.id || o.level !== v.level) continue;
         if (Math.abs(o.x - px) > 30 * M || Math.abs(o.y - py) > 30 * M) continue;
         // Where it'll be by then (moving along the way it's facing, and moving over).
@@ -2641,7 +2658,7 @@ export class Traffic {
   private laneClear(v: Vehicle, to: Lane, obstacles: Obstacle[]): boolean {
     const [x, y] = pathAt(v.route[0], v.s);
     const at = nearestOn(to, x, y).s;
-    for (const o of obstacles) {
+    for (const o of this.obstaclesNear(obstacles, x, y, 60 * M)) {
       if (o.id === v.id || o.level !== v.level || Math.abs(o.x - x) > 60 * M || Math.abs(o.y - y) > 60 * M) continue;
       const n = nearestOn(to, o.x, o.y);
       if (n.d > 1.6 * M + o.r * 0.6) continue;
@@ -2658,7 +2675,7 @@ export class Traffic {
   private freerAhead(v: Vehicle, to: Lane, gap: number, obstacles: Obstacle[]): boolean {
     const [x, y] = pathAt(v.route[0], v.s);
     const at = nearestOn(to, x, y).s;
-    for (const o of obstacles) {
+    for (const o of this.obstaclesNear(obstacles, x, y, 60 * M)) {
       if (o.id === v.id || o.level !== v.level || Math.abs(o.x - x) > 60 * M || Math.abs(o.y - y) > 60 * M) continue;
       const n = nearestOn(to, o.x, o.y);
       if (n.d > 1.6 * M + o.r * 0.6) continue;

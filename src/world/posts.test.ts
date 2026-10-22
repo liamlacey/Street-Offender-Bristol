@@ -98,7 +98,8 @@ describe('emergency services', () => {
   }, 120_000);
 
   it('on a call, keep no speed limit nor the rules of the road, going round what holds them up (wrong side, pavement), but hit nothing', () => {
-    let seed = 3;
+    // (A run where traffic holds it up, so it has to go round it.)
+    let seed = 1;
     const traffic = new Traffic(map, { rand: () => (seed = (seed * 16807) % 2147483647) / 2147483647 });
     const post = traffic.posts.find((p) => p.service.name === 'Bristol Royal Infirmary')!;
     const player = { x: post.x + 40 * M, y: post.y + 40 * M, heading: 0, vx: 0, vy: 0, level: 0, length: 38, width: 18 };

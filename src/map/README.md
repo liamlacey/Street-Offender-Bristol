@@ -190,6 +190,11 @@ the left side's traffic goes the way's way, the right side's against it).
   along the kerb, 8 m in from the road's ends; parallel bays 2 m deep with a line
   every 6 m, end-on ones 5 m deep a line every 2.5 m; LOADING ONLY where
   `parking:*:restriction=loading_only`.
+- **Cars parked along the kerb where a street doesn't say** (`highway=residential` or
+  `unclassified`, two-way, 6.5 m wide or more, no `parking*` tag at all, nothing else
+  along its kerbs): parallel, 2 m deep, unmarked (no lines painted); on one side
+  (which, by its name, the same each time), both if it's 9 m wide or more. As along
+  nearly every residential street in Bristol.
 - Bus lanes, cycle lanes and parking bays are painted only along stretches clear of
   junctions (6 m either side of a node where three or more ways out of it meet: not
   where a street's just mapped in pieces), crossings with stripes or lights (3 m
@@ -256,7 +261,12 @@ surfaced like the roads, slabbed), car parks, building sites (`landuse=construct
 brownfield land (`landuse=brownfield`: cleared or derelict, kept apart from the building
 sites), water (the harbour:
 too deep to drive in), pools and fountains (shallow), piers (decking) and traffic
-islands. Everything else is paving: it's a city centre.
+islands; farmland (`landuse=farmland`: crops in rows, soft going) and allotments
+(`landuse=allotments`: plots and sheds); meadows, orchards, wetland and grassland as
+grass; heath and shrubbery as woods; farmyards as yards. Where people live
+(`landuse=residential`), under everything else: their gardens and yards (lawns with
+patios, beds and shrubs, behind and between the houses: the roads, pavements and
+buildings are drawn over them; driven on as grass). Everything else is paving.
 
 **Buildings** (`building=*`, `building:part=*`). Height: OSM's `height`, else
 measured by the LIDAR (below), else `building:levels` × 3.2 m (+ roof levels),
@@ -595,7 +605,10 @@ middle). Park Street, with 30 to 47, is the busiest.
 service roads (car parks, driveways, yards), tracks or paths. Each road is cut where
 it meets another into edges, each with its lanes (`lanes:forward/backward`, or one each
 way; a one-way road 7.5 m or wider, two), on the left of the way they go, inside any
-bus, cycle or parking lane painted along that side. Lanes stop short of a junction
+bus, cycle or parking lane painted along that side. On a two-way road with cars parked
+along one side (or more along one than the other), both ways keep to the middle of
+what's left between them (its middle moved over by half the difference; less on a
+street too narrow for the cars and a 2.3 m lane each way). Lanes stop short of a junction
 (where three or more edges meet) by half the widest road there plus 1.2 m; a smooth
 curve takes each lane on to the next across it. Where two roads leave a junction at a
 sharp angle (under 80°), their carriageways overlap for a way out from it, so the lanes
@@ -780,8 +793,12 @@ front and back) or fire engines (red, a ladder on top).
 
 **Parked cars:** in the car parks' bays (65% of them taken; not the big shops' trolley shelters, nor under a market's stalls or the street life: see People) and in the parking lanes'
 bays (55%, plus 1.2% per point of the street's activity, at most 92%; loading bays
-25%), not at bus stops (the bays aren't painted there either). Parallel bays face the
-way the traffic on that side goes; end-on ones either way round. No lorries.
+25%), not at bus stops (the bays aren't painted there either), nor where a car park's
+bays come right up to the kerb, nor one over another (round a tight bend or a corner).
+Parallel bays face the way the traffic on that side goes; end-on ones either way
+round. No lorries. The traffic drives past those parked in their bays (they're out of
+its lane), but anything out of its lane (overtaking, going round, one on a call
+weaving through) sees them, and doesn't pull out into them.
 
 **Knocked about:** your car hits a vehicle as the heavier or lighter thing it is (a
 small car 0.8 of yours, a van 1.5, a lorry 4): it slides to a stop (skidding sideways

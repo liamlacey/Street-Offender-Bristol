@@ -35,6 +35,20 @@ const run = (traffic: Traffic, seconds: number, player = away, light = green) =>
 };
 
 describe('the lanes', () => {
+  it("keep clear of the cars parked along one side of a street, both ways keeping to what's left between", () => {
+    // A street 7 m wide running east, cars parked along its left (north) kerb, 2 m deep.
+    const map = { ...crossroads(), roads: [road('street', 56, [0, 400, 800, 400], { lanes: [{ side: 1, kind: 'parking', width: 16, bays: 'parallel', unmarked: true }], laneSpans: [0, 800] })] } as unknown as GameMap;
+    const { lanes } = buildLanes(map);
+    const across = (dir: 1 | -1) => lanes.find((l) => l.dir === dir)!.pts[1] - 400;
+    // (y down: the left kerb's at 400 - 28 = 372, the parked cars' bays to 388, the cars themselves (1.8 m wide) to 386; the right kerb's at 428.)
+    for (const dir of [1, -1] as const) {
+      const y = across(dir) + 400;
+      expect(y - 9).toBeGreaterThan(386);
+      expect(y + 9).toBeLessThan(428);
+    }
+    expect(across(1)).toBeLessThan(across(-1));
+  });
+
   it('split the roads at the junction, a lane each way, on the left (as in Britain)', () => {
     const { lanes } = buildLanes(crossroads());
     expect(lanes.length).toBe(8);

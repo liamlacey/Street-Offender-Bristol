@@ -184,7 +184,8 @@ export function drawLanes(ctx: Ctx, roads: Road[], paint: PaintMark[] = []): voi
           for (const d of along(lane, 6 * 8, BIKES_EVERY, 3 * 8)) bike(ctx, ...laneAt(r, lane, d, 1.6 * 8), WHITE);
           break;
         case 'parking':
-          for (const p of pieces) bays(ctx, r, lane, p.from, p.to, stops);
+          // (Not where they're just parked along the kerb.)
+          if (!lane.unmarked) for (const p of pieces) bays(ctx, r, lane, p.from, p.to, stops);
           break;
       }
     }

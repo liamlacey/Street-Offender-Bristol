@@ -26,6 +26,12 @@ export type AreaKind =
   | 'grass'
   | 'park'
   | 'garden'
+  /** A farmer's field (`landuse=farmland`): crops in rows. */
+  | 'field'
+  /** Allotments (`landuse=allotments`): plots of vegetables and soil, sheds, paths between. */
+  | 'allotments'
+  /** Where people live (`landuse=residential`): their gardens and yards, between and behind the houses, under all else. */
+  | 'gardens'
   | 'flowerbed'
   | 'wood'
   | 'pitch'
@@ -153,6 +159,8 @@ export interface Lane {
   /** Parking bays: which way round the cars park, and whether it's for loading only. */
   bays?: 'parallel' | 'perpendicular' | 'diagonal';
   loading?: boolean;
+  /** Not painted: cars just parked along the kerb (a residential street that doesn't say). */
+  unmarked?: boolean;
   /** It carries on from the same lane on the road before (so its name isn't painted again at its start). */
   continues?: boolean;
 }
@@ -219,6 +227,17 @@ export const BUS_STOP_DEPTH = 3 * PX_PER_METRE;
 const BUS_LANE = 3.2 * PX_PER_METRE;
 const CYCLE_LANE = 1.5 * PX_PER_METRE;
 
+/** The streets that have cars parked along them where they don't say (`highway=*`); and how wide one has to be for them on one side, and both, m. */
+const UNMARKED: ReadonlySet<string | undefined> = new Set(['residential', 'unclassified']);
+const UNMARKED_ONE = 6.5;
+const UNMARKED_BOTH = 9;
+
+function hashText(text: string): number {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
 /**
  * The lanes painted along a road's sides, from OSM's `lanes:psv`, `lanes:bus`
  * (`:forward`, `:backward`), `cycleway`, `cycleway:left/right/both` (and
@@ -266,6 +285,14 @@ export function roadLanes(t: Tags, oneway: boolean, width: number): Lane[] | und
     const loading = (t[`parking:${name}:restriction`] ?? t['parking:both:restriction']) === 'loading_only';
     const depth = bays === 'parallel' ? 2 : bays === 'diagonal' ? 4.5 : 5;
     lanes.push({ side, kind: 'parking', width: Math.round(Math.min(half, depth * PX_PER_METRE)), bays: bays as Lane['bays'], ...(loading ? { loading } : {}) });
+  }
+  // A residential street that says nothing of its parking: cars parked along the kerb, as along nearly every one in Bristol (on one
+  // side; both, if it's wide enough for them and the traffic). Not if it's got anything else along its kerbs.
+  if (!lanes.length && UNMARKED.has(t.highway) && !Object.keys(t).some((k) => k.startsWith('parking')) && t.oneway !== 'yes' && width >= UNMARKED_ONE * PX_PER_METRE) {
+    const one = { kind: 'parking', width: 2 * PX_PER_METRE, bays: 'parallel', unmarked: true } as const;
+    if (width >= UNMARKED_BOTH * PX_PER_METRE) lanes.push({ side: 1, ...one }, { side: -1, ...one });
+    // (Which side, the same each time: by its name.)
+    else lanes.push({ side: hashText(t.name ?? '') % 2 ? -1 : 1, ...one });
   }
   return lanes.length ? lanes : undefined;
 }
@@ -1097,14 +1124,18 @@ export function areaKind(tags: Tags): AreaKind | null {
   if (tags['area:highway'] === 'traffic_island' || tags.footway === 'traffic_island') return 'island';
   if (tags.railway === 'platform' || (tags.public_transport === 'platform' && (tags.train === 'yes' || tags.railway === 'platform'))) return 'platform';
   if (tags.landuse === 'flowerbed') return 'flowerbed';
-  if (tags.natural === 'wood' || tags.landuse === 'forest' || tags.natural === 'scrub') return 'wood';
+  if (tags.natural === 'wood' || tags.landuse === 'forest' || tags.natural === 'scrub' || tags.natural === 'heath' || tags.natural === 'shrubbery') return 'wood';
+  if (tags.landuse === 'farmland') return 'field';
+  if (tags.landuse === 'allotments') return 'allotments';
+  if (tags.landuse === 'farmyard') return 'yard';
   if (tags.leisure === 'pitch' || tags.leisure === 'sports_centre') return tags.surface && tags.surface !== 'grass' ? 'plaza' : 'pitch';
   if (tags.leisure === 'playground') return 'play';
   if (tags.leisure === 'park' || tags.leisure === 'common') return 'park';
   if (tags.leisure === 'garden') return 'garden';
-  if (['grass', 'meadow', 'village_green', 'recreation_ground', 'cemetery'].includes(tags.landuse) || tags.natural === 'grassland' || tags.amenity === 'grave_yard') return 'grass';
+  if (['grass', 'meadow', 'village_green', 'recreation_ground', 'cemetery', 'orchard'].includes(tags.landuse) || tags.natural === 'grassland' || tags.natural === 'wetland' || tags.amenity === 'grave_yard') return 'grass';
   if (tags.landuse === 'construction') return 'dirt';
   if (tags.landuse === 'brownfield') return 'brownfield';
+  if (tags.landuse === 'residential') return 'gardens';
   if (tags.amenity === 'fuel' && !tags.building) return 'forecourt';
   if (tags.amenity === 'parking' && !tags.building && tags.parking !== 'underground' && tags.parking !== 'multi-storey') return 'parking';
   if (tags['area:highway'] === 'service') return 'yard';
@@ -1114,6 +1145,9 @@ export function areaKind(tags: Tags): AreaKind | null {
 
 /** Where an area sits in the drawing order (later on top). */
 export const AREA_ORDER: Record<AreaKind, number> = {
+  gardens: -1,
+  field: 0,
+  allotments: 1,
   wood: 0,
   park: 1,
   grass: 2,

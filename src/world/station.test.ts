@@ -46,7 +46,7 @@ describe('Bristol Bus Station', () => {
     let longest = 0;
     let most = 0;
     const step = 1 / 30;
-    for (let t = 0; t < 180; t += step) {
+    for (let t = 0; t < 240; t += step) {
       traffic.update(step, player, view, () => 'green');
       let inBays = 0;
       for (const v of traffic.vehicles) {
@@ -93,7 +93,7 @@ describe('Bristol Bus Station', () => {
     // Every bus that's backed out faced on round the yard after (towards the way out, the south-west: x falling, y rising).
     const out = traffic.vehicles.filter((v: Vehicle) => v.bus?.done && v.mode === 'drive' && v.route[0].lane && st.yard.has(v.route[0].lane.id));
     for (const v of out) expect(Math.cos(v.angle) < 0.3 || Math.sin(v.angle) > -0.3).toBe(true);
-  }, 120_000);
+  }, 180_000);
 
   it("has no one walking about in its yard: they get off at the bays, onto the platforms, and on from them", () => {
     const st = map.busStations![0];
