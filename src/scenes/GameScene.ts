@@ -28,7 +28,7 @@ import {
 } from '../physics/collisions';
 import { Buildings } from '../world/Buildings';
 import { DeckLayer } from '../world/DeckLayer';
-import type { Decks } from '../world/decks';
+import { type Decks, nearestAlong } from '../world/decks';
 import { GroundLayer, surfacesWork } from '../world/GroundLayer';
 import { Perspective } from '../world/perspective';
 import { Terrain } from '../world/terrain';
@@ -751,11 +751,24 @@ export class GameScene extends Phaser.Scene {
     // A bridge is drawn over the car when it's underneath, and under it when it's on top.
     // (And under it at the end of a bridge you're driving onto or off, where the deck meets the road.)
     // (A deck over another, higher, over it: a path along the river under the railway's bridge is under it.)
-    this.deckLayer.update(view, this.perspective, (i) => {
-      const deck = this.decks.decks[i];
-      const over = this.decks.height(deck, deck.length / 2) / 100_000;
-      return (this.level === 1 || this.decks.atEnd(this.car.x, this.car.y, this.carLength() / 2 + 4, deck) ? DEPTH.deckBelow : DEPTH.deckAbove) + over;
-    });
+    const below = (deck: Decks['decks'][number]) => this.level === 1 || this.decks.atEnd(this.car.x, this.car.y, this.carLength() / 2 + 4, deck);
+    // (See-through while you're under it, so you can still see the car, as under a tree.)
+    this.deckLayer.update(
+      view,
+      this.perspective,
+      (i) => {
+        const deck = this.decks.decks[i];
+        const over = this.decks.height(deck, deck.length / 2) / 100_000;
+        return (below(deck) ? DEPTH.deckBelow : DEPTH.deckAbove) + over;
+      },
+      (i) => {
+        const deck = this.decks.decks[i];
+        const { x, y } = this.car;
+        if (this.level !== 0 || x < deck.x0 - 16 || x > deck.x1 + 16 || y < deck.y0 - 16 || y > deck.y1 + 16) return false;
+        const { along, distance } = nearestAlong(deck.road.pts, x, y);
+        return distance < deck.half + this.carLength() * 0.6 && this.decks.height(deck, along) - this.groundAt(x, y) > 1.5 * 8 && !below(deck);
+      },
+    );
     // Down in a tunnel: everything above in the dark; the tunnel, and you, over it.
     const under = this.level === 2;
     this.dark.setVisible(under);

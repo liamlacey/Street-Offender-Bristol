@@ -12,6 +12,9 @@ const NEAR = 240;
 const FAR = 800;
 /** New pieces drawn a frame, at most (so coming up to a big bridge never holds a frame up for long). */
 const PER_FRAME = 2;
+/** How see-through a deck is with you under it, and how quickly it fades to that (or back), a frame. */
+const SEE_THROUGH = 0.35;
+const FADE = 0.08;
 
 type Sheet = DeckLayer['sheets'][number];
 
@@ -27,7 +30,7 @@ export class DeckLayer {
    * those near the view; and the stretches of its parapet knocked through, to
    * cut out of it again.
    */
-  private sheets: { name: string; x0: number; y0: number; x1: number; y1: number; half: number; pieces: Map<string, { sheet: TerrainSheet; key: string; texture: Phaser.Textures.CanvasTexture }>; broken: [number, number, number, number][] }[] = [];
+  private sheets: { name: string; x0: number; y0: number; x1: number; y1: number; half: number; alpha: number; pieces: Map<string, { sheet: TerrainSheet; key: string; texture: Phaser.Textures.CanvasTexture }>; broken: [number, number, number, number][] }[] = [];
   /** Every stretch of parapet knocked through (for the next region's decks: see `use`). */
   private readonly breaks: [[number, number], [number, number]][] = [];
   private made = 0;
@@ -56,7 +59,7 @@ export class DeckLayer {
         return old;
       }
       const { x0, y0, x1, y1 } = deck;
-      return { name, x0, y0, x1, y1, half: deck.road.width / 2, pieces: new Map(), broken: [] };
+      return { name, x0, y0, x1, y1, half: deck.road.width / 2, alpha: 1, pieces: new Map(), broken: [] };
     });
     for (const s of had.values()) this.unmake(s);
     for (const s of this.sheets) {
@@ -155,8 +158,12 @@ export class DeckLayer {
     for (const s of this.sheets) for (const p of s.pieces.values()) p.sheet.setVisible(false);
   }
 
-  /** Call once a frame: lays the decks near the view where the perspective puts them, each at its depth (the pieces of them near it, drawn as they come near). */
-  update(view: Phaser.Geom.Rectangle, perspective: Perspective, depthOf: (deck: number) => number): void {
+  /**
+   * Call once a frame: lays the decks near the view where the perspective
+   * puts them, each at its depth (the pieces of them near it, drawn as they
+   * come near); see-through, fading to it, while `under` says you're beneath it.
+   */
+  update(view: Phaser.Geom.Rectangle, perspective: Perspective, depthOf: (deck: number) => number, under: (deck: number) => boolean = () => false): void {
     let fresh = 0;
     for (const [i, s] of this.sheets.entries()) {
       // Its pieces well out of view: let go.
@@ -169,6 +176,8 @@ export class DeckLayer {
       if (s.x1 < view.left - NEAR || s.x0 > view.right + NEAR || s.y1 < view.top - NEAR || s.y0 > view.bottom + NEAR) continue;
       const depth = depthOf(i);
       const road = this.decks.decks[i].road;
+      const alpha = under(i) ? SEE_THROUGH : 1;
+      if (s.alpha !== alpha) s.alpha += Math.sign(alpha - s.alpha) * Math.min(Math.abs(alpha - s.alpha), FADE);
       // The pieces near the view the deck runs through.
       for (let px = s.x0 + Math.max(0, Math.floor((view.left - NEAR - s.x0) / PIECE)) * PIECE; px < Math.min(s.x1, view.right + NEAR); px += PIECE) {
         for (let py = s.y0 + Math.max(0, Math.floor((view.top - NEAR - s.y0) / PIECE)) * PIECE; py < Math.min(s.y1, view.bottom + NEAR); py += PIECE) {
@@ -179,6 +188,7 @@ export class DeckLayer {
           const sheet = this.make(i, px, py);
           sheet.setVisible(true);
           if (sheet.mesh.depth !== depth) sheet.mesh.setDepth(depth);
+          if (sheet.mesh.alpha !== s.alpha) sheet.mesh.setAlpha(s.alpha);
           sheet.update(perspective);
         }
       }
