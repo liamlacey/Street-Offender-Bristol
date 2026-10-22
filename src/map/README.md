@@ -32,61 +32,104 @@ downloaded again unless asked for (`npm run map -- --refresh <area>`).
 
 Each area's LIDAR alignment (`lidarShift`, metres east and south) is worked out
 the first time it's built (see "Lining up" below) and then kept in `areas.json`.
-The areas make a 7 by 7 grid, each about 970 m by 945 m (about 6.8 km by 6.6 km in
-all), with `cathedral` in the middle: the first 3 by 3 round it, then a ring of 16
-round those, then a ring of 24 round those (the "second ring"). Their shifts (east, south):
+The areas make a grid 9 wide and 10 deep, each about 970 m by 945 m (about 8.7 km by
+9.5 km in all; rows counted from the north, columns from the west): `cathedral` and
+the first 3 by 3 round it, then a ring of 16 round those, then a ring of 24 round
+those (the "second ring"), then a third ring of 41: a row and a column more to the
+west, east and south, and two rows more to the north. Their shifts (east, south):
 
-| Area | Where | Shift |
-| --- | --- | --- |
-| `cathedral` | middle | −0.5 m, 0 m |
-| `kingsdown` | north | −0.5 m, 0.5 m |
-| `stpauls` | north-east | −0.5 m, 1 m |
-| `broadmead` | east | 0 m, 1 m |
-| `redcliffe` | south-east | 0 m, 0.5 m |
-| `southville` | south | 1 m, 1 m |
-| `ashton` | south-west | 0.5 m, 0.5 m |
-| `hotwells` | west | 1 m, 0 m |
-| `clifton` | north-west | 1 m, 1 m |
-| `seawalls` | outer ring, north-west corner | 1 m, 0.5 m |
-| `whiteladies` | outer ring, north | 1.5 m, −0.5 m |
-| `redland` | outer ring, north | 0.5 m, 1 m |
-| `montpelier` | outer ring, north | 0 m, 0 m |
-| `stwerburghs` | outer ring, north-east corner | 0.5 m, 0.5 m |
-| `lawrencehill` | outer ring, east | 1.5 m, 0 m |
-| `stphilips` | outer ring, east | 2 m, 0.5 m |
-| `totterdown` | outer ring, east | 2 m, 0 m |
-| `knowle` | outer ring, south-east corner | 4 m, 0 m |
-| `windmillhill` | outer ring, south | 2 m, 0.5 m |
-| `bedminster` | outer ring, south | 2 m, 0.5 m |
-| `winterstoke` | outer ring, south | 2 m, 0 m |
-| `ashtonvale` | outer ring, south-west corner | 0.5 m, 0.5 m |
-| `bowerashton` | outer ring, west | 1 m, 1 m |
-| `gorge` | outer ring, west | 1 m, 0.5 m |
-| `observatory` | outer ring, west | 1 m, 0.5 m |
-| `seamills` | second ring, north-west corner | −0.5 m, 0.5 m |
-| `sneydpark` | second ring, north | 0 m, 1 m |
-| `westburypark` | second ring, north | 1 m, 1.5 m |
-| `bishopston` | second ring, north | 0.5 m, 1 m |
-| `ashleydown` | second ring, north | −0.5 m, 1 m |
-| `eastville` | second ring, north | 0.5 m, 2 m |
-| `whitehall` | second ring, north-east corner | 0.5 m, 0 m |
-| `easton` | second ring, east | 1.5 m, 0 m |
-| `redfield` | second ring, east | 3 m, 0.5 m |
-| `bartonhill` | second ring, east | 4 m, 0 m |
-| `stannes` | second ring, east | 5 m, 0 m |
-| `brislington` | second ring, east | 6 m, 0 m |
-| `broomhill` | second ring, south-east corner | 7 m, 0.5 m |
-| `filwood` | second ring, south | 7 m, 1 m |
-| `knowlewest` | second ring, south | 4.5 m, 1.5 m |
-| `headleypark` | second ring, south | 4 m, 1.5 m |
-| `bedminsterdown` | second ring, south | 3.5 m, 1.5 m |
-| `colliters` | second ring, south | 1.5 m, 0.5 m |
-| `yanley` | second ring, south-west corner | 0.5 m, 0.5 m |
-| `longashton` | second ring, west | 0 m, 0 m |
-| `ashtoncourt` | second ring, west | −1 m, −1.5 m |
-| `nightingale` | second ring, west | −1 m, 1 m |
-| `leighwoods` | second ring, west | 0.5 m, 0.5 m |
-| `abbotsleigh` | second ring, west | 0 m, 1 m |
+| Area | Where | Row, column | Shift |
+| --- | --- | --- | --- |
+| `cathedral` | middle | 6, 5 | −0.5 m, 0 m |
+| `kingsdown` | north | 5, 5 | 0 m, 0 m |
+| `stpauls` | north-east | 5, 6 | −0.5 m, 0.5 m |
+| `broadmead` | east | 6, 6 | −1 m, 1 m |
+| `redcliffe` | south-east | 7, 6 | −1 m, 0 m |
+| `southville` | south | 7, 5 | 0 m, 0.5 m |
+| `ashton` | south-west | 7, 4 | 0.5 m, 0.5 m |
+| `hotwells` | west | 6, 4 | 0.5 m, 0 m |
+| `clifton` | north-west | 5, 4 | 1 m, 0 m |
+| `seawalls` | outer ring, north-west corner | 4, 3 | 1 m, 0 m |
+| `whiteladies` | outer ring, north | 4, 4 | 1.5 m, −1 m |
+| `redland` | outer ring, north | 4, 5 | 0.5 m, 0.5 m |
+| `montpelier` | outer ring, north | 4, 6 | −1 m, −0.5 m |
+| `stwerburghs` | outer ring, north-east corner | 4, 7 | 0.5 m, 0.5 m |
+| `lawrencehill` | outer ring, east | 5, 7 | 0.5 m, 0 m |
+| `stphilips` | outer ring, east | 6, 7 | 0.5 m, 0 m |
+| `totterdown` | outer ring, east | 7, 7 | −0.5 m, −0.5 m |
+| `knowle` | outer ring, south-east corner | 8, 7 | 0 m, 0.5 m |
+| `windmillhill` | outer ring, south | 8, 6 | −1 m, 0 m |
+| `bedminster` | outer ring, south | 8, 5 | 0 m, 0 m |
+| `winterstoke` | outer ring, south | 8, 4 | 1 m, 0 m |
+| `ashtonvale` | outer ring, south-west corner | 8, 3 | 0.5 m, −0.5 m |
+| `bowerashton` | outer ring, west | 7, 3 | 1 m, 1 m |
+| `gorge` | outer ring, west | 6, 3 | 0 m, 0.5 m |
+| `observatory` | outer ring, west | 5, 3 | 0.5 m, 0.5 m |
+| `seamills` | second ring, north-west corner | 3, 2 | −0.5 m, 0 m |
+| `sneydpark` | second ring, north | 3, 3 | −0.5 m, 0 m |
+| `westburypark` | second ring, north | 3, 4 | 0.5 m, 0.5 m |
+| `bishopston` | second ring, north | 3, 5 | 0 m, −0.5 m |
+| `ashleydown` | second ring, north | 3, 6 | −1 m, 0.5 m |
+| `eastville` | second ring, north | 3, 7 | 0 m, 1 m |
+| `whitehall` | second ring, north-east corner | 3, 8 | −0.5 m, 0 m |
+| `easton` | second ring, east | 4, 8 | 0 m, −0.5 m |
+| `redfield` | second ring, east | 5, 8 | 0 m, 0 m |
+| `bartonhill` | second ring, east | 6, 8 | 0 m, 0.5 m |
+| `stannes` | second ring, east | 7, 8 | −0.5 m, 0 m |
+| `brislington` | second ring, east | 8, 8 | 0 m, 0 m |
+| `broomhill` | second ring, south-east corner | 9, 8 | −0.5 m, 1 m |
+| `filwood` | second ring, south | 9, 7 | −0.5 m, 0.5 m |
+| `knowlewest` | second ring, south | 9, 6 | −1 m, 0.5 m |
+| `headleypark` | second ring, south | 9, 5 | 0 m, 0.5 m |
+| `bedminsterdown` | second ring, south | 9, 4 | 1 m, 0.5 m |
+| `colliters` | second ring, south | 9, 3 | 0 m, 0 m |
+| `yanley` | second ring, south-west corner | 9, 2 | 0.5 m, 0.5 m |
+| `longashton` | second ring, west | 8, 2 | 0 m, −0.5 m |
+| `ashtoncourt` | second ring, west | 7, 2 | −1 m, −2 m |
+| `nightingale` | second ring, west | 6, 2 | −1 m, 0.5 m |
+| `leighwoods` | second ring, west | 5, 2 | 0.5 m, 0 m |
+| `abbotsleigh` | second ring, west | 4, 2 | −0.5 m, 1 m |
+| `highwood` | third ring, south-west corner | 10, 1 | −0.5 m, 1 m |
+| `limekiln` | third ring, south | 10, 2 | 0 m, 0 m |
+| `highridge` | third ring, south | 10, 3 | 0 m, 0.5 m |
+| `manorwoods` | third ring, south | 10, 4 | 0.5 m, 0 m |
+| `imperialpark` | third ring, south | 10, 5 | 0 m, 0 m |
+| `hengrove` | third ring, south | 10, 6 | −1.5 m, 0.5 m |
+| `perrycourt` | third ring, south | 10, 7 | −0.5 m, 0 m |
+| `saltwell` | third ring, south | 10, 8 | 0 m, 0.5 m |
+| `stockwood` | third ring, south-east corner | 10, 9 | 0 m, 0 m |
+| `northleaze` | third ring, west | 9, 1 | 0.5 m, 0.5 m |
+| `westtownlane` | third ring, east | 9, 9 | −1 m, 0 m |
+| `clarkencoombe` | third ring, west | 8, 1 | −0.5 m, 0 m |
+| `victorypark` | third ring, east | 8, 9 | 0 m, 0 m |
+| `fiftyacre` | third ring, west | 7, 1 | −4 m, 4 m |
+| `hencliff` | third ring, east | 7, 9 | 0.5 m, 0.5 m |
+| `beggarbush` | third ring, west | 6, 1 | 0 m, 0.5 m |
+| `stannespark` | third ring, east | 6, 9 | −0.5 m, 0 m |
+| `pillroad` | third ring, west | 5, 1 | −0.5 m, 1 m |
+| `crewshole` | third ring, east | 5, 9 | −0.5 m, −0.5 m |
+| `oakwood` | third ring, west | 4, 1 | −1 m, 0.5 m |
+| `rosegreen` | third ring, east | 4, 9 | −1 m, 0.5 m |
+| `portway` | third ring, west | 3, 1 | 0.5 m, −0.5 m |
+| `fishponds` | third ring, east | 3, 9 | 1 m, 0.5 m |
+| `shirehampton` | third ring, north-west corner | 2, 1 | 0.5 m, −0.5 m |
+| `stokebishop` | third ring, north | 2, 2 | −0.5 m, 0 m |
+| `stokelodge` | third ring, north | 2, 3 | 0 m, 0 m |
+| `henleaze` | third ring, north | 2, 4 | 0.5 m, 0 m |
+| `goldenhill` | third ring, north | 2, 5 | 0 m, −0.5 m |
+| `horfieldcommon` | third ring, north | 2, 6 | −0.5 m, 0 m |
+| `mullerroad` | third ring, north | 2, 7 | 1.5 m, −0.5 m |
+| `purdown` | third ring, north | 2, 8 | 0.5 m, 0.5 m |
+| `blackberryhill` | third ring, north-east corner | 2, 9 | 0 m, 1 m |
+| `kingsweston` | third ring, north-west corner | 1, 1 | 0.5 m, 0.5 m |
+| `coombedingle` | third ring, north | 1, 2 | −0.5 m, 0.5 m |
+| `canford` | third ring, north | 1, 3 | 0 m, 0.5 m |
+| `westbury` | third ring, north | 1, 4 | 0.5 m, 0 m |
+| `southmead` | third ring, north | 1, 5 | 0 m, 0 m |
+| `horfield` | third ring, north | 1, 6 | 0 m, 1 m |
+| `filtonavenue` | third ring, north | 1, 7 | 0.5 m, 0.5 m |
+| `lockleaze` | third ring, north | 1, 8 | 0 m, 0.5 m |
+| `stokepark` | third ring, north-east corner | 1, 9 | −0.5 m, 0.5 m |
 
 ## Growing the map
 
@@ -432,7 +475,15 @@ on the Ordnance Survey's National Grid. `osgb.ts` converts (Helmert transform to
 OSGB36, then the National Grid's transverse Mercator: good to a few metres), and
 `alignLidar` takes out what's left: it tries every shift up to 8 m in half-metre
 steps and keeps the one that puts the most building interiors high (over 2.5 m)
-and road centre lines low (under 1.5 m).
+and road centre lines low (under 1.5 m). A map point's National Grid position
+(`nationalGridOf` in `enrich.ts`) is worked out exactly every 500 m and in between
+from the four round it (to under a centimetre), not fitted from the map's corners:
+the map's flat, its east-west scale that of its north edge, so a fit like that is
+out by up to 16 m across the map (most in the south-east), and moves whenever an area
+is added to the north or west. (Until the third ring it was fitted from three corners,
+and the shifts took up that error; all 90 were worked out again when it changed.)
+They're now all within 1.5 m but Fifty Acre Wood's (woods and a golf course, next to
+nothing to line up by).
 
 **Measured by the LIDAR** (height above ground = first-return surface − bare
 ground):
@@ -795,7 +846,9 @@ front and back) or fire engines (red, a ladder on top).
 **Parked cars:** in the car parks' bays (65% of them taken; not the big shops' trolley shelters, nor under a market's stalls or the street life: see People) and in the parking lanes'
 bays (55%, plus 1.2% per point of the street's activity, at most 92%; loading bays
 25%), not at bus stops (the bays aren't painted there either), nor where a car park's
-bays come right up to the kerb, nor one over another (round a tight bend or a corner).
+bays come right up to the kerb, nor one over another (round a tight bend or a corner),
+nor one that would stick out into the road round a bend (a corner of it, half a metre in,
+more than 0.3 m out from the parking lane's edge, the whole road's line measured).
 Parallel bays face the way the traffic on that side goes; end-on ones either way
 round. No lorries. The traffic drives past those parked in their bays (they're out of
 its lane), but anything out of its lane (overtaking, going round, one on a call
@@ -908,7 +961,9 @@ but the water and the buildings.
   little behind, while it's beside them), they step aside just far enough to pass
   0.45 m clear of its side (away from it if there's open ground there, else round its
   other side), up to 3.5 m from their line, briskly, slowing till they're over; with
-  no way round, they wait. No one appears inside one.
+  no way round, they wait. No one appears inside one, and no step takes anyone nearer
+  than 0.3 m to its side (a step that would, as when a corner of their walk has them
+  change sides round it, goes along it instead: round its end, not through it).
 - **Danger**: only close by, and only in something (not you on foot): you going over 8 m/s within 3.5 m of them, or driving along a
   pavement (over 5 m/s, within 5 m): they run (4.2 m/s) away from you, roads or not (but
   not into the water or a wall), for 4 to 7 s, then go back to walking. A crash (or
@@ -1029,6 +1084,8 @@ but the water and the buildings.
     coming at them and they're out of its way, and off running (as the dogs are). A
     teacher or two; parents in a group outside the gate; a lollipop lady (white coat,
     peaked cap, her sign) at the kerb.
+  - (Those at a door stand out from it, 1.5 to 2 m, or nearer if that's within a
+    metre of a carriageway; if even half a metre out is, no one stands there.)
   - A pub (its building, or the one its point's in): two to four smokers out the
     front, an A-board, one to three kegs against the wall by the door; a beer garden
     on open ground (or grass) behind and beside it (not the road side): two to six

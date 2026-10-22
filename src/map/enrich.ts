@@ -29,16 +29,32 @@ const PITCH = 1.5;
 /** And those whose heights spread less than this are flat. */
 const FLAT = 0.6;
 
-/** A map point's National Grid position: near enough linear over a few kilometres, so fitted from three points. */
+/** How far apart the National Grid's worked out exactly, metres: in between, it's near enough linear (to under a centimetre). */
+const GRID_MESH = 500;
+
+/**
+ * A map point's National Grid position: worked out exactly every 500 m, and in between from the four round it. (Not from the
+ * map's corners alone: the map's flat, its east-west scale that of its north edge, so its south's out by 16 m across 9 km.)
+ */
 export function nationalGridOf(map: GameMap): (x: number, y: number) => [number, number] {
   const proj = new Projection(map.origin.lat, map.origin.lon, map.pxPerMetre);
-  const at = (x: number, y: number) => toNationalGrid(proj.lat(y), proj.lon(x));
-  const [e0, n0] = at(0, 0);
-  const [ex, nx] = at(map.width, 0);
-  const [ey, ny] = at(0, map.height);
-  const [dex, dnx] = [(ex - e0) / map.width, (nx - n0) / map.width];
-  const [dey, dny] = [(ey - e0) / map.height, (ny - n0) / map.height];
-  return (x, y) => [e0 + dex * x + dey * y, n0 + dnx * x + dny * y];
+  const step = GRID_MESH * map.pxPerMetre;
+  const cols = Math.ceil(map.width / step) + 1;
+  const rows = Math.ceil(map.height / step) + 1;
+  const es = new Float64Array(cols * rows);
+  const ns = new Float64Array(cols * rows);
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) [es[j * cols + i], ns[j * cols + i]] = toNationalGrid(proj.lat(j * step), proj.lon(i * step));
+  }
+  return (x, y) => {
+    const i = Math.min(cols - 2, Math.max(0, Math.floor(x / step)));
+    const j = Math.min(rows - 2, Math.max(0, Math.floor(y / step)));
+    const u = x / step - i;
+    const v = y / step - j;
+    const k = j * cols + i;
+    const [a, b, c, d] = [(1 - u) * (1 - v), u * (1 - v), (1 - u) * v, u * v];
+    return [es[k] * a + es[k + 1] * b + es[k + cols] * c + es[k + cols + 1] * d, ns[k] * a + ns[k + 1] * b + ns[k + cols] * c + ns[k + cols + 1] * d];
+  };
 }
 
 /**

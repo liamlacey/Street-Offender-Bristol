@@ -5,7 +5,7 @@
  * long however big the map grows.
  */
 
-import bristol from '../map/bristol.json';
+import bristol from './bristol';
 import type { GameMap } from '../map/osm';
 import { type RegionMap, TILE, assemble, splitMap, tilesFor } from '../map/regions';
 

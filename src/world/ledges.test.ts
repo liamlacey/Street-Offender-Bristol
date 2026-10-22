@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createCar } from '../car/CarPhysics';
 import type { GameMap } from '../map/osm';
-import bristol from '../map/bristol.json';
+import bristol from '../test/bristol';
 import { GRAVITY, Ledges, landingSpeed } from './ledges';
 
 const M = 8;

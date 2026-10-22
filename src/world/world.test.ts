@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GameMap, Road } from '../map/osm';
-import bristol from '../map/bristol.json';
+import bristol from '../test/bristol';
 import { buildingLook, clipHalfPlane, hatch, parseColour } from './buildingLook';
 import { Surface, SurfaceGrid, surfacePaint } from './surface';
 import { CHUNK, buildWorld, buildingWalls, chunkKey, cutWall, lineLength, pointAlong, shadowOffset, subPolyline } from './world';

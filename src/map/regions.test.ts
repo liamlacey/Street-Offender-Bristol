@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Terrain } from '../world/terrain';
-import bristol from './bristol.json';
+import bristol from '../test/bristol';
 import type { GameMap } from './osm';
 import { TILE, assemble, splitMap, tilesFor } from './regions';
 

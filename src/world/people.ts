@@ -42,6 +42,8 @@ export interface Block {
 const ROUND_LOOK = 4 * 8;
 const ROUND_ROOM = 0.45 * 8;
 const ROUND_MOST = 3.5 * 8;
+/** And never closer to its side than this, px: a step that'd take them nearer slides along it instead (round its end, not through it). */
+const ROUND_NEAREST = 0.3 * 8;
 
 /** How far (x, y) is from the line down a vehicle's middle (its length, less its rounded ends), px. */
 function bodyDist(b: Block, x: number, y: number): number {
@@ -1499,7 +1501,9 @@ export class People {
     const wide = round !== null ? ROUND_MOST : 1.05 * M;
     const off = Math.max(-wide, Math.min(wide, p.side + p.avoid));
     const [sx, sy] = [px + ux * ahead - uy * off, py + uy * ahead + ux * off];
+    const [x0, y0] = [p.x, p.y];
     this.goTo(p, sx, sy, Math.min(p.pace, slow), dt, 0.05 * M);
+    if (this.blocks.length) this.skirt(p, x0, y0);
     if (len - along < 0.6 * M) {
       p.next += p.dir;
       if (p.next < 0 || p.next >= n) this.endOfWalk(p);
@@ -1565,6 +1569,27 @@ export class People {
       }
     }
     return Number.NaN;
+  }
+
+  /**
+   * Having stepped from (x0, y0): if that took them nearer a vehicle standing there than they should be (as when a corner of
+   * their walk has them change which side they go round it), the part of the step towards it is dropped, so they go along it.
+   */
+  private skirt(p: Person, x0: number, y0: number): void {
+    for (const b of this.blocks) {
+      if (b.level !== p.level || Math.abs(b.x - p.x) > b.length || Math.abs(b.y - p.y) > b.length) continue;
+      const from = bodyDist(b, x0, y0);
+      if (bodyDist(b, p.x, p.y) >= Math.min(from, b.r + ROUND_NEAREST)) continue;
+      // Away from the nearest point down its middle.
+      const h = Math.max(0, b.length / 2 - b.r);
+      const [c, s] = [Math.cos(b.angle), Math.sin(b.angle)];
+      const t = Math.max(-h, Math.min(h, (x0 - b.x) * c + (y0 - b.y) * s));
+      const [ox, oy] = [x0 - b.x - c * t, y0 - b.y - s * t];
+      const [nx, ny] = [ox / (from || 1), oy / (from || 1)];
+      const [mx, my] = [p.x - x0, p.y - y0];
+      const into = Math.min(0, mx * nx + my * ny);
+      [p.x, p.y] = [x0 + mx - nx * into, y0 + my - ny * into];
+    }
   }
 
   /**

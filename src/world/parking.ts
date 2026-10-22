@@ -182,7 +182,12 @@ export function streetBays(r: Road, lane: Lane, from: number, to: number): Bays 
     const [cx, cy] = [mx + mnx * (kerb - depth / 2) + mtx * (t / 2), my + mny * (kerb - depth / 2) + mty * (t / 2)];
     // Parallel: facing the way the traffic on that side goes; end on or slanted: in from the road, along the lines.
     const angle = parallel ? Math.atan2(mty * lane.side, mtx * lane.side) : Math.atan2(mny * depth - mty * t, mnx * depth - mtx * t);
-    spaces.push({ x: cx, y: cy, angle, length: parallel ? PARALLEL_BAY : depth, taken, endOn: !parallel });
+    const length = parallel ? PARALLEL_BAY : depth;
+    // (Not round a bend so tight the bay would stick out into the road: its corners, a little in, all by the kerb.)
+    const [ca, sa] = [Math.cos(angle), Math.sin(angle)];
+    const [hl, hw] = [length / 2 - 0.5 * 8, (parallel ? depth : BAY_WIDTH) / 2 - 0.5 * 8];
+    const out = [[hl, hw], [hl, -hw], [-hl, hw], [-hl, -hw]].some(([a, b]) => distanceTo(cx + ca * a - sa * b, cy + sa * a + ca * b, r.pts) < kerb - depth - 0.3 * 8);
+    if (!out) spaces.push({ x: cx, y: cy, angle, length, taken, endOn: !parallel });
   }
   return { lines, spaces, edge, start, end };
 }

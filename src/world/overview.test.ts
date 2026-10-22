@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GameMap } from '../map/osm';
-import bristol from '../map/bristol.json';
+import bristol from '../test/bristol';
 import { jumpSpot, placeName } from './overview';
 
 const map = bristol as unknown as GameMap;

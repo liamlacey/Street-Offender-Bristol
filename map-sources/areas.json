@@ -34,8 +34,8 @@
       "fetched": "2026-10-19",
       "osmNewestEdit": "2026-10-19T19:14:12Z",
       "lidarShift": [
-        -0.5,
-        0.5
+        0,
+        0
       ]
     },
     {
@@ -51,7 +51,7 @@
       "osmNewestEdit": "2026-10-19T19:14:12Z",
       "lidarShift": [
         -0.5,
-        1
+        0.5
       ]
     },
     {
@@ -66,7 +66,7 @@
       "fetched": "2026-10-19",
       "osmNewestEdit": "2026-10-19T20:26:10Z",
       "lidarShift": [
-        0,
+        -1,
         1
       ]
     },
@@ -82,8 +82,8 @@
       "fetched": "2026-10-19",
       "osmNewestEdit": "2026-10-19T15:52:27Z",
       "lidarShift": [
-        0,
-        0.5
+        -1,
+        0
       ]
     },
     {
@@ -98,8 +98,8 @@
       "fetched": "2026-10-19",
       "osmNewestEdit": "2026-10-19T19:14:12Z",
       "lidarShift": [
-        1,
-        1
+        0,
+        0.5
       ]
     },
     {
@@ -130,7 +130,7 @@
       "fetched": "2026-10-19",
       "osmNewestEdit": "2026-10-19T19:14:12Z",
       "lidarShift": [
-        1,
+        0.5,
         0
       ]
     },
@@ -147,7 +147,7 @@
       "osmNewestEdit": "2026-10-19T19:14:12Z",
       "lidarShift": [
         1,
-        1
+        0
       ]
     },
     {
@@ -163,7 +163,7 @@
       "osmNewestEdit": "2026-10-18T17:29:49Z",
       "lidarShift": [
         1,
-        0.5
+        0
       ]
     },
     {
@@ -179,7 +179,7 @@
       "osmNewestEdit": "2026-10-18T11:28:24Z",
       "lidarShift": [
         1.5,
-        -0.5
+        -1
       ]
     },
     {
@@ -195,7 +195,7 @@
       "osmNewestEdit": "2026-10-19T15:12:04Z",
       "lidarShift": [
         0.5,
-        1
+        0.5
       ]
     },
     {
@@ -210,8 +210,8 @@
       "fetched": "2026-10-20",
       "osmNewestEdit": "2026-10-19T15:12:04Z",
       "lidarShift": [
-        0,
-        0
+        -1,
+        -0.5
       ]
     },
     {
@@ -242,7 +242,7 @@
       "fetched": "2026-10-20",
       "osmNewestEdit": "2026-10-19T23:45:26Z",
       "lidarShift": [
-        1.5,
+        0.5,
         0
       ]
     },
@@ -258,8 +258,8 @@
       "fetched": "2026-10-20",
       "osmNewestEdit": "2026-10-20T18:55:09Z",
       "lidarShift": [
-        2,
-        0.5
+        0.5,
+        0
       ]
     },
     {
@@ -274,8 +274,8 @@
       "fetched": "2026-10-20",
       "osmNewestEdit": "2026-10-20T18:55:09Z",
       "lidarShift": [
-        2,
-        0
+        -0.5,
+        -0.5
       ]
     },
     {
@@ -290,8 +290,8 @@
       "fetched": "2026-10-20",
       "osmNewestEdit": "2026-10-20T12:21:30Z",
       "lidarShift": [
-        4,
-        0
+        0,
+        0.5
       ]
     },
     {
@@ -306,8 +306,8 @@
       "fetched": "2026-10-20",
       "osmNewestEdit": "2026-10-15T14:51:21Z",
       "lidarShift": [
-        2,
-        0.5
+        -1,
+        0
       ]
     },
     {
@@ -322,8 +322,8 @@
       "fetched": "2026-10-20",
       "osmNewestEdit": "2026-10-20T17:54:12Z",
       "lidarShift": [
-        2,
-        0.5
+        0,
+        0
       ]
     },
     {
@@ -338,7 +338,7 @@
       "fetched": "2026-10-20",
       "osmNewestEdit": "2026-10-20T17:54:12Z",
       "lidarShift": [
-        2,
+        1,
         0
       ]
     },
@@ -355,7 +355,7 @@
       "osmNewestEdit": "2026-10-20T12:38:39Z",
       "lidarShift": [
         0.5,
-        0.5
+        -0.5
       ]
     },
     {
@@ -386,7 +386,7 @@
       "fetched": "2026-10-20",
       "osmNewestEdit": "2026-10-20T18:55:09Z",
       "lidarShift": [
-        1,
+        0,
         0.5
       ]
     },
@@ -402,7 +402,7 @@
       "fetched": "2026-10-20",
       "osmNewestEdit": "2026-10-19T19:14:12Z",
       "lidarShift": [
-        1,
+        0.5,
         0.5
       ]
     },
@@ -419,7 +419,7 @@
       "osmNewestEdit": "2026-10-18T17:29:49Z",
       "lidarShift": [
         -0.5,
-        0.5
+        0
       ]
     },
     {
@@ -434,8 +434,8 @@
       "fetched": "2026-10-20",
       "osmNewestEdit": "2026-10-13T20:03:53Z",
       "lidarShift": [
-        0,
-        1
+        -0.5,
+        0
       ]
     },
     {
@@ -450,8 +450,8 @@
       "fetched": "2026-10-20",
       "osmNewestEdit": "2026-10-17T09:59:26Z",
       "lidarShift": [
-        1,
-        1.5
+        0.5,
+        0.5
       ]
     },
     {
@@ -466,8 +466,8 @@
       "osmNewestEdit": "2026-10-06T09:14:33Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        0.5,
-        1
+        0,
+        -0.5
       ]
     },
     {
@@ -482,8 +482,8 @@
       "osmNewestEdit": "2026-10-19T15:12:04Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        -0.5,
-        1
+        -1,
+        0.5
       ]
     },
     {
@@ -498,8 +498,8 @@
       "osmNewestEdit": "2026-10-19T11:18:42Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        0.5,
-        2
+        0,
+        1
       ]
     },
     {
@@ -514,7 +514,7 @@
       "osmNewestEdit": "2026-10-19T23:45:26Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        0.5,
+        -0.5,
         0
       ]
     },
@@ -530,8 +530,8 @@
       "osmNewestEdit": "2026-10-19T23:45:26Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        1.5,
-        0
+        0,
+        -0.5
       ]
     },
     {
@@ -546,8 +546,8 @@
       "osmNewestEdit": "2026-10-19T11:18:42Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        3,
-        0.5
+        0,
+        0
       ]
     },
     {
@@ -562,8 +562,8 @@
       "osmNewestEdit": "2026-10-20T18:55:09Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        4,
-        0
+        0,
+        0.5
       ]
     },
     {
@@ -578,7 +578,7 @@
       "osmNewestEdit": "2026-10-20T18:55:09Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        5,
+        -0.5,
         0
       ]
     },
@@ -594,7 +594,7 @@
       "osmNewestEdit": "2026-10-18T17:29:49Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        6,
+        0,
         0
       ]
     },
@@ -610,8 +610,8 @@
       "osmNewestEdit": "2026-10-15T22:57:52Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        7,
-        0.5
+        -0.5,
+        1
       ]
     },
     {
@@ -626,8 +626,8 @@
       "osmNewestEdit": "2026-10-15T14:51:21Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        7,
-        1
+        -0.5,
+        0.5
       ]
     },
     {
@@ -642,8 +642,8 @@
       "osmNewestEdit": "2026-10-15T14:51:21Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        4.5,
-        1.5
+        -1,
+        0.5
       ]
     },
     {
@@ -658,8 +658,8 @@
       "osmNewestEdit": "2026-10-15T14:51:21Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        4,
-        1.5
+        0,
+        0.5
       ]
     },
     {
@@ -674,8 +674,8 @@
       "osmNewestEdit": "2026-10-18T11:24:31Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        3.5,
-        1.5
+        1,
+        0.5
       ]
     },
     {
@@ -690,8 +690,8 @@
       "osmNewestEdit": "2026-10-20T12:38:39Z",
       "fetched": "2026-10-20",
       "lidarShift": [
-        1.5,
-        0.5
+        0,
+        0
       ]
     },
     {
@@ -723,7 +723,7 @@
       "fetched": "2026-10-20",
       "lidarShift": [
         0,
-        0
+        -0.5
       ]
     },
     {
@@ -739,7 +739,7 @@
       "fetched": "2026-10-20",
       "lidarShift": [
         -1,
-        -1.5
+        -2
       ]
     },
     {
@@ -755,7 +755,7 @@
       "fetched": "2026-10-20",
       "lidarShift": [
         -1,
-        1
+        0.5
       ]
     },
     {
@@ -771,7 +771,7 @@
       "fetched": "2026-10-20",
       "lidarShift": [
         0.5,
-        0.5
+        0
       ]
     },
     {
@@ -786,8 +786,664 @@
       "osmNewestEdit": "2026-10-18T17:29:49Z",
       "fetched": "2026-10-20",
       "lidarShift": [
+        -0.5,
+        1
+      ]
+    },
+    {
+      "name": "highwood",
+      "about": "High Wood, Bowmans Wood and Charcoal Wood, and the edge of the Woodspring golf course: the far south-west corner, woods and fields south of Long Ashton.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.6635,
+        "maxlat": 51.422,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-22T14:38:46Z",
+      "lidarShift": [
+        -0.5,
+        1
+      ]
+    },
+    {
+      "name": "limekiln",
+      "about": "The Bridgwater Road (A38) and the South Bristol Link Road meeting at the Lime Kiln Roundabout, and Hanging Hill Wood.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.6495,
+        "maxlat": 51.422,
+        "maxlon": -2.6355
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-21T23:46:39Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "highridge",
+      "about": "Highridge: Highridge Common and Green, Kings Head Lane Park, Colliters Way.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.6355,
+        "maxlat": 51.422,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-21T23:46:39Z",
+      "lidarShift": [
+        0,
+        0.5
+      ]
+    },
+    {
+      "name": "manorwoods",
+      "about": "Manor Woods Valley, Headley Park and Bedminster Down School, along Whitchurch Lane.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.6215,
+        "maxlat": 51.422,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-20T17:54:12Z",
+      "lidarShift": [
+        0.5,
+        0
+      ]
+    },
+    {
+      "name": "imperialpark",
+      "about": "Hartcliffe Way and Hengrove Way: Imperial Park, Crox Bottom and the Western Slopes.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.6075,
+        "maxlat": 51.422,
+        "maxlon": -2.5935
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-20T17:54:12Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "hengrove",
+      "about": "Hengrove Park and its leisure park, Hengrove Mounds, Filwood Park and playing fields.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.5935,
+        "maxlat": 51.422,
+        "maxlon": -2.5795
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-21T18:38:45Z",
+      "lidarShift": [
+        -1.5,
+        0.5
+      ]
+    },
+    {
+      "name": "perrycourt",
+      "about": "Airport Road: Perry Court, Oasis Academy New Oak and John Williams, the east end of Hengrove Park.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.5795,
+        "maxlat": 51.422,
+        "maxlon": -2.5655
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-21T15:59:49Z",
+      "lidarShift": [
+        -0.5,
+        0
+      ]
+    },
+    {
+      "name": "saltwell",
+      "about": "Wells Road (A37): Saltwell Valley and Mowbray Road open spaces, St Bernadette schools, Knowle Golf Club.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.5655,
+        "maxlat": 51.422,
+        "maxlon": -2.5515
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-21T15:30:07Z",
+      "lidarShift": [
+        0,
+        0.5
+      ]
+    },
+    {
+      "name": "stockwood",
+      "about": "The south-east corner: Stockwood Open Space, Knowle Golf Club, Cottle Road Park and Oasis Academy Brislington.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.5515,
+        "maxlat": 51.422,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-21T15:25:25Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "northleaze",
+      "about": "Long Ashton village: Northleaze and Birdwell schools, west of the Ashton Court estate.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.6635,
+        "maxlat": 51.4305,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-22T14:38:46Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "westtownlane",
+      "about": "Bath Road (A4) and West Town Lane: Brislington Retail Park, the Flowers Hill and Wilverley trading estates.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.5515,
+        "maxlat": 51.4305,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-18T17:29:49Z",
+      "lidarShift": [
+        -1,
+        0
+      ]
+    },
+    {
+      "name": "clarkencoombe",
+      "about": "Clarken Coombe up the edge of the Ashton Court estate, Coombe Plantation and Long Ashton Golf Club.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.6635,
+        "maxlat": 51.439,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-22T14:38:46Z",
+      "lidarShift": [
+        -0.5,
+        0
+      ]
+    },
+    {
+      "name": "victorypark",
+      "about": "Brislington Hill, Callington Road and the Bath Road: Victory Park, Brislington Trading Estate, Holymead and Broomhill schools.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.5515,
+        "maxlat": 51.439,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-18T17:29:49Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "fiftyacre",
+      "about": "The west of the Ashton Court estate: Fifty Acre Wood, the golf course, Beggar Bush Lane.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.6635,
+        "maxlat": 51.4475,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-09-16T05:48:07Z",
+      "lidarShift": [
+        -4,
+        4
+      ]
+    },
+    {
+      "name": "hencliff",
+      "about": "Nightingale Valley, East Wood, Hencliff Wood and Birch Wood above the Avon, with Broomhill and St Anne's schools.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.5515,
+        "maxlat": 51.4475,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-21T16:04:33Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "beggarbush",
+      "about": "Beggar Bush Lane: Ashton Court golf course, the Bristol Bears training ground and Clifton College's fields.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.6635,
+        "maxlat": 51.456,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-09-10T23:19:23Z",
+      "lidarShift": [
+        0,
+        0.5
+      ]
+    },
+    {
+      "name": "stannespark",
+      "about": "St Anne's Park and Wood, St Anne's Well, the Kingfisher School and Crews Hole woodland by the Avon.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.5515,
+        "maxlat": 51.456,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-21T16:04:33Z",
+      "lidarShift": [
+        -0.5,
+        0
+      ]
+    },
+    {
+      "name": "pillroad",
+      "about": "Abbots Leigh Road and Pill Road through Leigh Woods, Abbots Leigh cricket club.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.6635,
+        "maxlat": 51.4645,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-14T00:40:22Z",
+      "lidarShift": [
+        -0.5,
+        1
+      ]
+    },
+    {
+      "name": "crewshole",
+      "about": "Crew's Hole and Troopers Hill by the Avon, up to St George Park and Church Road.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.5515,
+        "maxlat": 51.4645,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-22T11:54:02Z",
+      "lidarShift": [
+        -0.5,
+        -0.5
+      ]
+    },
+    {
+      "name": "oakwood",
+      "about": "Oak Wood and the north of Leigh Woods, across the Avon from Sea Mills.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.6635,
+        "maxlat": 51.473,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-05T08:51:05Z",
+      "lidarShift": [
+        -1,
+        0.5
+      ]
+    },
+    {
+      "name": "rosegreen",
+      "about": "Rose Green, Whitehall Road and Gordon Road: Packers Field, Royate Hill nature reserve, Eastpark Trading Estate.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.5515,
+        "maxlat": 51.473,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-22T11:54:02Z",
+      "lidarShift": [
+        -1,
+        0.5
+      ]
+    },
+    {
+      "name": "portway",
+      "about": "The Avon and the Portway at Sea Mills station, Leigh Woods across the river.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.6635,
+        "maxlat": 51.4815,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-21T16:04:33Z",
+      "lidarShift": [
+        0.5,
+        -0.5
+      ]
+    },
+    {
+      "name": "fishponds",
+      "about": "Fishponds Road (A432) east of Eastville Park: Bristol Metropolitan Academy, the Ridgeway playing fields.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.5515,
+        "maxlat": 51.4815,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-17T18:47:37Z",
+      "lidarShift": [
+        1,
+        0.5
+      ]
+    },
+    {
+      "name": "shirehampton",
+      "about": "Shirehampton Park and its golf club, Sylvan Way, the Portway, Sea Mills primary.",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.6635,
+        "maxlat": 51.49,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-22T14:38:46Z",
+      "lidarShift": [
+        0.5,
+        -0.5
+      ]
+    },
+    {
+      "name": "stokebishop",
+      "about": "Sea Mills and Stoke Bishop: Trym Park, Stoke Lodge playing field, Shirehampton Road.",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.6495,
+        "maxlat": 51.49,
+        "maxlon": -2.6355
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-22T14:38:46Z",
+      "lidarShift": [
+        -0.5,
+        0
+      ]
+    },
+    {
+      "name": "stokelodge",
+      "about": "Stoke Bishop: Parrys Lane, Elmlea schools, Coombe Dingle sports complex.",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.6355,
+        "maxlat": 51.49,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-13T20:03:53Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "henleaze",
+      "about": "Henleaze and the north end of Durdham Down: Westbury Road, Henleaze Road, Redmaids' and Badminton schools.",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.6215,
+        "maxlat": 51.49,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-17T18:45:03Z",
+      "lidarShift": [
+        0.5,
+        0
+      ]
+    },
+    {
+      "name": "goldenhill",
+      "about": "Golden Hill and Kellaway Avenue: the sports grounds, Henleaze schools, Horfield Common.",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.6075,
+        "maxlat": 51.49,
+        "maxlon": -2.5935
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-21T15:46:44Z",
+      "lidarShift": [
+        0,
+        -0.5
+      ]
+    },
+    {
+      "name": "horfieldcommon",
+      "about": "Gloucester Road (A38) at Horfield Common, Muller Road and Ashley Down Road.",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.5935,
+        "maxlat": 51.49,
+        "maxlon": -2.5795
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-21T23:46:39Z",
+      "lidarShift": [
+        -0.5,
+        0
+      ]
+    },
+    {
+      "name": "mullerroad",
+      "about": "Muller Road and Lockleaze Green: the recreation ground, Priory Hospital, Trinity Academy.",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.5795,
+        "maxlat": 51.49,
+        "maxlon": -2.5655
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-21T18:41:43Z",
+      "lidarShift": [
+        1.5,
+        -0.5
+      ]
+    },
+    {
+      "name": "purdown",
+      "about": "Purdown and the Stoke Park estate, Park Road, Eastville Park's north end.",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.5655,
+        "maxlat": 51.49,
+        "maxlon": -2.5515
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-19T23:45:26Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "blackberryhill",
+      "about": "Frenchay Park Road and Blackberry Hill: Blackberry Hill Hospital, Begbrook, the Stoke Park estate.",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.5515,
+        "maxlat": 51.49,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-19T23:45:26Z",
+      "lidarShift": [
         0,
         1
+      ]
+    },
+    {
+      "name": "kingsweston",
+      "about": "The Kings Weston estate and Blaise Castle estate's west end, Kings Weston Road, Penpole Wood.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.6635,
+        "maxlat": 51.4985,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-15T16:17:27Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "coombedingle",
+      "about": "Coombe Dingle: Dingle Road, the Trym Valley, Canford Lane, Henbury Golf Club.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.6495,
+        "maxlat": 51.4985,
+        "maxlon": -2.6355
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-06T09:14:33Z",
+      "lidarShift": [
+        -0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "canford",
+      "about": "Canford Park and Canford Lane, Henbury Road, the Blaise Castle estate's south edge.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.6355,
+        "maxlat": 51.4985,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-13T20:03:53Z",
+      "lidarShift": [
+        0,
+        0.5
+      ]
+    },
+    {
+      "name": "westbury",
+      "about": "Westbury on Trym: its High Street, Westbury Hill, Old Quarry Park and Badock's Wood.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.6215,
+        "maxlat": 51.4985,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-17T18:45:03Z",
+      "lidarShift": [
+        0.5,
+        0
+      ]
+    },
+    {
+      "name": "southmead",
+      "about": "Southmead Road and Southmead Hospital, Lime Tree park, Badock's Wood.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.6075,
+        "maxlat": 51.4985,
+        "maxlon": -2.5935
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-20T12:21:30Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "horfield",
+      "about": "Horfield: Gloucester Road and Filton Road (A38), Southmead Hospital's east side, Dorian Road playing field.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.5935,
+        "maxlat": 51.4985,
+        "maxlon": -2.5795
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-21T23:46:39Z",
+      "lidarShift": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "filtonavenue",
+      "about": "Filton Avenue and the Bonnington Walk playing fields.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.5795,
+        "maxlat": 51.4985,
+        "maxlon": -2.5655
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-19T12:37:00Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "lockleaze",
+      "about": "Lockleaze: Gainsborough Square, Wallscourt Farm Academy, Long Wood and Barn Wood.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.5655,
+        "maxlat": 51.4985,
+        "maxlon": -2.5515
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-20T12:21:30Z",
+      "lidarShift": [
+        0,
+        0.5
+      ]
+    },
+    {
+      "name": "stokepark",
+      "about": "The north-east corner: the Stoke Park estate, Sims' Hill woodland, Frenchay Park Road.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.5515,
+        "maxlat": 51.4985,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-10-22",
+      "osmNewestEdit": "2026-10-19T23:45:26Z",
+      "lidarShift": [
+        -0.5,
+        0.5
       ]
     }
   ]

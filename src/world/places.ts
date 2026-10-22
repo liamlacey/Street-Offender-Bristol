@@ -158,7 +158,7 @@ class Ground {
   private readonly buildings = new Map<number, number[]>();
   private readonly boxes: [number, number, number, number][];
   private readonly areas = new Map<number, Area[]>();
-  private readonly roads = new Map<number, { ax: number; ay: number; bx: number; by: number; reach: number; vehicle: boolean }[]>();
+  private readonly roads = new Map<number, { ax: number; ay: number; bx: number; by: number; reach: number; half: number; vehicle: boolean }[]>();
   private readonly trees = new Map<number, [number, number][]>();
 
   constructor(readonly map: GameMap) {
@@ -173,7 +173,7 @@ class Ground {
       if (r.tunnel || r.bridge) continue;
       const reach = r.width / 2 + (VEHICLE_ROADS.has(r.kind) && r.pavement ? 2.4 * M : 0);
       for (let k = 0; k + 3 < r.pts.length; k += 2) {
-        const s = { ax: r.pts[k], ay: r.pts[k + 1], bx: r.pts[k + 2], by: r.pts[k + 3], reach, vehicle: VEHICLE_ROADS.has(r.kind) && r.kind !== 'service' && r.kind !== 'track' };
+        const s = { ax: r.pts[k], ay: r.pts[k + 1], bx: r.pts[k + 2], by: r.pts[k + 3], reach, half: VEHICLE_ROADS.has(r.kind) ? r.width / 2 : Number.NaN, vehicle: VEHICLE_ROADS.has(r.kind) && r.kind !== 'service' && r.kind !== 'track' };
         this.add(this.roads, s, [Math.min(s.ax, s.bx) - reach, Math.min(s.ay, s.by) - reach, Math.max(s.ax, s.bx) + reach, Math.max(s.ay, s.by) + reach]);
       }
     }
@@ -242,6 +242,12 @@ class Ground {
 
   onRoad(x: number, y: number, pad = 0): boolean {
     for (const s of this.at(this.roads, x, y)) if (distToSeg(x, y, s.ax, s.ay, s.bx, s.by) < s.reach + pad) return true;
+    return false;
+  }
+
+  /** In a carriageway (not on its pavements), or within `pad` px of one. */
+  onCarriageway(x: number, y: number, pad = 0): boolean {
+    for (const s of this.at(this.roads, x, y)) if (distToSeg(x, y, s.ax, s.ay, s.bx, s.by) < s.half + pad) return true;
     return false;
   }
 
@@ -443,6 +449,15 @@ function doorOf(ring: Pts, ground: Ground, reach = 40 * M): { x: number; y: numb
   return { x: best.x, y: best.y, ox, oy, road: best.road };
 }
 
+/** Where to stand out of a door: `want` px out, or nearer if that's too near the road (a metre clear, for a group round it); or null. */
+function outOf(door: { x: number; y: number; ox: number; oy: number }, ground: Ground, want: number): [number, number] | null {
+  for (let d = want; d >= 0.5 * M; d -= 0.4 * M) {
+    const [x, y] = [door.x + door.ox * d, door.y + door.oy * d];
+    if (!ground.onCarriageway(x, y, M)) return [r1(x), r1(y)];
+  }
+  return null;
+}
+
 /** A pub: its beer garden, kegs and A-board, its smokers. */
 function pub(place: Place, ground: Ground, out: PlaceLife): void {
   // Its building: the one it's mapped as, or the one it's in.
@@ -455,7 +470,8 @@ function pub(place: Place, ground: Ground, out: PlaceLife): void {
   if (door) {
     const { x, y, ox, oy } = door;
     // Out the front, on the pavement: two to four having a smoke; an A-board; kegs against the wall by the door.
-    out.spots.push({ x: r1(x + ox * 1.6 * M), y: r1(y + oy * 1.6 * M), angle: 0, weight: 1.2, group: true });
+    const at = outOf(door, ground, 1.6 * M);
+    if (at) out.spots.push({ x: at[0], y: at[1], angle: 0, weight: 1.2, group: true });
     const [sx, sy] = [-oy, ox];
     if (!ground.onRoad(x + ox * 1.2 * M + sx * 1.5 * M, y + oy * 1.2 * M + sy * 1.5 * M, -1.5 * M)) thing(out, 'aboard', x + ox * 1.2 * M + sx * 1.5 * M, y + oy * 1.2 * M + sy * 1.5 * M, Math.atan2(sy, sx));
     for (let k = 0, n = 1 + Math.floor(rand() * 3); k < n; k++) {
@@ -568,7 +584,8 @@ function flats(i: number, ground: Ground, out: PlaceLife): void {
     }
   }
   // Someone at the door, now and then.
-  if (rand() < 0.4) out.spots.push({ x: r1(door.x + door.ox * 1.5 * M), y: r1(door.y + door.oy * 1.5 * M), angle: 0, weight: 0.6, group: false });
+  const stand = rand() < 0.4 && outOf(door, ground, 1.5 * M);
+  if (stand) out.spots.push({ x: stand[0], y: stand[1], angle: 0, weight: 0.6, group: false });
 }
 
 /** Lock-up garages: the tarmac in front of their doors, a car at some, junk at others. */
@@ -675,8 +692,10 @@ function crowd(place: Place, ground: Ground, out: PlaceLife): void {
     const { x, y, ox, oy } = door;
     const [sx, sy] = [-oy, ox];
     const weight = stadium ? 4 : place.kind === 'university' || place.kind === 'college' ? 1.6 : place.kind === 'hospital' ? 1.4 : 0.8;
-    out.spots.push({ x: r1(x + ox * 2 * M), y: r1(y + oy * 2 * M), angle: 0, weight, group: true });
-    if (place.kind === 'hospital' && rand() < 0.8) out.spots.push({ x: r1(x + ox * 1.5 * M + sx * 4 * M), y: r1(y + oy * 1.5 * M + sy * 4 * M), angle: 0, weight: 0.8, group: true });
+    const at = outOf(door, ground, 2 * M);
+    if (at) out.spots.push({ x: at[0], y: at[1], angle: 0, weight, group: true });
+    const [hx, hy] = [x + ox * 1.5 * M + sx * 4 * M, y + oy * 1.5 * M + sy * 4 * M];
+    if (place.kind === 'hospital' && rand() < 0.8 && !ground.onCarriageway(hx, hy, M)) out.spots.push({ x: r1(hx), y: r1(hy), angle: 0, weight: 0.8, group: true });
     // Bikes by the door (not at a hospital or a stadium), a bench or two.
     if (!stadium && place.kind !== 'hospital' && rand() < 0.7) {
       for (let k = 0, n = 3 + Math.floor(rand() * (place.kind === 'university' ? 8 : 4)); k < n; k++) {

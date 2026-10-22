@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import mapData from '../map/bristol.json';
+import mapData from '../test/bristol';
 import { BOAT_SIZE, Water, findBerths } from '../map/berths';
 import type { Area, GameMap } from '../map/osm';
 import { Boats, WaterGrid } from './boats';
@@ -141,5 +141,5 @@ describe('boats', () => {
       // Nothing had to be rescued.
       expect(errors).toEqual([]);
     }
-  }, 20000);
+  }, 60000);
 });
