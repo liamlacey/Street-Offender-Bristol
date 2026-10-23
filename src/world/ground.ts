@@ -10,7 +10,7 @@
  */
 
 import type { Area, AreaKind, GameMap, Pts, Road } from '../map/osm';
-import { AREA_ORDER, type Paving, VEHICLE_ROADS, ringArea } from '../map/osm';
+import { AREA_ORDER, type Paving, VEHICLE_ROADS, pointInRing, ringArea } from '../map/osm';
 import { drawCarParks, drawHumps, drawLaneFills, drawLanes, drawPaint } from './paint';
 import { newCanvas } from './canvas';
 import { Surface, surfacePaint } from './surface';
@@ -234,8 +234,80 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
     }
   }
 
+  if (!palette.surface) drawRuins(ctx, map, index);
   if (shadows && !palette.surface) drawShadows(ctx, shadows, map, index, x0, y0, w, h, scale);
   ctx.restore();
+}
+
+/**
+ * What's left of the huts knocked down (see world.ts's `ruin`), on the ground: the floor they stood on, its concrete cracked and
+ * broken up, the stubs of their walls round it, and rubble and bricks heaped over it (the same each time it's painted).
+ */
+function drawRuins(ctx: Ctx, map: GameMap, index: ChunkIndex): void {
+  for (const i of index.buildings) {
+    const b = map.buildings[i];
+    if (!b.ruined) continue;
+    const ring = b.rings[0];
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    ctx.beginPath();
+    for (let k = 0; k < ring.length; k += 2) {
+      [x0, y0, x1, y1] = [Math.min(x0, ring[k]), Math.min(y0, ring[k + 1]), Math.max(x1, ring[k]), Math.max(y1, ring[k + 1])];
+      if (k === 0) ctx.moveTo(ring[k], ring[k + 1]);
+      else ctx.lineTo(ring[k], ring[k + 1]);
+    }
+    ctx.closePath();
+    // The floor: bare concrete, dusty, darker than the paving round it.
+    ctx.fillStyle = '#6f6a62';
+    ctx.fill();
+    // The stubs of its walls, broken off, round it.
+    ctx.strokeStyle = '#4f4a43';
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([5, 3, 2, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    let s = (Math.abs(b.id) % 2147483646) + 1;
+    const rand = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    const inside = () => {
+      for (let t = 0; t < 12; t++) {
+        const [x, y] = [x0 + rand() * (x1 - x0), y0 + rand() * (y1 - y0)];
+        if (pointInRing(x, y, ring)) return [x, y];
+      }
+      return [(x0 + x1) / 2, (y0 + y1) / 2];
+    };
+    // Cracks across the floor.
+    ctx.strokeStyle = '#3f3b35';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    for (let k = 0; k < 4; k++) {
+      let [x, y] = inside();
+      ctx.moveTo(x, y);
+      for (let j = 0; j < 3; j++) {
+        x += (rand() - 0.5) * 12;
+        y += (rand() - 0.5) * 12;
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+    // Rubble and bricks heaped over it, thicker towards the middle.
+    const area = Math.abs(ringArea(ring));
+    const lumps = Math.min(60, Math.max(12, Math.round(area / 40)));
+    const colours = ['#8a7f70', '#a59c8c', '#5d564d', '#8d4a36', '#9a917f', '#b3a690'];
+    for (let k = 0; k < lumps; k++) {
+      const [x, y] = inside();
+      const r = 1 + rand() * 2.6;
+      const turn = rand() * Math.PI;
+      ctx.fillStyle = colours[Math.floor(rand() * colours.length)];
+      ctx.beginPath();
+      for (let c = 0; c < 5; c++) {
+        const a = turn + (c / 5) * Math.PI * 2;
+        const d = r * (0.6 + rand() * 0.5);
+        if (c === 0) ctx.moveTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
+        else ctx.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
 }
 
 /**
@@ -546,7 +618,7 @@ function drawShadows(ctx: Ctx, scratch: Ctx, map: GameMap, index: ChunkIndex, x0
   scratch.beginPath();
   for (const i of index.buildings) {
     const b = map.buildings[i];
-    if (!b.drawn || b.bottom > 0 || b.kind === 'roof') continue;
+    if (!b.drawn || b.bottom > 0 || b.kind === 'roof' || b.ruined) continue;
     const [sx, sy] = shadowOffset(b.top);
     const ring = b.rings[0];
     // The footprint swept along the shadow: the footprint, the same moved, and each wall's sweep

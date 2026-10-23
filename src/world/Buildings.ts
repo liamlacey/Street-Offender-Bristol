@@ -4,6 +4,8 @@ import { type BuildingEntry, type BuildingIndex, CELL, cellKey } from './buildin
 import { pointInRing } from '../map/osm';
 import type { Perspective } from './perspective';
 
+/** How long a hut takes to come down, knocked down, s. */
+const COLLAPSE = 0.6;
 /** How far beyond the view a building is still drawn (its walls lean in from out there), px. */
 const PAD = 60;
 /** How far a tall building's roof can lean out past its foot, at most, px: they're looked for this much further round the view. */
@@ -27,6 +29,8 @@ export class Buildings {
    */
   private index: BuildingIndex;
   private readonly looked = new Set<number>();
+  /** The huts coming down (by their place in `index.all`): how tall they were, px, and when they were hit (ms). */
+  private readonly collapsing = new Map<number, { from: number; start: number }>();
   private readonly earcut = (data: number[], holes?: number[]) => Phaser.Geom.Polygon.Earcut(data, holes);
   private readonly g: Phaser.GameObjects.Graphics;
 
@@ -45,6 +49,7 @@ export class Buildings {
       if (e.look) looks.set(e.id, e.look);
     }
     this.looked.clear();
+    this.collapsing.clear();
     index.all.forEach((e, i) => {
       const look = looks.get(e.id);
       if (!look) return;
@@ -54,9 +59,14 @@ export class Buildings {
     this.index = index;
   }
 
-  /** A hut's been knocked down (by its id in the whole map): its look worked out again, as what's left of it. */
-  ruined(id: number): void {
-    for (const e of this.index.all) if (e.id === id) e.look = null;
+  /**
+   * A hut's being knocked down (by its id in the whole map; before it's left a ruin: see world.ts's `ruin`): it comes down,
+   * over COLLAPSE seconds, into the ground (where what's left of it is painted, on the ground: see ground.ts).
+   */
+  collapse(id: number): void {
+    this.index.all.forEach((e, i) => {
+      if (e.id === id) this.collapsing.set(i, { from: e.b.top, start: performance.now() });
+    });
   }
 
   /** A building's look: worked out the first time it's needed. */
@@ -96,14 +106,27 @@ export class Buildings {
         this.looked.delete(i);
       }
     }
+    const now = performance.now();
     for (const i of [...near].sort((a, b) => a - b)) {
       const e = this.index.all[i];
       const { b } = e;
+      // A hut knocked down: coming down (faster and faster, into the ground), and then not drawn at all (what's left of it's
+      // on the ground).
+      let top = b.top;
+      if (b.ruined) {
+        const c = this.collapsing.get(i);
+        const t = c ? (now - c.start) / 1000 / COLLAPSE : 1;
+        if (t >= 1) {
+          this.collapsing.delete(i);
+          continue;
+        }
+        top = c!.from * (1 - t * t);
+      }
       const look = e.look ?? this.lookOf(i);
       this.looked.add(i);
       // How much a point h px up the building is scaled out from the middle of the view.
       const lift = (h: number) => perspective.lift(look.ground + h);
-      const sTop = lift(b.top);
+      const sTop = lift(top);
       const sBase = lift(b.bottom);
       // The roof's box and the foot's, together.
       const [rx0, rx1, ry0, ry1] = [cx + (look.x0 - cx) * sTop, cx + (look.x1 - cx) * sTop, cy + (look.y0 - cy) * sTop, cy + (look.y1 - cy) * sTop];
@@ -138,7 +161,7 @@ export class Buildings {
           // A band of windows along each floor.
           if (look.windows !== null && Math.hypot(w.bx - w.ax, w.by - w.ay) > 12) {
             g.fillStyle(look.windows, 0.85 * alpha);
-            for (let h = b.bottom + FLOOR * 0.35; h + FLOOR * 0.4 < b.top - 4; h += FLOOR) quad(lift(h), lift(h + FLOOR * 0.4));
+            for (let h = b.bottom + FLOOR * 0.35; h + FLOOR * 0.4 < top - 4; h += FLOOR) quad(lift(h), lift(h + FLOOR * 0.4));
           }
         }
       }
@@ -195,14 +218,6 @@ export class Buildings {
         const [ax, ay, bx, by] = look.ridge;
         g.lineStyle(2 * sTop, look.ridgeColour, alpha);
         g.lineBetween(tx + ax * sTop, ty + ay * sTop, tx + bx * sTop, ty + by * sTop);
-      }
-      // What's left of a hut knocked down: lumps of rubble and brick over it.
-      if (look.rubble) {
-        const r = look.rubble;
-        for (let i = 0; i + 3 < r.length; i += 4) {
-          const size = r[i + 2] * sTop;
-          g.fillStyle(r[i + 3], alpha).fillRect(tx + r[i] * sTop - size / 2, ty + r[i + 1] * sTop - size / 2, size, size * 0.8);
-        }
       }
       for (const [x, y, w, h] of look.boxes) {
         const px = tx + x * sTop;

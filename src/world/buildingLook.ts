@@ -54,13 +54,7 @@ export interface BuildingLook {
   panels: number[][];
   /** A ship's or a barge's deck painted on its roof: patches (each four corners, x, y, ...) and lines, in their colours, over the roof. */
   deck: { colour: number; quads: number[][]; lines: number[]; width: number }[];
-  /** What's left of a hut knocked down (see world.ts's `ruin`): lumps of rubble and brick over it, each x, y, size, colour. */
-  rubble?: number[];
 }
-
-/** The colours of what's left of a hut knocked down: its rubble bed, and the lumps over it (stone, light and dark, and brick). */
-const RUBBLE_BED = 0x6e665b;
-const RUBBLE = [0x8a7f70, 0xa59c8c, 0x5d564d, 0x8d4a36, 0x9a917f];
 
 /** How each roof material's drawn: lines along the ridge (courses of tiles), down the slope (a metal roof's seams), or both (glazing bars); how far apart, px; how dark. */
 const ROOF_TEXTURE: Record<string, { along: boolean; down: boolean; spacing: number; dark: number; width: number }> = {
@@ -290,28 +284,6 @@ export function buildingLook(b: Building, triangulate: Triangulate): BuildingLoo
       boxes.push([x, y, w, h]);
       k++;
     }
-  }
-
-  if (b.ruined) {
-    // Knocked down: no roof, nothing on it; its walls broken off low (see world.ts's `ruin`), and inside them, rubble and
-    // brick heaped every which way.
-    let s = Math.floor(seed * 2147483646) + 1;
-    const rand = () => (s = (s * 16807) % 2147483647) / 2147483647;
-    const rubble: number[] = [];
-    const count = Math.min(40, Math.max(8, Math.round(area / (1.2 * 64))));
-    for (let k = 0, tries = 0; k < count && tries < count * 4; tries++) {
-      const [x, y] = [x0 + rand() * (x1 - x0), y0 + rand() * (y1 - y0)];
-      if (!insideRings(x, y, b.rings, 1)) continue;
-      rubble.push(x, y, 2 + rand() * 4, RUBBLE[Math.floor(rand() * RUBBLE.length)]);
-      k++;
-    }
-    return {
-      b, x0, y0, x1, y1,
-      walls: walls.map((w) => ({ ...w, colour: shade(w.colour, 0.8) })),
-      facets: [{ tris: triangles(outer, b.rings.slice(1), triangulate), colour: RUBBLE_BED }],
-      rim: null, rimColour: 0, ridge: null, ridgeColour: 0, boxes: [], windows: null, canopy: false, texture: null, panels: [], deck: [],
-      rubble,
-    };
   }
 
   const glass = wallColour === 0x6b8299 || wallColour === 0x55697c || wallColour === 0x7d8a96;

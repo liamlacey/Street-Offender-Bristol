@@ -359,6 +359,8 @@ export class Wreckage {
       for (const d of debris(piece, count, x, y, car.vx * 0.6, car.vy * 0.6, rand, reach)) this.hooks.addDebris(d, 0);
     }
     this.effects.burst('stone', x, y, 30);
+    // (And again as it comes down (see Buildings' `collapse`): a cloud of dust and grit off it as it hits the ground.)
+    this.scene.time.delayedCall(450, () => this.effects.burst('stone', x, y, 40));
     this.hooks.audio()?.shatter('stone', speed);
     giveWay(car, HUT, this.hooks.weight());
   }

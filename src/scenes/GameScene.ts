@@ -410,8 +410,8 @@ export class GameScene extends Phaser.Scene {
         const b = map.buildings[k];
         if (!b) return;
         const [sx, sy] = shadowOffset(b.top);
+        this.buildings.collapse(id);
         ruin(b);
-        this.buildings.ruined(id);
         this.ground.ruined(k, x, y, reach + Math.hypot(sx, sy));
       },
     }, DEPTH.props - 0.1, DEPTH.trees);
