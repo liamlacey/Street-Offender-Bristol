@@ -196,6 +196,14 @@ export class Buildings {
         g.lineStyle(2 * sTop, look.ridgeColour, alpha);
         g.lineBetween(tx + ax * sTop, ty + ay * sTop, tx + bx * sTop, ty + by * sTop);
       }
+      // What's left of a hut knocked down: lumps of rubble and brick over it.
+      if (look.rubble) {
+        const r = look.rubble;
+        for (let i = 0; i + 3 < r.length; i += 4) {
+          const size = r[i + 2] * sTop;
+          g.fillStyle(r[i + 3], alpha).fillRect(tx + r[i] * sTop - size / 2, ty + r[i + 1] * sTop - size / 2, size, size * 0.8);
+        }
+      }
       for (const [x, y, w, h] of look.boxes) {
         const px = tx + x * sTop;
         const py = ty + y * sTop;

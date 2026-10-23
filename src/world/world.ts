@@ -209,7 +209,7 @@ export const RUIN_HEIGHT = 0.7 * 8;
 
 /** A hut knocked down: what's left of it (low, flat, rubble over it), drawn and its shadow cast so. */
 export function ruin(b: Building): void {
-  Object.assign(b, { ruined: true, top: RUIN_HEIGHT, bottom: 0, roof: '#8a7f70', roofShape: 'flat', roofMaterial: 'stone', roofAcross: false });
+  Object.assign(b, { ruined: true, top: RUIN_HEIGHT, bottom: 0 });
 }
 
 export interface LooseProp extends Body {
