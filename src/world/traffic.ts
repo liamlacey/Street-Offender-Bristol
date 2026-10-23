@@ -1304,11 +1304,25 @@ export class Traffic {
     }
   }
 
+  /**
+   * The next lane on the shortest way (see wayTo) from the end of `a`; but along the same road, or across a junction only a few
+   * metres wide, the lane on from the one it's in, if that goes the same way (not across into another there: a swerve).
+   */
+  private keepTo(a: Lane, toward: Map<number, Lane>): Lane | null {
+    const l = toward.get(a.id);
+    if (!l) return null;
+    const [ex, ey] = [a.pts[a.pts.length - 2], a.pts[a.pts.length - 1]];
+    if (l.road !== a.road && Math.hypot(l.pts[0] - ex, l.pts[1] - ey) >= 10 * M) return l;
+    const alongside = this.nodes[a.to].out.map((i) => this.lanes[i]).filter((o) => o.edge === l.edge && o.dir === l.dir && (o === l || toward.has(o.id)));
+    return onFrom(a, alongside);
+  }
+
   /** On its way to park at its post: the shortest way to its place's lane (and on past it, only to look along). */
   private toSpot(v: Vehicle, a: Lane): Lane | null {
     const spot = v.spot!;
     if (a.id === spot.lane.id) return this.next(a);
-    return this.posts[v.post!].ways.get(spot.lane.id)?.toward.get(a.id) ?? this.next(a);
+    const way = this.posts[v.post!].ways.get(spot.lane.id);
+    return (way && this.keepTo(a, way.toward)) ?? this.next(a);
   }
 
   private turn(a: Lane, b: Lane): Path {
@@ -1502,7 +1516,7 @@ export class Traffic {
         bus.lost = true;
         return this.next(a, false, true);
       }
-      return st.toward.get(a.id) ?? this.next(a, false, true);
+      return this.keepTo(a, st.toward) ?? this.next(a, false, true);
     }
     // At its bay's end: (it backs out of it) the way back out, only to look along.
     if (bus.bay && a === bus.bay.lane) return this.lanes.find((l) => l.edge === a.edge && l.dir !== a.dir) ?? null;
@@ -2000,9 +2014,11 @@ export class Traffic {
   private along(v: Vehicle, d: number): [number, number, number] {
     let s = v.s + d;
     if (s < 0) {
-      if (v.back) {
-        const [x, y] = pathAt(v.back, v.back.length + s);
-        return [x, y, v.back.level];
+      // (Back along the way it came, if that leads into this: not one it's moved over from, changing lanes, a lane's width away.)
+      const b = v.back;
+      if (b && Math.hypot(b.pts[b.pts.length - 2] - v.route[0].pts[0], b.pts[b.pts.length - 1] - v.route[0].pts[1]) < 1.5 * M) {
+        const [x, y] = pathAt(b, b.length + s);
+        return [x, y, b.level];
       }
       const [x, y, ux, uy] = pathAt(v.route[0], 0);
       return [x + ux * s, y + uy * s, v.route[0].level];
