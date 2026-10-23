@@ -123,6 +123,19 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
   bigbin: { r: 5, length: 11, invMass: 1.5 },
   forklift: { r: 5.5, length: 22, invMass: 0.5 },
   container: { r: 9.5, length: 48, invMass: 0.08 },
+  // On the pitches and courts (see sports.ts): goals (a full-size one 7.3 m across, a small one, a hockey goal), rugby posts
+  // (set in the ground), a basketball hoop (its post and board), a netball post, cricket stumps (sent flying), croquet hoops and
+  // its peg; a table-tennis table (concrete).
+  goal: { r: 6, length: 60, invMass: 1.5 },
+  goalsmall: { r: 5, length: 32, invMass: 3 },
+  hockeygoal: { r: 5, length: 30, invMass: 2 },
+  rugbypost: { r: 2, length: 46, invMass: 0.3 },
+  hoop: { r: 3, length: 14, invMass: 0.6 },
+  netpost: { r: 2, invMass: 2.5 },
+  stumps: { r: 1.5, invMass: 25 },
+  wicket: { r: 1, invMass: 30 },
+  peg: { r: 1, invMass: 20 },
+  pingpong: { r: 6, length: 22, invMass: 0.3 },
 };
 
 /** The maps whose gardens' drives and patios have been put in with their areas. */
@@ -627,7 +640,7 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   }
   // The gardens' walls, fences and hedges (see homes.ts); the places' fences (see places.ts).
   for (const l of homes.lines) addRing(ground, l.pts, LINE_THICKNESS[l.kind]!, false, 0, l.kind, l.height);
-  for (const l of places.lines) addRing(ground, l.pts, l.kind === 'mesh' ? 0.6 : l.kind === 'prison' ? 3 : LINE_THICKNESS[l.kind]!, false, 0, l.kind, l.height);
+  for (const l of places.lines) addRing(ground, l.pts, l.kind === 'mesh' || l.kind === 'net' ? 0.6 : l.kind === 'prison' ? 3 : LINE_THICKNESS[l.kind]!, false, 0, l.kind, l.height);
   // The building sites' fences (Heras panels: see sites.ts).
   for (const run of (yield* siteLifeWork(map)).fences) addRing(ground, run, 0.6, false, 0, 'heras');
   // The edge of the map.

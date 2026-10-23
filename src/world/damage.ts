@@ -20,7 +20,7 @@ export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'moo
 /** What doesn't topple like the street furniture: a tree (it splits and falls its own way), and what's left of one (low enough to drive over). */
 export type Structure = 'tree' | 'stump';
 /** Walls, by what OSM calls them (and a bridge's parapets). */
-export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing' | 'gate' | 'liftgate' | 'chain' | 'shelter' | 'parapet' | 'heras' | 'mesh' | 'prison';
+export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing' | 'gate' | 'liftgate' | 'chain' | 'shelter' | 'parapet' | 'heras' | 'mesh' | 'prison' | 'net';
 
 export interface Toughness {
   material: Material;
@@ -77,6 +77,8 @@ export const WALLS: Record<WallKind, Toughness & { /** How much of it a hit at i
   mesh: { material: 'metal', strength: 80, absorb: 0.12, gap: 2.5 * 8 },
   // The prison's wall: 5.5 m of stone. Barely marked by anything less than the biggest hit.
   prison: { material: 'stone', strength: 900, absorb: 0.9, gap: 2 * 8 },
+  // A tennis net: brought down all at once (its posts bent over).
+  net: { material: 'plastic', strength: 40, absorb: 0.05, gap: 20 * 8 },
 };
 
 /** A bench smashes if hit this hard; slower, it's just shoved. */
@@ -284,7 +286,7 @@ export function fallen(kind: Exclude<ThingKind, Structure>, x: number, y: number
  * ground) and smaller, the smaller the easier, down to bits too small to break.
  * What each piece is, how strong (as `Toughness`), and what it breaks into.
  */
-export const BREAKUP: Partial<Record<DebrisKind | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block' | 'trolley' | 'foodcart' | 'stall' | 'aboard' | 'swings' | 'slide' | 'roundabout' | 'climbframe' | 'sandpit' | 'seesaw' | 'springy' | 'cabin' | 'portaloo' | 'skip' | 'pallet' | 'pipes' | 'digger' | 'dumper' | 'mattress' | 'sofa' | 'tyres' | 'binbags' | 'fridge' | 'drum' | 'cone' | 'woodpallet' | 'washer' | 'carpet' | 'burntcar' | 'tent' | 'campfire' | HomeKind | 'parasol' | 'keg' | 'headstone' | 'tomb' | 'bigbin' | 'forklift' | 'container', Toughness & { into: [DebrisKind, number][] }>> = {
+export const BREAKUP: Partial<Record<DebrisKind | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block' | 'trolley' | 'foodcart' | 'stall' | 'aboard' | 'swings' | 'slide' | 'roundabout' | 'climbframe' | 'sandpit' | 'seesaw' | 'springy' | 'cabin' | 'portaloo' | 'skip' | 'pallet' | 'pipes' | 'digger' | 'dumper' | 'mattress' | 'sofa' | 'tyres' | 'binbags' | 'fridge' | 'drum' | 'cone' | 'woodpallet' | 'washer' | 'carpet' | 'burntcar' | 'tent' | 'campfire' | HomeKind | 'parasol' | 'keg' | 'headstone' | 'tomb' | 'bigbin' | 'forklift' | 'container' | 'goal' | 'goalsmall' | 'hockeygoal' | 'rugbypost' | 'hoop' | 'netpost' | 'stumps' | 'wicket' | 'peg' | 'pingpong', Toughness & { into: [DebrisKind, number][] }>> = {
   // A shopping trolley, hit hard: mangled, its basket's wires and its handle in bits.
   trolley: { material: 'metal', strength: 170, absorb: 0.06, into: [['rail', 3], ['plastic', 2]] },
   // A food cart: its panels and its parasol in bits.
@@ -349,6 +351,18 @@ export const BREAKUP: Partial<Record<DebrisKind | 'bench' | 'picnic' | 'gritbin'
   bigbin: { material: 'metal', strength: 120, absorb: 0.12, into: [['rail', 2], ['plastic', 4]] },
   forklift: { material: 'metal', strength: 250, absorb: 0.4, into: [['rail', 3], ['glass', 2], ['shortpole', 1]] },
   container: { material: 'metal', strength: 420, absorb: 0.7, into: [['rail', 4], ['rubble', 2]] },
+  // The pitches' things: goals buckled (their frames in pieces, the net torn), rugby posts and a hoop bent over, a netball post,
+  // stumps and croquet hoops scattered; a table-tennis table cracked up.
+  goal: { material: 'metal', strength: 90, absorb: 0.1, into: [['rail', 4], ['plastic', 3]] },
+  goalsmall: { material: 'metal', strength: 60, absorb: 0.06, into: [['rail', 3], ['plastic', 2]] },
+  hockeygoal: { material: 'metal', strength: 70, absorb: 0.08, into: [['rail', 2], ['splinter', 3]] },
+  rugbypost: { material: 'metal', strength: 160, absorb: 0.2, into: [['pole', 2], ['rail', 1]] },
+  hoop: { material: 'metal', strength: 120, absorb: 0.15, into: [['shortpole', 1], ['glass', 3], ['ring', 1]] },
+  netpost: { material: 'metal', strength: 60, absorb: 0.05, into: [['rail', 2], ['ring', 1]] },
+  stumps: { material: 'timber', strength: 15, absorb: 0.01, into: [['splinter', 3]] },
+  wicket: { material: 'metal', strength: 15, absorb: 0.01, into: [['rail', 1]] },
+  peg: { material: 'timber', strength: 20, absorb: 0.01, into: [['splinter', 1]] },
+  pingpong: { material: 'stone', strength: 260, absorb: 0.3, into: [['rubble', 5], ['rail', 1]] },
   // A bench and a picnic table, standing loose: smashed to planks.
   bench: { material: 'timber', strength: BENCH_SMASH, absorb: 0.12, into: [['plank', 5]] },
   picnic: { material: 'timber', strength: BENCH_SMASH, absorb: 0.15, into: [['plank', 7]] },

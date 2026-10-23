@@ -31,6 +31,7 @@
 
 import { type Area, type AreaKind, type GameMap, type Place, type Pts, VEHICLE_ROADS, pointInRing, ridgeAxis } from '../map/osm';
 import { rectsOverlap } from './playgrounds';
+import { type SportsGame, sportsOf } from './sports';
 import { type Work, every } from './work.ts';
 
 const M = 8;
@@ -46,7 +47,7 @@ export interface PlaceThing {
 
 /** A fence (or a wall) put up round a place. */
 export interface PlaceLine {
-  kind: 'mesh' | 'wall' | 'fence' | 'railing' | 'hedge' | 'prison';
+  kind: 'mesh' | 'wall' | 'fence' | 'railing' | 'hedge' | 'prison' | 'net';
   pts: Pts;
   height: number;
 }
@@ -75,6 +76,8 @@ export interface PlaceLife {
   rings: Pts[];
   /** Where a vehicle's parked (a lorry at a loading bay, a car at a lock-up), and how likely it's there. */
   spaces: { x: number; y: number; angle: number; length: number; taken: number; endOn: boolean; kind?: string }[];
+  /** The games on the pitches and courts (see sports.ts). */
+  games: SportsGame[];
 }
 
 /** A court marked out on a school's playground: netball (30.5 m by 15.25 m) or five-a-side, and smaller ones where there's no room. */
@@ -100,7 +103,7 @@ export function* placesWork(map: GameMap): Work<PlaceLife> {
   const had = cache.get(map);
   if (had) return had;
   const pause = every(4);
-  const out: PlaceLife = { things: [], lines: [], areas: [], spots: [], rings: [], spaces: [] };
+  const out: PlaceLife = { things: [], lines: [], areas: [], spots: [], rings: [], spaces: [], games: [] };
   const places = map.places ?? [];
   const ground = new Ground(map);
   yield;
@@ -149,6 +152,13 @@ export function* placesWork(map: GameMap): Work<PlaceLife> {
     if (b.kind === 'apartments') flats(i, ground, out);
     else if (b.kind === 'garages' || (b.kind === 'garage' && Math.abs(ringArea(b.rings[0])) > 40 * M * M)) garages(i, ground, out);
   }
+  // The pitches and courts: laid out for their sports (see sports.ts).
+  yield;
+  const sports = sportsOf(map);
+  out.things.push(...sports.things);
+  out.lines.push(...sports.lines);
+  out.areas.push(...sports.areas);
+  out.games.push(...sports.games);
   cache.set(map, out);
   return out;
 }

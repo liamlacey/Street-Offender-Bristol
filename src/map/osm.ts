@@ -74,8 +74,50 @@ export interface Area {
   markings?: { colour: string; width: number; segs: number[] }[];
   /** Only its markings drawn (painted straight on what's there: hopscotch). */
   bare?: boolean;
+  /** A colour laid over its look (a court's paint, a pitch's artificial turf): CSS, with its alpha. */
+  tint?: string;
+  /** A pitch's (or a court's) sport, and what it's played on (see `sportOf`, `pitchSurface`). */
+  sport?: Sport;
+  pitch?: PitchSurface;
   /** Lines painted on it: a petrol station forecourt's lanes (x0, y0, x1, y1, ...). */
   lines?: number[];
+}
+
+/** The sports the game lays pitches out for (OSM's `sport`, sorted: see `sportOf`). */
+export type Sport = 'football' | 'tennis' | 'padel' | 'basketball' | 'netball' | 'multi' | 'rugby' | 'hockey' | 'cricket' | 'bowls' | 'croquet' | 'skate';
+
+/** What a pitch is: grass, artificial turf, a hard court (tarmac, acrylic, concrete) or clay. */
+export type PitchSurface = 'grass' | 'turf' | 'hard' | 'clay';
+
+/** A pitch's sport, from OSM's `sport` (the first of a list the game knows). */
+export function sportOf(tags: Tags): Sport | undefined {
+  for (const s of (tags.sport ?? '').split(';').map((v) => v.trim())) {
+    if (s === 'soccer' || s === 'football' || s === 'futsal' || s === 'gaelic_games') return 'football';
+    if (s === 'tennis') return 'tennis';
+    if (s === 'padel' || s === 'padel_tennis') return 'padel';
+    if (s === 'basketball') return 'basketball';
+    if (s === 'netball') return 'netball';
+    if (s === 'multi') return 'multi';
+    if (s === 'rugby_union' || s === 'rugby_league' || s === 'rugby') return 'rugby';
+    if (s === 'hockey' || s === 'field_hockey') return 'hockey';
+    if (s === 'cricket' || s === 'cricket_nets') return 'cricket';
+    if (s === 'bowls' || s === 'lawn_bowls') return 'bowls';
+    if (s === 'croquet') return 'croquet';
+    if (s === 'skateboard') return 'skate';
+  }
+  return undefined;
+}
+
+/** What a pitch is played on: as tagged, or the usual for its sport (in Britain: tennis courts hard, hockey on artificial turf). */
+export function pitchSurface(tags: Tags, sport: Sport | undefined): PitchSurface {
+  const s = (tags.surface ?? '').split(';')[0];
+  if (s === 'grass') return 'grass';
+  if (s === 'artificial_turf' || s === 'artificial_grass' || s === 'astroturf') return 'turf';
+  if (s === 'clay') return 'clay';
+  if (s) return 'hard';
+  if (sport === 'tennis' || sport === 'padel' || sport === 'basketball' || sport === 'netball' || sport === 'multi' || sport === 'skate') return 'hard';
+  if (sport === 'hockey') return 'turf';
+  return 'grass';
 }
 
 /** What a road, path or square is surfaced with (tarmac, the usual for roads, is left unsaid). */
@@ -521,6 +563,18 @@ export type PropKind =
   // Round the places (see src/world/places.ts).
   | 'parasol'
   | 'keg'
+  // A table-tennis table (concrete, in a park).
+  | 'pingpong'
+  // On the pitches and courts (see src/world/sports.ts).
+  | 'goal'
+  | 'goalsmall'
+  | 'hockeygoal'
+  | 'rugbypost'
+  | 'hoop'
+  | 'netpost'
+  | 'stumps'
+  | 'wicket'
+  | 'peg'
   | 'headstone'
   | 'tomb'
   | 'bigbin'
@@ -1213,7 +1267,14 @@ export function areaKind(tags: Tags): AreaKind | null {
   if (tags.landuse === 'farmland') return 'field';
   if (tags.landuse === 'allotments') return 'allotments';
   if (tags.landuse === 'farmyard') return 'yard';
-  if (tags.leisure === 'pitch' || tags.leisure === 'sports_centre') return tags.surface && tags.surface !== 'grass' ? 'plaza' : 'pitch';
+  // A pitch played on a hard surface (or clay) is a court; one on grass or artificial turf, a pitch. (Something only tagged with
+  // its sport, too: a court mapped without `leisure=pitch`.)
+  if (tags.leisure === 'pitch' || (!tags.leisure && !tags.shop && !tags.club && !tags.amenity && !tags.landuse && sportOf(tags))) {
+    const sport = sportOf(tags);
+    if (sport) return pitchSurface(tags, sport) === 'hard' || pitchSurface(tags, sport) === 'clay' ? 'court' : 'pitch';
+    return tags.surface && tags.surface !== 'grass' ? 'plaza' : 'pitch';
+  }
+  if (tags.leisure === 'sports_centre') return tags.surface && tags.surface !== 'grass' ? 'plaza' : 'pitch';
   if (tags.leisure === 'playground') return 'play';
   if (tags.leisure === 'park' || tags.leisure === 'common') return 'park';
   if (tags.leisure === 'garden') return 'garden';
@@ -1499,6 +1560,7 @@ export function propKind(tags: Tags): PropKind | null {
   if (tags.barrier === 'planter' || tags.man_made === 'planter') return 'planter';
   if (tags.amenity === 'grit_bin') return 'gritbin';
   if (tags.leisure === 'picnic_table') return 'picnic';
+  if (tags.leisure === 'pitch' && tags.sport === 'table_tennis') return 'pingpong';
   if (tags.man_made === 'crane') return 'crane';
   if (tags.man_made === 'ladder') return 'ladder';
   if (tags.highway === 'street_lamp') return 'lamp';
@@ -1633,7 +1695,8 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     const clipped = rings.map((r) => clipRing(r, cx0, cy0, cx1, cy1)).filter((r) => r.length >= 6);
     if (clipped.length === 0 || Math.abs(ringArea(clipped[0])) < 4) return;
     const surface = kind === 'plaza' || kind === 'parking' ? paving(tags.surface) : undefined;
-    areas.push({ kind, rings: clipped.map(roundPts), ...(surface ? { surface } : {}) });
+    const sport = kind === 'pitch' || kind === 'court' ? sportOf(tags) : undefined;
+    areas.push({ kind, rings: clipped.map(roundPts), ...(surface ? { surface } : {}), ...(sport ? { sport, pitch: pitchSurface(tags, sport) } : {}) });
   };
 
   /** Each building's own tags (not its parts'), for what's in it (see stores.ts). */

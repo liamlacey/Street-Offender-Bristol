@@ -133,6 +133,8 @@ export function drawGround(ctx: Ctx, map: GameMap, index: ChunkIndex, palette: P
     // A pontoon floats: its shadow on the water round it, first.
     if (a.kind === 'pontoon' && !palette.surface) strokeRings(ctx, a.rings, 'rgba(10,25,35,0.35)', 7);
     fillRings(ctx, a.rings, a.surface ? palette.paving[a.surface] : palette.area[a.kind]);
+    // (A court's paint, a pitch's artificial turf: laid over its look.)
+    if (a.tint && !palette.surface) fillRings(ctx, a.rings, a.tint);
     if (!palette.surface && a.kind === 'pontoon') pontoonEdges(ctx, a.rings);
     if (!palette.surface && a.kind === 'slipway') slipwayLook(ctx, a);
     if (!palette.surface && (a.kind === 'water' || a.kind === 'pool')) {

@@ -24,6 +24,8 @@ const LOOK: Record<WallKind, { height: number; side: number; top: number; width:
   mesh: { height: 1.8 * 8, side: 0x2f6b3a, top: 0x3f8a4c, width: 0.9, mesh: true },
   // The prison's wall: tall, grey stone, its rounded coping (to stop anyone getting a grip).
   prison: { height: 5.5 * 8, side: 0x7d7a74, top: 0xa6a299, width: 6 },
+  // A tennis net: dark mesh, its white tape along the top.
+  net: { height: 1.07 * 8, side: 0x1e2224, top: 0xf2f0e6, width: 0.7, mesh: true },
 };
 
 /**

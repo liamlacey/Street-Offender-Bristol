@@ -19,6 +19,7 @@ import { type TrolleyRow, trolleyRows } from './parking';
 import { PLAY_KINDS, PLAY_SCALE, type PlayKind } from './playgrounds';
 import { type Game, parkLifeWork } from './parkLife';
 import { siteLifeWork } from './sites';
+import type { SportGame } from './sports';
 import { placesWork } from './places';
 import { type Act, pedestrianBusy, streetLifeWork } from './streetLife';
 import type { Light } from './lights';
@@ -68,6 +69,25 @@ const LEAD = 2.2 * M;
 /** How fast a football's passed, and a frisbee thrown, px/s; how high each goes (at the top of its flight), px. */
 const PASS = 9 * M;
 const THROW = 7 * M;
+
+/**
+ * How each game on a pitch or a court is played (see sports.ts): how fast its ball goes, px/s, and how high at the top of
+ * its flight, px (a shot's: at the hoop, the goal, the posts, and how often one's taken); how high it's held, px (0: at their
+ * feet); how long, s; how many play.
+ */
+const SPORT_PLAY: Record<SportGame, { speed: number; loft: number; held: number; hold: [number, number]; players: [number, number]; shot?: number; shotLoft?: number }> = {
+  tennis: { speed: 15 * M, loft: 1.4 * M, held: 1 * M, hold: [0.1, 0.4], players: [2, 4] },
+  padel: { speed: 11 * M, loft: 1.2 * M, held: 1 * M, hold: [0.1, 0.3], players: [4, 4] },
+  pingpong: { speed: 5 * M, loft: 0.35 * M, held: 0.9 * M, hold: [0.05, 0.25], players: [2, 2] },
+  basketball: { speed: 8 * M, loft: 0.6 * M, held: 1 * M, hold: [0.6, 2], players: [2, 5], shot: 0.4, shotLoft: 3.5 * M },
+  netball: { speed: 8 * M, loft: 0.8 * M, held: 1.2 * M, hold: [0.8, 2.5], players: [4, 7], shot: 0.25, shotLoft: 3.2 * M },
+  football: { speed: PASS, loft: 0.5 * M, held: 0, hold: [0.8, 2.8], players: [5, 12], shot: 0.15, shotLoft: 0.8 * M },
+  hockey: { speed: 12 * M, loft: 0, held: 0, hold: [0.4, 1.5], players: [5, 12], shot: 0.15, shotLoft: 0.1 * M },
+  rugby: { speed: 9 * M, loft: 1.2 * M, held: 1 * M, hold: [0.4, 1.4], players: [5, 8], shot: 0.08, shotLoft: 9 * M },
+  cricket: { speed: 18 * M, loft: 0.8 * M, held: 1 * M, hold: [1.5, 3], players: [10, 10] },
+  bowls: { speed: 3 * M, loft: 0, held: 0.3 * M, hold: [3, 7], players: [3, 3] },
+  croquet: { speed: 2.5 * M, loft: 0, held: 0, hold: [4, 9], players: [2, 2] },
+};
 /** Kept going this far beyond the view, px; gone beyond `FAR`. */
 const NEAR = 30 * M;
 const FAR = 55 * M;
@@ -193,6 +213,10 @@ export interface Kickabout {
   x: number;
   y: number;
   angle: number;
+  /** On a pitch or a court: where the players stand (x, y, ...: see sports.ts), what they aim at; who's playing, in that order. */
+  spots?: number[];
+  aims?: number[];
+  order?: Person[];
   ball: {
     x: number;
     y: number;
@@ -203,6 +227,8 @@ export interface Kickabout {
     /** How far through its flight it is, and how long that takes (0: not in the air), s. */
     t: number;
     dur: number;
+    /** How high it goes, at the top of its flight (on a pitch), px. */
+    loft?: number;
     holder: Person | null;
     target: Person | null;
     /** How long it's held (or dribbled) before it's passed on, s. */
@@ -515,6 +541,8 @@ export class People {
     for (const f of life.flocks) this.flocks.push({ x: f.x, y: f.y, birds: [], away: 0 });
     const park = yield* parkLifeWork(this.map);
     for (const g of park.games) this.games.push({ ...g, ball: { x: g.x, y: g.y, z: 0, from: [g.x, g.y], to: [g.x, g.y], t: 0, dur: 0, holder: null, target: null, hold: 0 } });
+    // The games on the pitches and courts (see sports.ts).
+    for (const g of (yield* placesWork(this.map)).games) this.games.push({ ...g, ball: { x: g.x, y: g.y, z: 0, from: [g.x, g.y], to: [g.x, g.y], t: 0, dur: 0, holder: null, target: null, hold: 0 } });
     for (const f of park.flocks) this.flocks.push({ x: f.x, y: f.y, birds: [], away: 0 });
     yield* this.buildWalks();
     yield* this.buildSpots();
@@ -2177,23 +2205,40 @@ export class People {
   }
 
   /** No longer at a pitch or a cart (gone, scared, knocked down, done): if they were its performer or vendor, it's free. */
-  /** Games starting on the grass near the view (out of sight): four to seven at a kick-about, two or three throwing a frisbee. */
+  /**
+   * Games starting near the view (out of sight): on the grass, four to seven at a kick-about, two or three throwing a frisbee;
+   * on a pitch or a court, as many as its game has (see SPORT_PLAY), each at their place on it.
+   */
   private parkGames(x0: number, y0: number, x1: number, y1: number, seen: (x: number, y: number) => boolean, all: boolean): void {
     for (const g of this.games) {
       if (g.x < x0 || g.x > x1 || g.y < y0 || g.y > y1 || seen(g.x, g.y) || (!all && this.rand() > 0.05)) continue;
       if (this.people.some((p) => p.game === g)) continue;
-      const football = g.kind === 'football';
-      const n = football ? 4 + Math.floor(this.rand() * 4) : 2 + (this.rand() < 0.3 ? 1 : 0);
       const time = 60 + this.rand() * 180;
       const players: Person[] = [];
-      for (let k = 0; k < n; k++) {
-        // Round in a ring (a kick-about), or either end of the throw (and one off to the side).
-        const [a, r] = football ? [g.angle + (k / n) * Math.PI * 2 + this.rand() * 0.4, (4 + this.rand() * 2) * M] : [g.angle + (k === 2 ? Math.PI / 2 : k * Math.PI), (k === 2 ? 5 : 7) * M];
-        const [x, y] = [g.x + Math.cos(a) * r, g.y + Math.sin(a) * r];
-        const p = this.make(x, y, 'game');
-        if (p.gone) continue;
-        Object.assign(p, { game: g, tx: x, ty: y, timer: time + this.rand() * 20, angle: a + Math.PI });
-        players.push(p);
+      if (g.spots) {
+        const play = SPORT_PLAY[g.kind as SportGame];
+        const most = Math.min(play.players[1], g.spots.length / 2);
+        const n = g.kind === 'tennis' ? (this.rand() < 0.35 && most >= 4 ? 4 : 2) : Math.max(Math.min(play.players[0], most), Math.floor(play.players[0] + this.rand() * (most - play.players[0] + 1)));
+        for (let k = 0; k < n; k++) {
+          const [x, y] = [g.spots[k * 2], g.spots[k * 2 + 1]];
+          const p = this.make(x, y, 'game');
+          if (p.gone) continue;
+          Object.assign(p, { game: g, tx: x, ty: y, timer: time + this.rand() * 20, angle: Math.atan2(g.y - y, g.x - x) });
+          players.push(p);
+        }
+        g.order = players;
+      } else {
+        const football = g.kind === 'football';
+        const n = football ? 4 + Math.floor(this.rand() * 4) : 2 + (this.rand() < 0.3 ? 1 : 0);
+        for (let k = 0; k < n; k++) {
+          // Round in a ring (a kick-about), or either end of the throw (and one off to the side).
+          const [a, r] = football ? [g.angle + (k / n) * Math.PI * 2 + this.rand() * 0.4, (4 + this.rand() * 2) * M] : [g.angle + (k === 2 ? Math.PI / 2 : k * Math.PI), (k === 2 ? 5 : 7) * M];
+          const [x, y] = [g.x + Math.cos(a) * r, g.y + Math.sin(a) * r];
+          const p = this.make(x, y, 'game');
+          if (p.gone) continue;
+          Object.assign(p, { game: g, tx: x, ty: y, timer: time + this.rand() * 20, angle: a + Math.PI });
+          players.push(p);
+        }
       }
       const b = g.ball;
       Object.assign(b, { holder: players[0] ?? null, target: null, dur: 0, hold: 1 + this.rand() });
@@ -2243,13 +2288,14 @@ export class People {
       if (b.holder && !players.includes(b.holder)) b.holder = null;
       if (b.target && !players.includes(b.target)) b.target = null;
       const football = g.kind === 'football';
+      const play = g.spots ? SPORT_PLAY[g.kind as SportGame] : null;
       if (b.dur > 0) {
         b.t += dt;
         const k = Math.min(1, b.t / b.dur);
         b.x = b.from[0] + (b.to[0] - b.from[0]) * k;
         b.y = b.from[1] + (b.to[1] - b.from[1]) * k;
-        // A football along the ground, or lofted a little; a frisbee floating level, then down.
-        b.z = football ? 4 * k * (1 - k) * 0.5 * M : (1.1 + 0.5 * Math.sin(k * Math.PI) - 0.9 * k * k) * M;
+        // A football along the ground, or lofted a little; a frisbee floating level, then down; on a pitch, as high as it was hit.
+        b.z = play ? 4 * k * (1 - k) * (b.loft ?? 0) : football ? 4 * k * (1 - k) * 0.5 * M : (1.1 + 0.5 * Math.sin(k * Math.PI) - 0.9 * k * k) * M;
         if (k >= 1) [b.dur, b.z] = [0, 0];
         continue;
       }
@@ -2258,15 +2304,24 @@ export class People {
         // At their feet (or in their hand), in front of them.
         b.x = h.x + Math.cos(h.angle) * 0.45 * M;
         b.y = h.y + Math.sin(h.angle) * 0.45 * M;
-        b.z = football ? 0 : 1 * M;
+        b.z = play ? play.held : football ? 0 : 1 * M;
         b.hold -= dt;
         const others = players.filter((q) => q !== h);
         if (b.hold > 0 || !others.length) continue;
+        b.from = [b.x, b.y];
+        b.t = 0;
+        if (play) {
+          const pass = this.pass(g, h, players, play);
+          b.to = pass.to;
+          b.loft = pass.loft;
+          b.dur = Math.max(0.25, Math.hypot(b.to[0] - b.x, b.to[1] - b.y) / pass.speed);
+          h.angle = Math.atan2(b.to[1] - b.y, b.to[0] - b.x);
+          [b.holder, b.target] = [null, pass.target];
+          continue;
+        }
         const to = others[Math.floor(this.rand() * others.length)];
         const [a, d] = [this.rand() * Math.PI * 2, this.rand() * 1.6 * M];
-        b.from = [b.x, b.y];
         b.to = [to.x + Math.cos(a) * d, to.y + Math.sin(a) * d];
-        b.t = 0;
         b.dur = Math.max(0.4, Math.hypot(b.to[0] - b.x, b.to[1] - b.y) / (football ? PASS : THROW));
         h.angle = Math.atan2(b.to[1] - b.y, b.to[0] - b.x);
         [b.holder, b.target] = [null, to];
@@ -2277,9 +2332,80 @@ export class People {
       const t = b.target;
       if (Math.hypot(t.x - b.x, t.y - b.y) < 0.7 * M) {
         [b.holder, b.target] = [t, null];
-        b.hold = football ? 0.8 + this.rand() * 2 : 0.5 + this.rand() * 1.2;
-        // Back to (near) where they were.
-        [t.tx, t.ty] = [t.tx + (t.x - t.tx) * 0.3, t.ty + (t.y - t.ty) * 0.3];
+        // (A batsman hits it straight back out.)
+        b.hold = play ? (g.kind === 'cricket' && t === g.order?.[1] ? 0.1 : play.hold[0] + this.rand() * (play.hold[1] - play.hold[0])) : football ? 0.8 + this.rand() * 2 : 0.5 + this.rand() * 1.2;
+        // Back to (near) where they were (on a pitch, their place on it).
+        if (!play) [t.tx, t.ty] = [t.tx + (t.x - t.tx) * 0.3, t.ty + (t.y - t.ty) * 0.3];
+      }
+    }
+  }
+
+  /**
+   * Where a game on a pitch sends its ball next, from whoever has it: over the net to someone the other side (tennis, padel,
+   * table tennis); a shot at the hoop or the goal, now and then, or a pass (basketball, netball, football, hockey; a kick at the
+   * posts, rugby); bowled to the batsman, hit out to a fielder and thrown back to the bowler (cricket); rolled up the rink to the
+   * jack, and back (bowls); at a hoop (croquet). Who's to get it, if anyone (a shot: whoever's nearest where it ends up).
+   */
+  private pass(g: Kickabout, h: Person, players: Person[], play: (typeof SPORT_PLAY)[SportGame]): { to: [number, number]; target: Person | null; loft: number; speed: number } {
+    const others = players.filter((q) => q !== h);
+    const any = () => others[Math.floor(this.rand() * others.length)];
+    const near = (x: number, y: number, d: number): [number, number] => {
+      const a = this.rand() * Math.PI * 2;
+      const r = this.rand() * d;
+      return [x + Math.cos(a) * r, y + Math.sin(a) * r];
+    };
+    const aims = g.aims ?? [];
+    const nearestAim = (): [number, number] | null => {
+      let best: [number, number] | null = null;
+      for (let k = 0; k + 1 < aims.length; k += 2) if (!best || Math.hypot(aims[k] - h.x, aims[k + 1] - h.y) < Math.hypot(best[0] - h.x, best[1] - h.y)) best = [aims[k], aims[k + 1]];
+      return best;
+    };
+    const [ux, uy] = [Math.cos(g.angle), Math.sin(g.angle)];
+    const end = (q: Person) => Math.sign((q.tx - g.x) * ux + (q.ty - g.y) * uy);
+    switch (g.kind) {
+      case 'tennis':
+      case 'padel':
+      case 'pingpong': {
+        const over = others.filter((q) => end(q) !== end(h));
+        const to = over.length ? over[Math.floor(this.rand() * over.length)] : any();
+        return { to: near(to.tx, to.ty, g.kind === 'pingpong' ? 0.3 * M : 1.5 * M), target: to, loft: play.loft, speed: play.speed * (0.8 + this.rand() * 0.4) };
+      }
+      case 'cricket': {
+        const [bowler, batsman] = g.order ?? [];
+        if (h === bowler && batsman && others.includes(batsman)) return { to: [batsman.tx, batsman.ty], target: batsman, loft: play.loft, speed: play.speed };
+        if (h === batsman) {
+          const fielders = others.filter((q) => q !== bowler && q !== g.order?.[2]);
+          const to = fielders.length ? fielders[Math.floor(this.rand() * fielders.length)] : any();
+          return { to: near(to.tx, to.ty, 4 * M), target: to, loft: (0.5 + this.rand() * 6) * M, speed: (12 + this.rand() * 10) * M };
+        }
+        const to = bowler && others.includes(bowler) ? bowler : any();
+        return { to: [to.tx, to.ty], target: to, loft: 2 * M, speed: 15 * M };
+      }
+      case 'bowls': {
+        // From the mat up to the jack (it ends up round it, and the one up there gets it); and from up there, back to the mat.
+        const skip = g.order?.[2];
+        const aim = nearestAim();
+        if (h === skip || !aim) {
+          const to = others.find((q) => q !== skip) ?? any();
+          return { to: near(to.tx, to.ty, 0.6 * M), target: to, loft: 0, speed: play.speed * 1.5 };
+        }
+        const [x, y] = aims.length >= 2 ? [aims[0], aims[1]] : aim;
+        return { to: near(x, y, 1.2 * M), target: skip && others.includes(skip) ? skip : null, loft: 0, speed: play.speed };
+      }
+      case 'croquet': {
+        // At a hoop, and after it (their own ball), or the other's turn.
+        const k = Math.floor((this.rand() * aims.length) / 2) * 2;
+        const to: [number, number] = aims.length ? near(aims[k], aims[k + 1], 1 * M) : near(h.x, h.y, 6 * M);
+        return { to, target: this.rand() < 0.5 ? any() : h, loft: 0, speed: play.speed };
+      }
+      default: {
+        // A shot (at the nearest hoop, goal or posts), now and then: whoever's nearest where it ends up gets it.
+        const aim = nearestAim();
+        if (aim && play.shot && this.rand() < play.shot && Math.hypot(aim[0] - h.x, aim[1] - h.y) < 35 * M) {
+          return { to: near(aim[0], aim[1], (g.kind === 'basketball' || g.kind === 'netball' ? 0.4 : 1.5) * M), target: null, loft: play.shotLoft ?? play.loft, speed: play.speed * 1.2 };
+        }
+        const to = any();
+        return { to: near(to.tx, to.ty, 1.2 * M), target: to, loft: play.loft, speed: play.speed };
       }
     }
   }

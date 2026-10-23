@@ -1139,6 +1139,115 @@ export function createArt(scene: Phaser.Scene): void {
       ctx.fillRect(0, 0, 48, 1.2);
     });
   });
+  // On the pitches and courts (see sports.ts), from above. A goal: its white posts and crossbar along the top edge, its net back
+  // from them (a full-size one 7.3 m across, a small one, a hockey goal with its boards); stood up, so a shadow.
+  const goal = (key: string, w: number, d: number, boards: boolean) =>
+    canvasTexture(scene, key, w + 2, d + 2, (ctx) => {
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.fillRect(2, 2.4, w - 1, d - 1);
+      ctx.strokeStyle = 'rgba(235,235,230,0.55)';
+      ctx.lineWidth = 0.25;
+      for (let x = 1.5; x < w; x += 1.6) {
+        ctx.beginPath();
+        ctx.moveTo(x, 1);
+        ctx.lineTo(x, d);
+        ctx.stroke();
+      }
+      for (let y = 2.5; y < d; y += 1.6) {
+        ctx.beginPath();
+        ctx.moveTo(1, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = '#f4f4f0';
+      ctx.lineWidth = 0.9;
+      ctx.strokeRect(1, 1, w - 1, d - 1);
+      if (boards) {
+        ctx.fillStyle = '#1f2a3a';
+        ctx.fillRect(1, d - 0.8, w - 1, 1);
+      }
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(0.6, 1);
+      ctx.lineTo(w + 0.4, 1);
+      ctx.stroke();
+    });
+  goal(TEX.prop('goal'), 59, 16, false);
+  goal(TEX.prop('goalsmall'), 30, 11, false);
+  goal(TEX.prop('hockeygoal'), 29, 9, true);
+  // Rugby posts: the crossbar between the two tall posts (padded at their feet), their long shadow.
+  canvasTexture(scene, TEX.prop('rugbypost'), 48, 8, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(3, 4.5, 44, 1.6);
+    ctx.fillStyle = '#f4f4f0';
+    ctx.fillRect(1, 3.4, 46, 0.9);
+    for (const x of [2.5, 45.5]) {
+      circle(ctx, x, 3.8, 1.9, '#c8323a');
+      circle(ctx, x, 3.8, 0.8, '#f4f4f0');
+    }
+  });
+  // A basketball hoop: its post (at the end), the arm out to the board, the white board and the orange ring, its net.
+  canvasTexture(scene, TEX.prop('hoop'), 16, 10, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(2.5, 4.4, 9, 2);
+    circle(ctx, 2, 5, 1.3, '#4a4f55');
+    ctx.fillStyle = '#5c6268';
+    ctx.fillRect(2.5, 4.4, 5.5, 1.2);
+    roundRect(ctx, 8, 1, 1.2, 8, 0.2, '#f2f2ee');
+    ctx.strokeStyle = '#e26a1f';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.arc(11.6, 5, 1.8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 0.2;
+    ctx.beginPath();
+    ctx.arc(11.6, 5, 1.2, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+  // A netball post: the pole, its ring (no board).
+  canvasTexture(scene, TEX.prop('netpost'), 6, 6, (ctx) => {
+    circle(ctx, 3.4, 3.4, 1, 'rgba(0,0,0,0.25)');
+    ctx.strokeStyle = '#c9ccd0';
+    ctx.lineWidth = 0.4;
+    ctx.beginPath();
+    ctx.arc(3, 3, 1.9, 0, Math.PI * 2);
+    ctx.stroke();
+    circle(ctx, 3, 3, 0.6, '#6c7176');
+  });
+  // Cricket stumps: three, side by side, the bails across them.
+  canvasTexture(scene, TEX.prop('stumps'), 4, 3, (ctx) => {
+    ctx.fillStyle = '#e8d9b0';
+    ctx.fillRect(0.5, 1.1, 3, 0.5);
+    for (const x of [0.7, 2, 3.3]) circle(ctx, x, 1.35, 0.35, '#d8c290');
+  });
+  // A croquet hoop, white; the peg in the middle, its coloured bands.
+  canvasTexture(scene, TEX.prop('wicket'), 3, 2, (ctx) => {
+    ctx.strokeStyle = '#f4f4f0';
+    ctx.lineWidth = 0.35;
+    ctx.beginPath();
+    ctx.moveTo(0.4, 1);
+    ctx.lineTo(2.6, 1);
+    ctx.stroke();
+  });
+  canvasTexture(scene, TEX.prop('peg'), 2, 2, (ctx) => {
+    circle(ctx, 1, 1, 0.8, '#f4f4f0');
+    circle(ctx, 1, 1, 0.45, '#2d58b8');
+  });
+  // A table-tennis table, concrete, in the park: its green-painted top, the white lines, the steel net across the middle.
+  canvasTexture(scene, TEX.prop('pingpong'), 24, 14, (ctx) => {
+    shade(ctx, 22.4, 12.6);
+    roundRect(ctx, 0, 0, 22, 12.2, 0.4, '#3d6f55');
+    ctx.strokeStyle = 'rgba(245,245,240,0.85)';
+    ctx.lineWidth = 0.35;
+    ctx.strokeRect(0.4, 0.4, 21.2, 11.4);
+    ctx.beginPath();
+    ctx.moveTo(0.4, 6.1);
+    ctx.lineTo(21.6, 6.1);
+    ctx.stroke();
+    ctx.fillStyle = '#5a6066';
+    ctx.fillRect(10.6, -0.2, 0.8, 12.6);
+  });
   // A tower crane's foot: its concrete base, the mast's corner legs.
   canvasTexture(scene, `${TEX.prop('crane')}-tower`, 32, 32, (ctx) => {
     roundRect(ctx, 4, 4, 24, 24, 1, '#9e9a91');

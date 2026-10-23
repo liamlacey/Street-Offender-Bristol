@@ -8,6 +8,7 @@
  */
 
 import { type GameMap, type Pts, VEHICLE_ROADS, pointInRing } from '../map/osm';
+import type { SportGame } from './sports';
 import { type Work, drain, every } from './work.ts';
 
 const M = 8;
@@ -15,17 +16,19 @@ const M = 8;
 const PER_GAME = 2500 * M * M;
 const GAMES = 4;
 /** How much open grass each game needs round it (a radius), px. */
-const ROOM: Record<Game, number> = { football: 7 * M, frisbee: 9 * M };
+const ROOM: Record<ParkGame, number> = { football: 7 * M, frisbee: 9 * M };
 /** An ice-cream cart in a park this big, px²; a second in one ten times that. */
 const CART_PARK = 4000 * M * M;
 /** Pigeons in a park this big, px². */
 const FLOCK_PARK = 3000 * M * M;
 
-export type Game = 'football' | 'frisbee';
+/** A park's game, or one on a pitch or a court (see sports.ts). */
+export type ParkGame = 'football' | 'frisbee';
+export type Game = ParkGame | SportGame;
 
 export interface ParkLife {
   /** The games on the grass: where (their middle), which way they're played (a frisbee's thrown along it), which. */
-  games: { x: number; y: number; angle: number; kind: Game }[];
+  games: { x: number; y: number; angle: number; kind: ParkGame }[];
   /** The ice-cream carts, by a path: where, which way the serving side faces. */
   carts: { x: number; y: number; angle: number }[];
   /** Where the pigeons peck about. */
@@ -51,7 +54,8 @@ export function* parkLifeWork(map: GameMap): Work<ParkLife> {
     return { pts, x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
   };
   const within = (x: number, y: number, b: { x0: number; y0: number; x1: number; y1: number }) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
-  const parks = (map.areas ?? []).filter((a) => a.kind === 'park' || a.kind === 'pitch');
+  // (A pitch for a sport has its own game: see sports.ts.)
+  const parks = (map.areas ?? []).filter((a) => a.kind === 'park' || (a.kind === 'pitch' && !a.sport));
   if (!parks.length) {
     cache.set(map, life);
     return life;
@@ -85,7 +89,7 @@ export function* parkLifeWork(map: GameMap): Work<ParkLife> {
     // The games: on open grass, room all round.
     const want = a.kind === 'pitch' ? 1 : Math.min(GAMES, Math.floor(area / PER_GAME));
     for (let k = 0, tries = 0; k < want && tries < want * 40; tries++) {
-      const kind: Game = a.kind === 'pitch' || rand() < 0.55 ? 'football' : 'frisbee';
+      const kind: ParkGame = a.kind === 'pitch' || rand() < 0.55 ? 'football' : 'frisbee';
       const [x, y] = [box.x0 + rand() * (box.x1 - box.x0), box.y0 + rand() * (box.y1 - box.y0)];
       const room = ROOM[kind];
       const ring8 = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => [x + Math.cos((i * Math.PI) / 4) * room, y + Math.sin((i * Math.PI) / 4) * room]);

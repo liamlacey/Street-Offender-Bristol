@@ -287,18 +287,40 @@ function dogTexture(scene: Phaser.Scene, look: number, frame: number): string {
   return key;
 }
 
-/** A football (white, its black panels), or a frisbee (bright plastic). */
+/**
+ * A game's ball: a football (white, its black panels), a frisbee (bright plastic); on a pitch or a court, its own (a tennis ball,
+ * a basketball, a rugby ball, a cricket ball, a bowl, ...).
+ */
+const BALLS: Record<Kickabout['kind'], { colour: string; r: number; inner?: string; ir?: number; oval?: boolean }> = {
+  football: { colour: '#f4f4f0', r: 1.1, inner: '#1d1d1f', ir: 0.45 },
+  frisbee: { colour: '#ff5a1f', r: 1.6, inner: 'rgba(255,255,255,0.45)', ir: 1 },
+  tennis: { colour: '#d8ec3a', r: 0.6 },
+  padel: { colour: '#e9f04a', r: 0.6 },
+  pingpong: { colour: '#fbfbf6', r: 0.4 },
+  basketball: { colour: '#d9692a', r: 1.3, inner: 'rgba(40,20,10,0.6)', ir: 0.25 },
+  netball: { colour: '#f3efe0', r: 1.2, inner: '#3a6fc0', ir: 0.4 },
+  hockey: { colour: '#f8f8f4', r: 0.55 },
+  rugby: { colour: '#8a5a32', r: 1.2, inner: '#f2f0e6', ir: 0.2, oval: true },
+  cricket: { colour: '#b0232a', r: 0.6 },
+  bowls: { colour: '#3a2a20', r: 0.9, inner: '#c8b98a', ir: 0.25 },
+  croquet: { colour: '#2d58b8', r: 0.8 },
+};
+
 function ballTexture(scene: Phaser.Scene, kind: Kickabout['kind']): string {
   const key = `ball-${kind}`;
+  const look = BALLS[kind];
   canvasTexture(scene, key, 4, 4, (ctx) => {
-    ctx.fillStyle = kind === 'football' ? '#f4f4f0' : '#ff5a1f';
+    ctx.fillStyle = look.colour;
     ctx.beginPath();
-    ctx.arc(2, 2, kind === 'football' ? 1.1 : 1.6, 0, Math.PI * 2);
+    if (look.oval) ctx.ellipse(2, 2, look.r * 1.4, look.r, 0, 0, Math.PI * 2);
+    else ctx.arc(2, 2, look.r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = kind === 'football' ? '#1d1d1f' : 'rgba(255,255,255,0.45)';
-    ctx.beginPath();
-    ctx.arc(2, 2, kind === 'football' ? 0.45 : 1, 0, Math.PI * 2);
-    ctx.fill();
+    if (look.inner) {
+      ctx.fillStyle = look.inner;
+      ctx.beginPath();
+      ctx.arc(2, 2, look.ir ?? 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
     if (kind === 'frisbee') {
       ctx.fillStyle = '#ff5a1f';
       ctx.beginPath();

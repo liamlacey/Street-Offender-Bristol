@@ -311,6 +311,13 @@ grass; heath and shrubbery as woods; farmyards as yards. Where people live
 (`landuse=residential`), under everything else: their gardens and yards (lawns with
 patios, beds and shrubs, behind and between the houses: the roads, pavements and
 buildings are drawn over them; driven on as grass). Everything else is paving.
+Pitches (`leisure=pitch`, or a closed way tagged only with its `sport`) keep their sport
+(`sportOf`: football, tennis, padel, basketball, netball, multi, rugby, hockey,
+cricket, bowls, croquet, skateboard) and what they're played on (`pitchSurface`: as
+`surface` says, else the usual for the sport: tennis, padel, basketball, netball and
+multi-sport courts hard, hockey artificial turf, the rest grass); a hard (or clay) one is
+a court, a grass or turf one a pitch (one with no sport: grass, or paving if surfaced).
+A table-tennis table (`leisure=pitch` + `sport=table_tennis` on a node) is a prop.
 
 **Buildings** (`building=*`, `building:part=*`). Height: OSM's `height`, else
 measured by the LIDAR (below), else `building:levels` × 3.2 m (+ roof levels),
@@ -1015,7 +1022,8 @@ but the water and the buildings.
   - **Games** on the open grass (in it, not within 3 m of a building, 5 m of a road or
     railway, 2 m of a path, not in anything else, a playground or a pond, nor under a
     tree), with room all round (7 m for a kick-about, 9 m for a frisbee): one per
-    2,500 m² of park (at most 4), one on each playing field (always football). A
+    2,500 m² of park (at most 4), one on each playing field with no sport tagged
+    (always football: one with a sport has its own game, see Sports pitches). A
     kick-about is four to seven in a ring 4 to 6 m across, a frisbee two (or three) 14 m
     apart; they start out of sight, and play for one to four minutes. The ball's held a
     moment (a football dribbled, 0.8 to 2.8 s), then passed to someone else in the game
@@ -1110,6 +1118,42 @@ but the water and the buildings.
     bikes (not a hospital), a bench. A stadium: a crowd all round it (a match on),
     stewards in hi-vis, burger vans.
   - The prison: a 5.5 m stone wall round it (all but unbreakable).
+- **Sports pitches and courts** (`src/world/sports.ts`), by their sport (see the ground):
+  each fitted with a rectangle (lined up with whichever edge gives the smallest one round
+  it, then drawn in till its corners are on it).
+  - Tennis (23.77 m by 10.97 m) and padel (20 m by 10 m): as many courts side by side
+    as fit (3.66 m apart; along the ground or across it, whichever fits more), no more
+    than a quarter smaller (fewer, if need be). A hard court painted in two colours (one
+    round the courts, one on them: greens, blue, red), clay, grass or artificial turf;
+    the lines (singles and doubles, service boxes); the net across each (1.07 m, knocked
+    down all at once); a 2.75 m green mesh fence round them (not grass), a gate in it. A
+    padel court's walls (3 m), a door either side of the net. Two playing (one each end)
+    or four on 55% of the courts.
+  - Basketball (28 m by 15 m, smaller to fit): the key, circles, three-point line; a
+    hoop at each end (post, board, ring); two to five shooting about at one end on 60%.
+    Netball (30.5 m by 15.25 m): thirds, circles, a post at each end; four to seven
+    playing on half. A multi-sport court (a cage): five-a-side lines, basketball's keys
+    in yellow, a small goal each end, a 3.5 m mesh fence; a kick-about on half.
+  - Football, rugby, hockey: the pitch fitted 2 m in, no longer than 1.25 times its
+    sport's proportions (or no narrower than 1.15 to 1); grass mown in stripes 5.5 m
+    wide, or the turf (hockey's blue half the time). Football: halfway, centre circle,
+    penalty and goal areas, spots and arcs, corners; a goal each end (7.3 m across on a
+    pitch over 70 m long, else small). Rugby: try lines, 22s, dashed 10 m and 5 m lines,
+    the posts. Hockey: 23 m lines, shooting circles, goals. A game on about half: keepers
+    in goal, the rest about the pitch, shots at the goal now and then (a kick at the
+    posts, rugby, its side in a line passing it along).
+  - Cricket (a field 40 m by 24 m or more): the strip mown short, its creases and the
+    stumps at each end, the boundary rope 3 m in; a game on 60%: bowler, batsman,
+    keeper, seven fielders (bowled to the batsman, hit out to a fielder, thrown back).
+  - Bowls: the green mown in stripes along its rinks (5.5 m), the ditch round it; on up
+    to three rinks, two at the mat rolling bowls up to the jack and one up at the far
+    end. Croquet: the lawn, its six hoops and the peg; two playing on half.
+  - A skate park: concrete. A table-tennis table: two playing at half of them.
+  - All the goals, posts, hoops, stumps and croquet hoops are loose things, knocked about
+    and broken (goals buckled, stumps sent flying); each game's ball its own (a tennis
+    ball, a basketball, a rugby ball, ...), passed and hit as its game is: over the net
+    (tennis, padel, table tennis), at the hoop (four in ten), at the goal (15%), rolled
+    up the rink (bowls). A pitch with a sport has its own game, not a park's kick-about.
 - **Building sites and brownfield** (`src/world/sites.ts`; drawn bare earth, and
   rough ground: patchy rank grass and weeds over earth, gravel and bits of rubble):
   - A building site (150 m² or more) is fenced all round with Heras panels (2 m steel
