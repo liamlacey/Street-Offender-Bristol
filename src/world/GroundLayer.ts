@@ -232,7 +232,7 @@ export class GroundLayer {
 }
 
 /** Rows of the surface grid painted at a time (see `surfacesWork`). */
-const STRIP = 192;
+const STRIP = 64;
 
 /** Paints the map (or the part of it from (x0, y0) to (x1, y1), px) in its surfaces' flat colours, a metre to a pixel, and reads it back as the surface grid. */
 export function paintSurfaces(world: World, bounds?: { x0: number; y0: number; x1: number; y1: number }): SurfaceGrid {

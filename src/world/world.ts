@@ -445,6 +445,11 @@ function runs(ax: number, ay: number, bx: number, by: number, keep: (x: number, 
  * (and see-through while you're under it: see Buildings.ts).
  */
 export function buildingWalls(rings: Pts[], all: Road[], level: number, joined: Set<string> = new Set()): Wall[] {
+  return drain(buildingWallsWork(rings, all, level, joined));
+}
+
+/** The same, a little at a time: a pause whenever `due` says (a big building with a lot of ways into it takes a while). */
+function* buildingWallsWork(rings: Pts[], all: Road[], level: number, joined: Set<string>, due: () => boolean = () => false): Work<Wall[]> {
   const out: Wall[] = [];
   // (Most buildings have no way reaching into them at all: their walls as they are, looked at no further.)
   const [x0, y0, x1, y1] = bounds(rings[0]);
@@ -503,6 +508,7 @@ export function buildingWalls(rings: Pts[], all: Road[], level: number, joined: 
         out.push({ ax, ay, bx, by, r: 0, level });
         continue;
       }
+      if (due()) yield;
       for (const piece of runs(ax, ay, bx, by, (x, y) => {
         for (const c of close) {
           const reach = openReach(c.piece);
@@ -524,7 +530,10 @@ export function buildingWalls(rings: Pts[], all: Road[], level: number, joined: 
       for (const side of [1, -1]) {
         const edge = offsetLine(piece.pts, side * h);
         // (Every 4 px: they're only kept to, never seen.)
-        for (let k = 0; k + 3 < edge.length; k += 2) for (const bit of runs(edge[k], edge[k + 1], edge[k + 2], edge[k + 3], keep, 4)) out.push({ ...bit, level });
+        for (let k = 0; k + 3 < edge.length; k += 2) {
+          if (due()) yield;
+          for (const bit of runs(edge[k], edge[k + 1], edge[k + 2], edge[k + 3], keep, 4)) out.push({ ...bit, level });
+        }
       }
     }
     const p = r.pts;
@@ -568,10 +577,12 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   const terrain = shared ?? new Terrain(map.terrain, map.pxPerMetre, map.ledges);
   const decks = new Decks(map.roads, (x, y) => terrain.at(x, y) * terrain.px, waterOf(map));
   const onDeck = (x: number, y: number) => decks.over(x, y) !== null;
+  yield;
   // (The roads and paths by where they are, in squares, each in those its line goes through: each building looks only at those near it.)
   const CELL = 256;
   const wayGrid = new Map<string, Set<Road>>();
   for (const r of map.roads) {
+    if (pause()) yield;
     // (A railway in a tunnel is under everything: it opens no building's walls.)
     if (r.tunnel) continue;
     const pad = Math.max(0, openReach(r)) + 4;
@@ -615,25 +626,31 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   const joined = new Set<string>();
   {
     const uses = new Map<string, number>();
-    for (const r of map.roads) for (let k = 0; k + 1 < r.pts.length; k += 2) uses.set(`${r.pts[k]},${r.pts[k + 1]}`, (uses.get(`${r.pts[k]},${r.pts[k + 1]}`) ?? 0) + 1);
+    for (const r of map.roads) {
+      if (pause()) yield;
+      for (let k = 0; k + 1 < r.pts.length; k += 2) uses.set(`${r.pts[k]},${r.pts[k + 1]}`, (uses.get(`${r.pts[k]},${r.pts[k + 1]}`) ?? 0) + 1);
+    }
     for (const [k, n] of uses) if (n > 1) joined.add(k);
   }
   const buildings: Wall[] = [];
   const buildingsUp: Wall[] = [];
-  // (A pause every so often: some take far longer than others, where a lot of ways go into them.)
+  // (A pause every so often: some take far longer than others, where a lot of ways go into them; a big one, partway through.)
   let since = performance.now();
+  const due = () => {
+    const now = performance.now();
+    if (now - since <= BUILDING_STEP) return false;
+    since = now;
+    return true;
+  };
   for (const b of map.buildings) {
-    if (performance.now() - since > BUILDING_STEP) {
-      yield;
-      since = performance.now();
-    }
+    if (due()) yield;
     if (!b.solid) continue;
     const [x0, y0, x1, y1] = bounds(b.rings[0]);
     const near = waysNear({ ax: x0, ay: y0, bx: x1, by: y1, r: 0 });
     const onGround = near.filter((r) => !r.bridge);
-    const walls = buildingWalls(b.rings, onGround, 0, joined);
+    const walls = yield* buildingWallsWork(b.rings, onGround, 0, joined, due);
     buildings.push(...walls);
-    buildingsUp.push(...(onGround.length === near.length ? walls : buildingWalls(b.rings, near, 1, joined)));
+    buildingsUp.push(...(onGround.length === near.length ? walls : yield* buildingWallsWork(b.rings, near, 1, joined, due)));
   }
   // Garden walls, fences and railings: on a bridge if they run along one (its handrails), otherwise on the ground.
   for (const line of map.lines) {
@@ -671,12 +688,13 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   beacons(map).forEach((b, index) => posts[levelOf(b.x, b.y)].push({ x: b.x, y: b.y, r: BEACON_POLE, thing: 'beacon', index }));
   const loose: LooseProp[] = [];
   const fixed: FixedProp[] = [];
-  map.props.forEach((p) => {
+  for (const p of map.props) {
+    if (pause()) yield;
     const level = levelOf(p.x, p.y);
     const post = POST_RADIUS[p.kind];
     if (post !== undefined) posts[level].push({ x: p.x, y: p.y, r: post, thing: p.kind as ThingKind, index: fixed.length });
     // Traffic lights and bus stops are mapped on the road's centre line, not where they stand: left off for now.
-    if (p.kind === 'signals' || p.kind === 'busstop') return;
+    if (p.kind === 'signals' || p.kind === 'busstop') continue;
     const l = LOOSE[p.kind];
     if (l) {
       // Benches face along the nearest wall or path; without knowing which (unless the map says), turn each its own way.
@@ -686,7 +704,7 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
     } else {
       fixed.push({ ...p, level });
     }
-  });
+  }
   // The food carts on the busy pedestrian streets and squares, the market stalls (along their rows), and the A-boards (see streetLife.ts).
   const life = yield* streetLifeWork(map);
   const add = (kind: 'foodcart' | 'stall' | 'aboard', x: number, y: number, angle: number, variant?: number) => {
@@ -712,6 +730,7 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   }
   // What's in the gardens (see homes.ts).
   for (const t of homes.things) {
+    if (pause()) yield;
     const l = LOOSE[t.kind]!;
     const p = { kind: t.kind, x: t.x, y: t.y };
     loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: t.angle, spin: 0, moved: false, level: 0, home: homeOf(p), ...(t.variant === undefined ? {} : { variant: t.variant }) });
@@ -766,12 +785,14 @@ export function* indexChunks(map: GameMap): Work<Map<string, ChunkIndex>> {
     const [x0, y0, x1, y1] = bounds(a.rings[0]);
     add('areas', i, x0 - 4, y0 - 4, x1 + 4, y1 + 4);
   });
+  yield;
   map.roads.forEach((r, i) => {
     // Wide enough for the pavements either side.
     const pad = r.width / 2 + 24;
     const [x0, y0, x1, y1] = bounds(r.pts);
     add('roads', i, x0 - pad, y0 - pad, x1 + pad, y1 + pad);
   });
+  yield;
   (map.paint ?? []).forEach((p, i) => {
     // Arrows and boxes run a few metres along their way.
     const reach = p.width + 6 * 8;

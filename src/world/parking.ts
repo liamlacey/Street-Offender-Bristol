@@ -230,6 +230,13 @@ export function shelterSpaces(map: GameMap, store: number, spaces: Space[]): Spa
   return out;
 }
 
+const trolleys = new WeakMap<GameMap, TrolleyRow[][]>();
+
+/** The trolley rows laid out for a map elsewhere (in the layout worker: see layout.ts), taken as worked out here. */
+export function primeTrolleys(map: GameMap, value: TrolleyRow[][]): void {
+  trolleys.set(map, value);
+}
+
 /** A row of trolleys: where the first stands, which way the row runs (each faces back along it, nested), how many it holds. */
 export type TrolleyRow = [number, number, number, number];
 
@@ -239,6 +246,8 @@ export type TrolleyRow = [number, number, number, number];
  * end, the aisle).
  */
 export function trolleyRows(map: GameMap): TrolleyRow[][] {
+  const had = trolleys.get(map);
+  if (had) return had;
   const rows: TrolleyRow[][] = (map.stores ?? []).map((st) => [st.bay]);
   for (const a of map.areas) {
     if (a.kind !== 'parking') continue;
@@ -259,6 +268,7 @@ export function trolleyRows(map: GameMap): TrolleyRow[][] {
       }
     }
   }
+  trolleys.set(map, rows);
   return rows;
 }
 
