@@ -24,7 +24,7 @@ const M = 8;
 
 // --- The vehicles ---
 
-export type VehicleKind = 'small' | 'hatch' | 'saloon' | 'estate' | 'suv' | 'van' | 'lorry' | 'bus' | 'double' | 'bike' | 'own' | 'police' | 'ambulance' | 'fire';
+export type VehicleKind = 'small' | 'hatch' | 'saloon' | 'estate' | 'suv' | 'van' | 'lorry' | 'bus' | 'double' | 'bike' | 'own' | 'police' | 'ambulance' | 'fire' | 'taxi';
 
 /**
  * Each kind: how long and wide (px; real sizes, a tenth up, to match your car),
@@ -50,6 +50,8 @@ export const VEHICLES: Record<VehicleKind, { length: number; width: number; mass
   police: { length: 4.9 * 1.1 * M, width: 1.85 * 1.1 * M, mass: 1.1, traffic: 0, parked: 0, paint: 'car' },
   ambulance: { length: 6.6 * 1.1 * M, width: 2.3 * 1.1 * M, mass: 2.4, traffic: 0, parked: 0, paint: 'van' },
   fire: { length: 8.4 * 1.1 * M, width: 2.5 * 1.1 * M, mass: 7, traffic: 0, parked: 0, paint: 'lorry' },
+  // A taxi (a saloon in its livery, its sign on the roof): from the taxi ranks (see Post), and about in the traffic.
+  taxi: { length: 4.8 * 1.1 * M, width: 1.84 * 1.1 * M, mass: 1.05, traffic: 0.03, parked: 0, paint: 'car' },
 };
 
 /** The colours, about as common as on Britain's roads (grey, black and white the most); vans mostly white; lorries' cabs. */
@@ -325,7 +327,7 @@ const OBSTACLE_CELL = 24 * M;
 /** How many bikes ride along a cycle path each way, per 100 m. */
 const PATH_BIKES = 0.9;
 /** How fast each kind's driven, against the road's usual speed (before the driver's own pace). */
-const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85, bus: 0.85, double: 0.82, bike: 1, own: 1, police: 1.05, ambulance: 1, fire: 0.9 };
+const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85, bus: 0.85, double: 0.82, bike: 1, own: 1, police: 1.05, ambulance: 1, fire: 0.9, taxi: 1.02 };
 /** How fast a cyclist rides on the flat, px/s (each faster or slower: see pace); how much less briskly they pull away than a car. */
 const BIKE_SPEED = 5.3 * M;
 const BIKE_ACCEL = 0.4;
@@ -335,7 +337,7 @@ const BIKE_ROOM = 1.5 * M;
 /** A cyclist hit harder than this (an impulse, your car's mass × px/s) comes off. */
 const UNSEAT = 1;
 /** Up a hill, how much each kind slows for each 1 in 1 of it (a lorry labours; a car barely notices); and how strongly gravity holds it back pulling away. */
-const CLIMB: Record<VehicleKind, number> = { small: 0.8, hatch: 0.6, saloon: 0.5, estate: 0.5, suv: 0.5, van: 1.3, lorry: 3, bus: 2.2, double: 2.4, bike: 7, own: 0.5, police: 0.4, ambulance: 1, fire: 2 };
+const CLIMB: Record<VehicleKind, number> = { small: 0.8, hatch: 0.6, saloon: 0.5, estate: 0.5, suv: 0.5, van: 1.3, lorry: 3, bus: 2.2, double: 2.4, bike: 7, own: 0.5, police: 0.4, ambulance: 1, fire: 2, taxi: 0.5 };
 const GRAVITY = 9.81 * M;
 /** Dawdling: how often a driver slows a moment, a second (more often the busier the street), and for how long. */
 const DAWDLE = 0.003;
@@ -963,7 +965,7 @@ const ZONE_PROBE: Obstacle = { id: -3, x: 0, y: 0, angle: 0, r: 0, length: 0, vx
 const POST_NEAR = 350 * M;
 const POST_EVERY: [number, number] = [10, 28];
 const POST_FROM: [number, number] = [80 * M, 260 * M];
-const POST_PLACES: Record<'police' | 'fire' | 'ambulance' | 'emergency', number> = { police: 5, fire: 3, ambulance: 3, emergency: 6 };
+const POST_PLACES: Record<'police' | 'fire' | 'ambulance' | 'emergency' | 'taxi', number> = { police: 5, fire: 3, ambulance: 3, emergency: 6, taxi: 4 };
 const POST_FILLED = 0.7;
 const SIREN = 0.8;
 const SIREN_TOP = 20 * M;
@@ -1165,11 +1167,15 @@ export class Traffic {
     // The emergency services' posts, their vehicles parked along the kerb outside (most of their places taken).
     const kerbLanes = this.lanes.filter((l) => !l.path && !l.bus && l.level === 0 && DRIVEN.has(map.roads[l.road].kind));
     const all: Kerbside<Lane>[] = [];
+    // (A taxi rank's cabs keep off the roads the buses run along: there, they'd have the buses squeezing by.)
+    const busRoads = new Set<number>();
+    for (const r of map.busRoutes ?? []) for (const leg of r.legs) if (leg >= 0) busRoads.add(leg >> 1);
+    const rankLanes = kerbLanes.filter((l) => !busRoads.has(l.road));
     for (const service of map.services ?? []) {
       yield;
-      const kind: VehicleKind = service.kind === 'police' ? 'police' : service.kind === 'fire' ? 'fire' : 'ambulance';
+      const kind: VehicleKind = service.kind === 'police' ? 'police' : service.kind === 'fire' ? 'fire' : service.kind === 'taxi' ? 'taxi' : 'ambulance';
       const { length, width } = VEHICLES[kind];
-      const spots = yield* kerbsidesWork(map, kerbLanes, service, length, width, spaces, all, POST_PLACES[service.kind === 'ambulance' && service.emergency ? 'emergency' : service.kind]);
+      const spots = yield* kerbsidesWork(map, service.kind === 'taxi' ? rankLanes : kerbLanes, service, length, width, spaces, all, POST_PLACES[service.kind === 'ambulance' && service.emergency ? 'emergency' : service.kind]);
       if (!spots.length) continue;
       all.push(...spots);
       const ways = new Map<number, { toward: Map<number, Lane>; from: Lane[] }>();
@@ -1190,6 +1196,8 @@ export class Traffic {
     Object.assign(v, { mode: 'parked', x: spot.x, y: spot.y, angle: spot.angle, speed: 0, vx: 0, vy: 0, spin: 0, side: 0, sideRate: 0, accel: 0, damping: SLIDE, post, spot, parking: false, siren: false });
     v.space = { x: spot.x, y: spot.y, angle: spot.angle, length: v.length, taken: 1, endOn: false };
     v.blues = blues ? 20 + this.rand() * 70 : 0;
+    // (A taxi's no blue lights.)
+    if (v.kind === 'taxi') v.blues = 0;
     spot.taken = v.id;
     this.parked.push(v);
     this.parkedById.set(v.id, v);
@@ -1739,7 +1747,8 @@ export class Traffic {
     if (i >= 0) this.parked.splice(i, 1);
     this.parkedById.delete(v.id);
     spot.taken = null;
-    const siren = this.rand() < SIREN;
+    // (A taxi off with a fare: no siren.)
+    const siren = v.kind !== 'taxi' && this.rand() < SIREN;
     Object.assign(v, { mode: 'drive', route: [spot.lane], s: spot.s, side: spot.off, sideRate: 0, speed: 0, accel: 0, react: 0.3, back: null, space: undefined, spot: undefined, post: undefined, parking: false, siren, blues: siren ? Infinity : 0 });
     this.plan(v);
     this.pose(v);
@@ -1757,7 +1766,7 @@ export class Traffic {
       const v = this.make(this.posts[post].kind, 0, 0, 0, lane.level);
       Object.assign(v, { route: [lane], s, post, spot });
       spot.taken = v.id;
-      v.siren = this.rand() < SIREN * 0.75;
+      v.siren = v.kind !== 'taxi' && this.rand() < SIREN * 0.75;
       v.blues = v.siren ? Infinity : 0;
       this.plan(v);
       v.speed = Math.min(lane.speed * v.pace, MAX_SPEED, this.limitAhead(v));

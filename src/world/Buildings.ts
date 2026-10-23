@@ -158,6 +158,19 @@ export class Buildings {
           };
           g.fillStyle(w.colour, alpha);
           quad(sBase, sTop);
+          // A mural painted on it: its panels, from a metre up to near its top.
+          if (w.mural) {
+            const [s0, s1] = [lift(b.bottom + 8), lift(top - 4)];
+            const n = w.mural.length;
+            for (let k = 0; k < n; k++) {
+              const [t0, t1] = [k / n, (k + 1) / n];
+              const [p0x, p0y, p1x, p1y] = [ax + (bx - ax) * t0, ay + (by - ay) * t0, ax + (bx - ax) * t1, ay + (by - ay) * t1];
+              g.fillStyle(w.mural[k], alpha);
+              g.fillTriangle(cx + p0x * s0, cy + p0y * s0, cx + p1x * s0, cy + p1y * s0, cx + p1x * s1, cy + p1y * s1);
+              g.fillTriangle(cx + p0x * s0, cy + p0y * s0, cx + p1x * s1, cy + p1y * s1, cx + p0x * s1, cy + p0y * s1);
+            }
+            continue;
+          }
           // A band of windows along each floor.
           if (look.windows !== null && Math.hypot(w.bx - w.ax, w.by - w.ay) > 12) {
             g.fillStyle(look.windows, 0.85 * alpha);

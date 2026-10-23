@@ -22,6 +22,7 @@ const TUNED: Record<VehicleKind, Partial<CarTuning>> = {
   ambulance: { engineAccel: 250, maxForwardSpeed: 300, maxTurnRate: 2.6, grip: 7.5, brakeDecel: 580 },
   fire: { engineAccel: 170, maxForwardSpeed: 240, maxTurnRate: 2, grip: 7, brakeDecel: 470, fullSteerSpeed: 140, climbSpeedLoss: 3.5 },
   hatch: { engineAccel: 330, maxForwardSpeed: 340 },
+  taxi: { engineAccel: 330, maxForwardSpeed: 350, maxTurnRate: 3.2 },
   saloon: { engineAccel: 340, maxForwardSpeed: 360, maxTurnRate: 3.2 },
   estate: { engineAccel: 320, maxForwardSpeed: 350, maxTurnRate: 3.1 },
   suv: { engineAccel: 300, maxForwardSpeed: 330, maxTurnRate: 3, grip: 8 },

@@ -76,7 +76,7 @@ export interface PlaceLife {
   /** Where those at a place wander about (a school's grounds). */
   rings: Pts[];
   /** Where a vehicle's parked (a lorry at a loading bay, a car at a lock-up), and how likely it's there. */
-  spaces: { x: number; y: number; angle: number; length: number; taken: number; endOn: boolean; kind?: string }[];
+  spaces: { x: number; y: number; angle: number; length: number; taken: number; endOn: boolean; kind?: string; sale?: boolean }[];
   /** The games on the pitches and courts (see sports.ts). */
   games: SportsGame[];
 }
@@ -114,6 +114,8 @@ export function* placesWork(map: GameMap): Work<PlaceLife> {
   const ground = new Ground(map);
   yield;
   const seen = new Set<string>();
+  // (Where the cafés' tables are, by the metre: one place's not put over another's.)
+  const tables = new Set<string>();
   for (const place of places) {
     if (pause()) yield;
     // (The same place twice over, in two tiles: once.)
@@ -146,6 +148,39 @@ export function* placesWork(map: GameMap): Work<PlaceLife> {
         break;
       case 'prison':
         prison(place, ground, out);
+        break;
+      case 'food':
+        food(place, ground, out, tables);
+        break;
+      case 'takeaway':
+        takeaway(place, ground, out);
+        break;
+      case 'seating':
+        seating(place, ground, out, tables);
+        break;
+      case 'cardealer':
+        dealer(place, ground, out);
+        break;
+      case 'carrepair':
+        repairs(place, ground, out);
+        break;
+      case 'taxi':
+        rank(place, ground, out);
+        break;
+      case 'substation':
+        substation(place, ground, out);
+        break;
+      case 'allotments':
+        allotments(place, ground, out);
+        break;
+      case 'shop':
+        shopFront(place, ground, out);
+        break;
+      case 'atm':
+        cashpoint(place, ground, out);
+        break;
+      case 'charger':
+        charging(place, ground, out);
         break;
     }
   }
@@ -744,6 +779,273 @@ function crowd(place: Place, ground: Ground, out: PlaceLife): void {
       else out.spots.push({ x: r1(px), y: r1(py), angle: +Math.atan2(-ny, -nx).toFixed(3), weight: r < 0.2 ? 0.6 : 3.5, group: r >= 0.2, ...(r < 0.2 ? { hivis: true } : {}) });
     }
   }
+}
+
+/** A café's table, by where it is to the metre and round it (see `food`, `seating`): whether there's one there already, and if not, it's taken. */
+function tableAt(tables: Set<string>, x: number, y: number): boolean {
+  const [i, j] = [Math.round(x / (2 * M)), Math.round(y / (2 * M))];
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) if (tables.has(`${i + a},${j + b}`)) return true;
+  tables.add(`${i},${j}`);
+  return false;
+}
+
+/** A place's building (the one it's mapped as, or the one it's in), and its door: or null. */
+function frontOf(place: Place, ground: Ground, reach = 25 * M): { ring: Pts; door: NonNullable<ReturnType<typeof doorOf>> } | null {
+  const b = ground.buildingAt(place.x, place.y);
+  const ring = b >= 0 ? ground.map.buildings[b].rings[0] : place.rings[0];
+  if (!ring) return null;
+  const door = doorOf(ring, ground, reach);
+  return door ? { ring, door } : null;
+}
+
+/** Along the front of a place from its door (`along` px either way, `out` px out from the wall), clear of the road and the buildings: or null. */
+function onFront(door: { x: number; y: number; ox: number; oy: number }, ground: Ground, along: number, out: number, clear = 1 * M): [number, number] | null {
+  const [sx, sy] = [-door.oy, door.ox];
+  const [x, y] = [door.x + door.ox * out + sx * along, door.y + door.oy * out + sy * along];
+  if (ground.inBuilding(x, y) || ground.onCarriageway(x, y, clear)) return null;
+  return [x, y];
+}
+
+/** A café or restaurant: its tables and chairs out on the pavement in front (where there's room), a parasol over some, people at them. */
+function food(place: Place, ground: Ground, out: PlaceLife, tables: Set<string>): void {
+  const front = frontOf(place, ground);
+  if (!front) return;
+  const { door } = front;
+  const rand = seeded(hash(place.x, place.y));
+  const colour = Math.floor(rand() * 4);
+  const want = place.sub === 'restaurant' ? 2 + Math.floor(rand() * 3) : 1 + Math.floor(rand() * 3);
+  const turn = Math.atan2(door.ox, -door.oy);
+  let put = 0;
+  for (const k of [0.6, -0.6, 1.8, -1.8, 3, -3]) {
+    if (put >= want) break;
+    const at = onFront(door, ground, k * 2.4 * M, 1.6 * M, 1.4 * M);
+    if (!at || tableAt(tables, at[0], at[1])) continue;
+    thing(out, 'cafetable', at[0], at[1], turn, colour);
+    if (place.sub === 'restaurant' && rand() < 0.3) thing(out, 'parasol', at[0], at[1], turn, colour);
+    if (rand() < 0.7) out.spots.push({ x: r1(at[0]), y: r1(at[1]), angle: 0, weight: 0.9, group: true });
+    put++;
+  }
+}
+
+/** A takeaway: a queue out of its door along the front, and a delivery moped (or two) at the kerb. */
+function takeaway(place: Place, ground: Ground, out: PlaceLife): void {
+  const front = frontOf(place, ground);
+  if (!front) return;
+  const { door } = front;
+  const rand = seeded(hash(place.x, place.y));
+  const [sx, sy] = [-door.oy, door.ox];
+  for (let k = 0, n = 1 + Math.floor(rand() * 3); k < n; k++) {
+    const at = onFront(door, ground, (0.9 + k * 0.8) * M, 0.9 * M, 0.5 * M);
+    if (at) out.spots.push({ x: r1(at[0]), y: r1(at[1]), angle: +Math.atan2(-sy, -sx).toFixed(3), weight: 0.8, group: false });
+  }
+  for (let k = 0, n = rand() < 0.5 ? 1 : rand() < 0.5 ? 2 : 0; k < n; k++) {
+    const kerb = outOf(door, ground, 4 * M);
+    if (!kerb) break;
+    const [x, y] = [kerb[0] - sx * (2 + k * 1.2) * M, kerb[1] - sy * (2 + k * 1.2) * M];
+    if (!ground.inBuilding(x, y) && !ground.onCarriageway(x, y, 0.3 * M)) thing(out, 'moped', x, y, Math.atan2(sy, sx) + (rand() - 0.5) * 0.3, Math.floor(rand() * 3));
+  }
+}
+
+/** Tables outside (`leisure=outdoor_seating`): as many as there's room for, 2.6 m apart, people at some. */
+function seating(place: Place, ground: Ground, out: PlaceLife, tables: Set<string>): void {
+  const ring = place.rings[0];
+  if (!ring) return;
+  const rand = seeded(hash(place.x, place.y));
+  const colour = Math.floor(rand() * 4);
+  const [x0, y0, x1, y1] = bounds(ring);
+  let put = 0;
+  for (let y = y0 + 1.3 * M; y < y1 && put < 14; y += 2.6 * M) {
+    for (let x = x0 + 1.3 * M; x < x1 && put < 14; x += 2.6 * M) {
+      if (!pointInRing(x, y, ring) || ground.inBuilding(x, y) || ground.onCarriageway(x, y, 1 * M) || tableAt(tables, x, y)) continue;
+      thing(out, 'cafetable', x, y, 0, colour);
+      if (rand() < 0.6) out.spots.push({ x: r1(x), y: r1(y), angle: 0, weight: 0.8, group: true });
+      put++;
+    }
+  }
+}
+
+/** A car dealer: its forecourt full of cars for sale (in rows, noses to the road; any of them can be driven off), an A-board. */
+function dealer(place: Place, ground: Ground, out: PlaceLife): void {
+  const front = frontOf(place, ground, 40 * M);
+  if (!front) return;
+  const { door } = front;
+  const rand = seeded(hash(place.x, place.y));
+  const kinds = ['hatch', 'saloon', 'suv', 'small', 'estate'];
+  const nose = +Math.atan2(door.oy, door.ox).toFixed(3);
+  let put = 0;
+  for (let row = 0; row < 3 && put < 14; row++) {
+    for (const k of [0, 1, -1, 2, -2, 3, -3, 4, -4]) {
+      if (put >= 14) break;
+      const out1 = (3.4 + row * 5.6) * M;
+      // (Room for the whole car: its front and back clear too.)
+      const at = onFront(door, ground, k * 2.7 * M, out1, 1.5 * M);
+      if (!at || !onFront(door, ground, k * 2.7 * M, out1 + 2.5 * M, 1 * M) || !onFront(door, ground, k * 2.7 * M, out1 - 2.5 * M, 0)) continue;
+      out.spaces.push({ x: r1(at[0]), y: r1(at[1]), angle: nose, length: 5 * M, taken: 1, endOn: true, kind: kinds[Math.floor(rand() * kinds.length)], sale: true });
+      put++;
+    }
+  }
+  const board = onFront(door, ground, 2 * M, 1.2 * M);
+  if (put && board) thing(out, 'aboard', board[0], board[1], Math.atan2(door.ox, -door.oy));
+}
+
+/** A garage that mends cars: a car or two out front waiting, old tyres stacked, a tool chest and an oil drum, a mechanic. */
+function repairs(place: Place, ground: Ground, out: PlaceLife): void {
+  const front = frontOf(place, ground);
+  if (!front) return;
+  const { door } = front;
+  const rand = seeded(hash(place.x, place.y));
+  const nose = +Math.atan2(-door.oy, -door.ox).toFixed(3);
+  for (const k of [0, 1.2]) {
+    const at = onFront(door, ground, k * 2.7 * M, 3.2 * M, 1.5 * M);
+    if (at && onFront(door, ground, k * 2.7 * M, 5.5 * M, 1 * M)) out.spaces.push({ x: r1(at[0]), y: r1(at[1]), angle: nose, length: 4.8 * M, taken: 0.8, endOn: true });
+  }
+  for (const [kind, along] of [['tyres', -2.2], ['tyres', -3], ['toolchest', 2.6], ['drum', -3.8]] as [string, number][]) {
+    if (rand() < 0.3) continue;
+    const at = onFront(door, ground, along * M, 0.8 * M, 0.5 * M);
+    if (at) thing(out, kind, at[0], at[1], Math.atan2(door.ox, -door.oy) + (rand() - 0.5) * 0.4);
+  }
+  const at = outOf(door, ground, 1.8 * M);
+  if (at && rand() < 0.8) out.spots.push({ x: at[0], y: at[1], angle: 0, weight: 0.6, group: false, hivis: true });
+}
+
+/** A taxi rank: those waiting for one, in a line along the kerb by it (the taxis are the traffic's: see posts.ts). */
+function rank(place: Place, ground: Ground, out: PlaceLife): void {
+  // The nearest pavement to it (it's mapped on the road, or at its edge), and the way along the road.
+  const road = ground.nearestRoad(place.x, place.y, 20 * M);
+  if (!road) return;
+  let best: [number, number] | null = null;
+  for (let d = 0; d <= 8 * M && !best; d += 0.5 * M) {
+    for (let a = 0; a < 16 && !best; a++) {
+      const [x, y] = [place.x + Math.cos((a / 16) * Math.PI * 2) * d, place.y + Math.sin((a / 16) * Math.PI * 2) * d];
+      if (!ground.onCarriageway(x, y, 0.6 * M) && !ground.inBuilding(x, y)) best = [x, y];
+    }
+  }
+  if (!best) return;
+  const [ox, oy] = unit(road[0] - best[0], road[1] - best[1]);
+  const [sx, sy] = [-oy, ox];
+  const rand = seeded(hash(place.x, place.y));
+  for (let k = 0, n = Math.floor(rand() * 4); k < n; k++) {
+    const [x, y] = [best[0] + sx * k * 0.9 * M, best[1] + sy * k * 0.9 * M];
+    if (!ground.onCarriageway(x, y, 0.4 * M) && !ground.inBuilding(x, y)) out.spots.push({ x: r1(x), y: r1(y), angle: +Math.atan2(-sy, -sx).toFixed(3), weight: 0.8, group: false });
+  }
+}
+
+/** An electricity substation: a mesh fence round its compound (if it's not a building of its own), its transformers inside. */
+function substation(place: Place, ground: Ground, out: PlaceLife): void {
+  const ring = place.rings[0];
+  if (!ring) return;
+  const area = Math.abs(ringArea(ring));
+  const { cx, cy, ux, uy, a0, a1 } = shape(ring);
+  // (In a building, or a box in a wall: nothing to fence.)
+  if (ground.buildingAt(cx, cy) >= 0) return;
+  if (area > 12 * M * M) out.lines.push({ kind: 'mesh', pts: [...ring, ring[0], ring[1]].map(r1), height: 2.4 * M });
+  const count = Math.max(1, Math.min(4, Math.floor(area / (45 * M * M))));
+  for (let k = 0; k < count; k++) {
+    const a = count === 1 ? 0 : a0 + ((k + 0.5) * (a1 - a0)) / count;
+    const [x, y] = [cx + ux * a, cy + uy * a];
+    if (!pointInRing(x, y, ring) && count > 1) continue;
+    if (!ground.inBuilding(x, y) && !ground.onRoad(x, y)) thing(out, 'transformer', x, y, Math.atan2(uy, ux) + Math.PI / 2);
+  }
+}
+
+/** Allotments: on its plots (8 m by 16 m, along it), sheds, the odd greenhouse, water butts, compost bins; people at work on some. */
+function allotments(place: Place, ground: Ground, out: PlaceLife): void {
+  const ring = place.rings[0];
+  if (!ring || Math.abs(ringArea(ring)) < 200 * M * M) return;
+  const rand = seeded(hash(place.x, place.y));
+  const { cx, cy, ux, uy, a0, a1, b0, b1 } = shape(ring);
+  const [vx, vy] = [-uy, ux];
+  const at = (a: number, b: number): [number, number] => [cx + ux * a + vx * b, cy + uy * a + vy * b];
+  const turn = Math.atan2(uy, ux);
+  let things = 0;
+  for (let a = a0 + 4 * M; a < a1 - 2 * M && things < 160; a += 8 * M) {
+    for (let b = b0 + 8 * M; b < b1 - 2 * M && things < 160; b += 16 * M) {
+      const [x, y] = at(a, b);
+      if (!pointInRing(x, y, ring) || ground.inBuilding(x, y) || ground.onRoad(x, y, 1 * M)) continue;
+      // At the plot's end (by the path): a shed, a greenhouse; a butt and a compost bin by them.
+      const [ex, ey] = at(a + 2.2 * M, b - 6 * M);
+      const r = rand();
+      if (pointInRing(ex, ey, ring) && !ground.inBuilding(ex, ey)) {
+        if (r < 0.35) thing(out, 'shed', ex, ey, turn, 0);
+        else if (r < 0.43) thing(out, 'greenhouse', ex, ey, turn, 0);
+        things++;
+      }
+      const [wx, wy] = at(a - 2.6 * M, b - 6.5 * M);
+      if (rand() < 0.5 && pointInRing(wx, wy, ring)) (thing(out, 'butt', wx, wy, 0), things++);
+      const [kx, ky] = at(a - 2.6 * M, b - 4.6 * M);
+      if (rand() < 0.35 && pointInRing(kx, ky, ring)) (thing(out, 'compost', kx, ky, turn), things++);
+      if (rand() < 0.12) out.spots.push({ x: r1(x), y: r1(y), angle: 0, weight: 0.5, group: false });
+    }
+  }
+}
+
+/** A shop with its goods (or what it is) out front: flowers, fruit and veg, bikes, papers; an empty one boarded up. */
+function shopFront(place: Place, ground: Ground, out: PlaceLife): void {
+  const front = frontOf(place, ground);
+  if (!front) return;
+  const { door } = front;
+  const rand = seeded(hash(place.x, place.y));
+  const along = Math.atan2(door.ox, -door.oy);
+  const put = (kind: string, k: number, outward: number, angle = along, variant?: number) => {
+    const at = onFront(door, ground, k * M, outward * M, 0.5 * M);
+    if (at) thing(out, kind, at[0], at[1], angle, variant);
+  };
+  switch (place.sub) {
+    case 'florist':
+      for (const k of [-1.2, 0, 1.2, 2.4]) if (rand() < 0.8) put('flowers', k + 1.4, 0.7, along, Math.floor(rand() * 3));
+      break;
+    case 'greengrocer':
+      for (const k of [-1.4, 1.4, 2.6]) if (rand() < 0.8) put('crates', k, 0.8, along, Math.floor(rand() * 3));
+      break;
+    case 'bicycle':
+      for (let k = 0; k < 5; k++) put('pushbike', 1.6 + k * 0.7, 0.9, Math.atan2(door.oy, door.ox));
+      break;
+    case 'newsagent':
+    case 'convenience':
+      put('newsstand', 1.4, 0.6);
+      if (rand() < 0.5) put('aboard', -1.6, 1.2);
+      break;
+    case 'vacant':
+      // Its windows boarded, against its front.
+      put('boards', 1.6, 0.3);
+      if (rand() < 0.6) put('boards', -1.8, 0.3);
+      if (rand() < 0.4) put('binbags', 2.8, 0.6);
+      break;
+    case 'charity':
+      // Bags of donations left outside.
+      if (rand() < 0.7) put('binbags', 1.4, 0.5);
+      break;
+    case 'hardware':
+      put('woodpallet', 1.8, 0.8, along + Math.PI / 2);
+      if (rand() < 0.5) put('drum', -1.4, 0.6);
+      break;
+    case 'furniture':
+      if (rand() < 0.4) put('sofa', 2, 1, along);
+      break;
+  }
+}
+
+/** A cash machine: a queue at it (one to three), from its wall out. */
+function cashpoint(place: Place, ground: Ground, out: PlaceLife): void {
+  const front = frontOf(place, ground, 15 * M);
+  if (!front) return;
+  const { door } = front;
+  const rand = seeded(hash(place.x, place.y));
+  for (let k = 0, n = Math.floor(rand() * 3) + (rand() < 0.5 ? 1 : 0); k < n; k++) {
+    const at = onFront(door, ground, 0, (0.7 + k * 0.8) * M, 0.5 * M);
+    if (at) out.spots.push({ x: r1(at[0]), y: r1(at[1]), angle: +Math.atan2(-door.oy, -door.ox).toFixed(3), weight: 0.7, group: false });
+  }
+}
+
+/** An electric car's charging point: a car on charge beside it, most of the time. */
+function charging(place: Place, ground: Ground, out: PlaceLife): void {
+  const road = ground.nearestRoad(place.x, place.y, 15 * M);
+  if (!road) return;
+  const [ox, oy] = unit(road[0] - place.x, road[1] - place.y);
+  const [sx, sy] = [-oy, ox];
+  const [x, y] = [place.x + sx * 1.6 * M, place.y + sy * 1.6 * M];
+  if (ground.inBuilding(x, y) || ground.onCarriageway(x, y, 0)) return;
+  out.spaces.push({ x: r1(x), y: r1(y), angle: +Math.atan2(oy, ox).toFixed(3), length: 4.8 * M, taken: 0.75, endOn: true, kind: 'hatch' });
 }
 
 /** The prison: its high wall round it. */

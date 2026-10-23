@@ -11,16 +11,25 @@ import { clothes } from './PeopleLayer';
 
 type Ctx = CanvasRenderingContext2D;
 
-export function vehicleTexture(scene: Phaser.Scene, kind: VehicleKind, colour: number, rider = 0): string {
+export function vehicleTexture(scene: Phaser.Scene, kind: VehicleKind, colour: number, rider = 0, sale = false): string {
   if (kind === 'bike') return bikeTexture(scene, colour, rider);
   // Your own car, left somewhere.
   if (kind === 'own') return TEX.car;
   // The emergency services' in their liveries (one each).
-  if (kind === 'police' || kind === 'ambulance' || kind === 'fire') colour = 0;
-  const key = `vehicle-${kind}-${colour}`;
+  if (kind === 'police' || kind === 'ambulance' || kind === 'fire' || kind === 'taxi') colour = 0;
+  const key = `vehicle-${kind}-${colour}${sale ? '-sale' : ''}`;
   const { length: L, width: W, paint } = VEHICLES[kind];
   const body = LIVERY[kind] ?? COLOURS[paint][colour][0];
-  canvasTexture(scene, key, L, W, (ctx) => draw(ctx, kind, L, W, body));
+  canvasTexture(scene, key, L, W, (ctx) => {
+    draw(ctx, kind, L, W, body);
+    // For sale, on a dealer's forecourt: its price on a card behind its windscreen.
+    if (sale && kind in LAYOUT) {
+      const at = L * LAYOUT[kind as keyof typeof LAYOUT][2];
+      roundRect(ctx, at - 2.2, W / 2 - 2.6, 1.8, 5.2, 0.3, '#fbfbf6');
+      ctx.fillStyle = '#d62828';
+      ctx.fillRect(at - 1.9, W / 2 - 2, 1.2, 4);
+    }
+  });
   return key;
 }
 
@@ -170,10 +179,18 @@ function draw(ctx: Ctx, kind: VehicleKind, L: number, W: number, colour: string)
   lights(ctx, L, W);
   if (kind === 'police') police(ctx, L, W, screen);
   if (kind === 'ambulance') ambulance(ctx, L, W, screen);
+  if (kind === 'taxi') taxi(ctx, L, W);
+}
+
+/** A taxi's sign on its roof, lit yellow, across it in the middle. */
+function taxi(ctx: Ctx, L: number, W: number): void {
+  roundRect(ctx, L * 0.44, W / 2 - 3, 2.6, 6, 0.5, '#f5d22e');
+  ctx.fillStyle = '#2b2b2b';
+  ctx.fillRect(L * 0.44 + 0.9, W / 2 - 2, 0.8, 4);
 }
 
 /** The emergency services' bodies' colours: a police car's white, an ambulance's yellow. */
-const LIVERY: Partial<Record<VehicleKind, string>> = { police: '#f2f3f1', ambulance: '#f0e010', fire: '#c3161c' };
+const LIVERY: Partial<Record<VehicleKind, string>> = { police: '#f2f3f1', ambulance: '#f0e010', fire: '#c3161c', taxi: '#2d63a8' };
 
 /** A strip of chequers (Battenburg markings) along both its sides, from `x0` to `x1`, alternating two colours. */
 function chequers(ctx: Ctx, x0: number, x1: number, W: number, a: string, b: string, size: number, inset: number): void {
@@ -279,6 +296,7 @@ const LAYOUT: Record<Exclude<VehicleKind, 'lorry' | 'bus' | 'double' | 'bike' | 
   suv: [0.05, 0.13, 0.62, 0.74],
   van: [0.02, 0.03, 0.74, 0.85],
   police: [0.05, 0.13, 0.6, 0.72],
+  taxi: [0.2, 0.31, 0.58, 0.71],
   ambulance: [0.02, 0.03, 0.78, 0.87],
 };
 

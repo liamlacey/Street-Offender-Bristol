@@ -51,6 +51,9 @@ const POST_RADIUS: Partial<Record<PropKind, number>> = {
   bikes: 4,
   statue: 10,
   crane: 16,
+  cctv: 1.6,
+  charger: 2.5,
+  railsignal: 2,
 };
 
 /** Street furniture that can be knocked about: how big, and how heavy (1 / mass, the car's being 1). */
@@ -61,6 +64,18 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
   gritbin: { r: 4, invMass: 3 },
   // Heavy: shoved, not sent flying.
   planter: { r: 6, invMass: 0.8 },
+  // Round the cafés, the takeaways, the shops, the garages, the substations, the allotments (see places.ts); a street cabinet.
+  cafetable: { r: 4, invMass: 6 },
+  moped: { r: 2.5, length: 14, invMass: 5 },
+  flowers: { r: 3, invMass: 8 },
+  crates: { r: 3, length: 9, invMass: 6 },
+  newsstand: { r: 3, invMass: 6 },
+  boards: { r: 1.5, length: 10, invMass: 8 },
+  transformer: { r: 8, length: 18, invMass: 0.2 },
+  butt: { r: 2.5, invMass: 10 },
+  compost: { r: 3, invMass: 8 },
+  toolchest: { r: 2.5, length: 7, invMass: 2 },
+  cabinet: { r: 3.5, length: 10, invMass: 0.6 },
   block: { r: 5, invMass: 0.4 },
   // A shopping trolley: on wheels, it rolls a long way.
   trolley: { r: 2.5, length: 8, invMass: 9 },

@@ -492,6 +492,8 @@ export interface Building {
   fuel?: boolean;
   /** A hut that's been knocked down: what's left of it (see world.ts's `ruin`). */
   ruined?: boolean;
+  /** The murals painted on its walls (`artwork_type=mural`): which sides of its outline (the side from point k to k + 1). */
+  murals?: number[];
 }
 
 export type PropKind =
@@ -581,7 +583,27 @@ export type PropKind =
   | 'tomb'
   | 'bigbin'
   | 'forklift'
-  | 'container';
+  | 'container'
+  // Round the cafés and restaurants, the takeaways, the shops, the car dealers and garages, the substations, the allotments (see
+  // src/world/places.ts).
+  | 'cafetable'
+  | 'moped'
+  | 'flowers'
+  | 'crates'
+  | 'newsstand'
+  | 'boards'
+  | 'transformer'
+  | 'butt'
+  | 'compost'
+  | 'toolchest'
+  // Street furniture: a street cabinet (a phone or power company's green box), a CCTV camera on its pole, an electric car's
+  // charging post; a railway's signal; a level crossing (its barriers and lights); a lock's gates.
+  | 'cabinet'
+  | 'cctv'
+  | 'charger'
+  | 'railsignal'
+  | 'levelcrossing'
+  | 'lockgate';
 
 export interface Prop {
   kind: PropKind;
@@ -593,6 +615,8 @@ export interface Prop {
   height?: number;
   /** A tower crane on a building site (not the harbour's): its jib turning slowly. */
   tower?: boolean;
+  /** How long, px: a level crossing's barriers (the road's width), a lock's gates (the lock's). */
+  length?: number;
 }
 
 export interface Crossing {
@@ -720,7 +744,7 @@ export interface Service {
   rings: Pts[];
 }
 
-export type ServiceKind = 'police' | 'fire' | 'ambulance';
+export type ServiceKind = 'police' | 'fire' | 'ambulance' | 'taxi';
 
 /**
  * A place of a kind that has things going on round it (see src/world/places.ts): a school's grounds, a pub, a church and its
@@ -729,12 +753,22 @@ export type ServiceKind = 'police' | 'fire' | 'ambulance';
 export interface Place {
   kind: PlaceKind;
   name?: string;
+  /** Which of its kind: a shop's (`shop=*`), a café's or restaurant's (`amenity=*`). */
+  sub?: string;
   x: number;
   y: number;
   rings: Pts[];
 }
 
-export type PlaceKind = 'school' | 'nursery' | 'college' | 'university' | 'hospital' | 'pub' | 'worship' | 'graveyard' | 'industrial' | 'commercial' | 'stadium' | 'sports' | 'library' | 'prison' | 'community';
+export type PlaceKind =
+  | 'school' | 'nursery' | 'college' | 'university' | 'hospital' | 'pub' | 'worship' | 'graveyard' | 'industrial' | 'commercial' | 'stadium' | 'sports' | 'library' | 'prison' | 'community'
+  // A café or restaurant; a takeaway; tables outside (`leisure=outdoor_seating`); a car dealer; a garage that mends them; a taxi
+  // rank; an electricity substation; allotments; a shop of a kind that has its goods out front (its kind in `sub`); a cash
+  // machine; an electric car's charging point.
+  | 'food' | 'takeaway' | 'seating' | 'cardealer' | 'carrepair' | 'taxi' | 'substation' | 'allotments' | 'shop' | 'atm' | 'charger';
+
+/** The shops that put their goods (or what they are) out front: flowers, fruit and veg, bikes, papers; and the empty ones, boarded up. */
+export const SHOP_FRONTS = new Set(['florist', 'greengrocer', 'bicycle', 'newsagent', 'vacant', 'convenience', 'charity', 'hardware', 'furniture']);
 
 /** What kind of place it is, if one of those (see Place). */
 export function placeKind(t: Tags): PlaceKind | null {
@@ -763,7 +797,25 @@ export function placeKind(t: Tags): PlaceKind | null {
       return 'prison';
     case 'community_centre':
       return 'community';
+    case 'cafe':
+    case 'restaurant':
+    case 'ice_cream':
+      return 'food';
+    case 'fast_food':
+      return 'takeaway';
+    case 'taxi':
+      return 'taxi';
+    case 'atm':
+      return 'atm';
+    case 'charging_station':
+      return 'charger';
   }
+  if (t.leisure === 'outdoor_seating') return 'seating';
+  if (t.shop === 'car') return 'cardealer';
+  if (t.shop === 'car_repair' || t.shop === 'tyres') return 'carrepair';
+  if (t.power === 'substation' && t.location !== 'indoor' && t.location !== 'underground') return 'substation';
+  if (t.landuse === 'allotments') return 'allotments';
+  if (t.shop && SHOP_FRONTS.has(t.shop)) return 'shop';
   if (t.landuse === 'cemetery') return 'graveyard';
   if (t.landuse === 'industrial') return 'industrial';
   if (t.landuse === 'commercial' || t.landuse === 'retail') return 'commercial';
@@ -774,6 +826,7 @@ export function placeKind(t: Tags): PlaceKind | null {
 
 /** What emergency service a place is, if any (see Service). */
 export function serviceKind(t: Tags): ServiceKind | null {
+  if (t.amenity === 'taxi') return 'taxi';
   if (t.amenity === 'police') return 'police';
   if (t.amenity === 'fire_station') return 'fire';
   if (t.emergency === 'ambulance_station' || t.amenity === 'ambulance_station' || t.amenity === 'hospital') return 'ambulance';
@@ -1415,6 +1468,8 @@ const FORECOURT_ROUND = 5 * PX_PER_METRE;
 /** A bus shelter's length, px; a kiosk's height mapped as a point, m. */
 const SHELTER_LONG = 4 * PX_PER_METRE;
 const KIOSK_HEIGHT = 2.6;
+/** A lock's width, m, where its waterway doesn't say (the harbour's locks, about 15 m; a canal's, 4 m). */
+const LOCK_WIDE = 12;
 
 /** A crane's height, if it's not tagged, m: the harbour's are about this. */
 const CRANE_HEIGHT = 15;
@@ -1586,6 +1641,12 @@ export function propKind(tags: Tags): PropKind | null {
   if (tags.highway === 'traffic_signals') return 'signals';
   if (tags.highway === 'bus_stop' || (tags['disused:highway'] === 'bus_stop' && tags.shelter === 'yes')) return 'busstop';
   if (tags.amenity === 'fountain') return 'fountain';
+  if (tags.man_made === 'street_cabinet') return 'cabinet';
+  if (tags.man_made === 'surveillance' && tags['surveillance:type'] !== 'ALPR' && tags['camera:mount'] !== 'wall' && tags['camera:mount'] !== 'ceiling' && tags['camera:mount'] !== 'building') return 'cctv';
+  if (tags.amenity === 'charging_station') return 'charger';
+  if (tags.railway === 'signal') return 'railsignal';
+  if (tags.railway === 'level_crossing') return 'levelcrossing';
+  if (tags.waterway === 'lock_gate') return 'lockgate';
   if (tags.amenity === 'bicycle_parking') return 'bikes';
   return null;
 }
@@ -2217,6 +2278,11 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       else waysOfNode.set(id, [{ way, index, kind }]);
     });
   }
+  // The waterways through the lock gates (to put each across its lock).
+  const lockWays = new Map<number, OsmWay>();
+  const gates = new Set<number>();
+  for (const n of data.nodes.values()) if (n.tags.waterway === 'lock_gate') gates.add(n.id);
+  if (gates.size) for (const way of data.ways.values()) if (way.tags.waterway) for (const id of way.nodes) if (gates.has(id) && !lockWays.has(id)) lockWays.set(id, way);
   /** A road through a node, and which way along it: the way it says, or else towards the nearer junction. */
   const approach = (id: number, direction?: string) => {
     const on = waysOfNode.get(id)?.find((w) => VEHICLE_ROADS.has(w.kind)) ?? waysOfNode.get(id)?.[0];
@@ -2496,6 +2562,34 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       props.push({ kind: prop, x: round(x), y: round(y), angle: +(water ?? 0).toFixed(3), ...(prop === 'crane' ? { height: round(Math.max(6, Math.min(40, metres(t.height) ?? CRANE_HEIGHT)) * PX_PER_METRE) } : {}) });
       continue;
     }
+    if (prop === 'cctv' && onBuilding.has(node.id)) continue;
+    if (prop === 'levelcrossing') {
+      // Along the road it carries over the railway: its barriers across the road, as wide as it is.
+      const a = approach(node.id);
+      if (a && VEHICLE_ROADS.has(a.on.kind)) props.push({ kind: prop, x: round(x), y: round(y), angle: +Math.atan2(a.uy, a.ux).toFixed(3), length: round(a.width) });
+      continue;
+    }
+    if (prop === 'railsignal') {
+      // Beside the track, facing along it.
+      const on = waysOfNode.get(node.id)?.find((w) => w.kind === 'rail');
+      const n = on?.way.nodes;
+      const [p, q] = n ? [xy(n[Math.max(0, on!.index - 1)]), xy(n[Math.min(n.length - 1, on!.index + 1)])] : [null, null];
+      if (!p || !q) continue;
+      const along = Math.atan2(q[1] - p[1], q[0] - p[0]) + (t['railway:signal:direction'] === 'backward' ? Math.PI : 0);
+      props.push({ kind: prop, x: round(x - Math.sin(along) * 2.6 * PX_PER_METRE), y: round(y + Math.cos(along) * 2.6 * PX_PER_METRE), angle: +along.toFixed(3) });
+      continue;
+    }
+    if (prop === 'lockgate') {
+      // Across the lock: the waterway it's on, as wide as it's tagged (or the lock's usual).
+      const way = lockWays.get(node.id);
+      const n = way?.nodes;
+      const k = n?.indexOf(node.id) ?? -1;
+      const [p, q] = n && k >= 0 ? [xy(n[Math.max(0, k - 1)]), xy(n[Math.min(n.length - 1, k + 1)])] : [null, null];
+      if (!p || !q) continue;
+      const wide = Math.max(6, Math.min(30, metres(way!.tags.width) ?? LOCK_WIDE));
+      props.push({ kind: prop, x: round(x), y: round(y), angle: +Math.atan2(q[1] - p[1], q[0] - p[0]).toFixed(3), length: round(wide * PX_PER_METRE) });
+      continue;
+    }
     if (prop) props.push({ kind: prop, x: round(x), y: round(y) });
   }
 
@@ -2759,7 +2853,8 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     for (const r of rings) for (let k = 0; k + 1 < r.length; k += 2) [sx, sy, n] = [sx + r[k], sy + r[k + 1], n + 1];
     const [x, y] = [sx / n, sy / n];
     if (x < 0 || y < 0 || x > width || y > height) return;
-    places.push({ kind, ...(t.name ? { name: t.name } : {}), x: round(x), y: round(y), rings: rings.map(roundPts) });
+    const sub = kind === 'shop' ? t.shop : kind === 'food' ? t.amenity : undefined;
+    places.push({ kind, ...(t.name ? { name: t.name } : {}), ...(sub ? { sub } : {}), x: round(x), y: round(y), rings: rings.map(roundPts) });
   };
   for (const way of data.ways.values()) {
     if (!placeKind(way.tags)) continue;
@@ -2917,6 +3012,37 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     // (Some out with the shoppers. Each faces back along the row, pushed into the one before.)
     const facing = +(angle + Math.PI).toFixed(3);
     for (let k = 0; k < Math.ceil(count * 0.7); k++) props.push({ kind: 'trolley', x: round(bx + Math.cos(angle) * k * TROLLEY_GAP * PX_PER_METRE), y: round(by + Math.sin(angle) * k * TROLLEY_GAP * PX_PER_METRE), angle: facing });
+  }
+
+  // The murals (`artwork_type=mural`, a point or a line along a wall): on the nearest side of a building within 6 m.
+  const murals: [number, number][] = [];
+  for (const n of data.nodes.values()) if (n.tags.artwork_type === 'mural' && !n.tags.disused) murals.push([proj.x(n.lon), proj.y(n.lat)]);
+  for (const way of data.ways.values()) {
+    if (way.tags.artwork_type !== 'mural') continue;
+    const pts = pointsOf(way.nodes);
+    if (!pts) continue;
+    for (let k = 0; k < pts.length; k += 2) murals.push([pts[k], pts[k + 1]]);
+  }
+  for (const [mx, my] of murals) {
+    if (!inside(mx, my)) continue;
+    let best: [Building, number] | null = null;
+    let bestD = 6 * PX_PER_METRE;
+    for (const b of buildings) {
+      const ring = b.rings[0];
+      let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+      for (let k = 0; k < ring.length; k += 2) [x0, y0, x1, y1] = [Math.min(x0, ring[k]), Math.min(y0, ring[k + 1]), Math.max(x1, ring[k]), Math.max(y1, ring[k + 1])];
+      if (mx < x0 - bestD || mx > x1 + bestD || my < y0 - bestD || my > y1 + bestD) continue;
+      for (let k = 0; k < ring.length; k += 2) {
+        const j = (k + 2) % ring.length;
+        const [ax, ay, bx, by] = [ring[k], ring[k + 1], ring[j], ring[j + 1]];
+        const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
+        if (!len2) continue;
+        const u = Math.max(0, Math.min(1, ((mx - ax) * (bx - ax) + (my - ay) * (by - ay)) / len2));
+        const d = Math.hypot(ax + (bx - ax) * u - mx, ay + (by - ay) * u - my);
+        if (d < bestD) [best, bestD] = [[b, k / 2], d];
+      }
+    }
+    if (best && !(best[0].murals ?? []).includes(best[1])) (best[0].murals ??= []).push(best[1]);
   }
 
   // Draw small areas over big ones of the same kind.

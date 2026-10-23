@@ -822,6 +822,11 @@ the nearest within 25 m. (Bristol's: 19 bays.)
   routes that stop there. With no bay free, it goes round and out. A bus in its bay, or
   backing out, isn't taken off the road as stuck; any taken off frees its bay.
 
+**Taxi ranks** (`amenity=taxi`): as the emergency services' posts (below), with up to 4
+taxis (saloons, Bristol blue, the lit TAXI sign on the roof) waiting along the kerb (not along a road a bus route runs along, where the buses would have to squeeze past them);
+now and then one leaves with a fare, and another comes back to wait (no sirens). And
+a few taxis about in the traffic.
+
 **The emergency services** (police stations, `amenity=police`; fire stations,
 `amenity=fire_station`; hospitals, `amenity=hospital` or a `building=hospital` named
 as one, and ambulance stations, `emergency=ambulance_station`): their outlines (or,
@@ -1003,6 +1008,24 @@ but the water and the buildings.
   is stepped round (to the side away from them, up to 1.05 m off the middle of the walk,
   easing over at 1.6 m/s; head on, each keeps to their left). Behind someone slower going
   the same way (within 1.2 m), they slow to their pace, and step round if there's room.
+- **Street furniture, more**: a street cabinet (`man_made=street_cabinet`: a phone or
+  power company's green box, loose and heavy); a CCTV camera on its pole
+  (`man_made=surveillance`, not one on a building's wall or ceiling), which topples; an
+  electric car's charging post (`amenity=charging_station`).
+- **Level crossings** (`railway=level_crossing`): along the road over the railway, its
+  barriers across it (as wide as the road), red and white, on posts each side, 4 m back
+  from the line. A train coming (within 350 m, heading for it) or near (60 m): the red
+  lights flash, each in turn, and the barriers come down over 4 s (up again over 3 s
+  once it's gone); the traffic stops at them. **Railway signals** (`railway=signal`):
+  on a post 2.6 m to the side of the track, facing along it (`railway:signal:direction`);
+  red with a train within 250 m, green otherwise. They topple.
+- **Lock gates** (`waterway=lock_gate`): a pair across the lock (its waterway's `width`,
+  else 12 m), hinged at its sides; they open and shut, each lock in its own time (shut
+  50 s, opening 10, open 50, shutting 10): shut, they meet in the middle, angled 17°
+  upstream; open, they're back against its sides.
+- **Murals** (`artwork_type=mural`, a point or a line along a wall): on the nearest side
+  of a building's outline within 6 m, painted in bright panels about 1.5 m wide, from a
+  metre up to near its top (and no windows on that side).
 - **Benches and picnic tables** (`amenity=bench`, `leisure=picnic_table`, the loose
   objects on the ground): people sit on them, 1 or 2 to a bench, 2 to 4 round a picnic
   table (weight 0.9 each), for 20 s to 2 minutes; knocked off if it's shoved hard (over
@@ -1125,6 +1148,36 @@ but the water and the buildings.
     bikes (not a hospital), a bench. A stadium: a crowd all round it (a match on),
     stewards in hi-vis, burger vans.
   - The prison: a 5.5 m stone wall round it (all but unbreakable).
+  - A café or restaurant (`amenity=cafe/restaurant/ice_cream`): 1 to 3 tables out on the
+    pavement in front (2 to 4 at a restaurant), 2.4 m apart along its front, 1.6 m out,
+    clear of the road; a café's table and two chairs, white, black, timber or green; a
+    parasol over some of a restaurant's; people at most.
+  - A takeaway (`fast_food`): a queue of 1 to 3 out of its door along its front; a
+    delivery moped or two at the kerb.
+  - Tables outside (`leisure=outdoor_seating`, an outline or a point): tables 2.6 m apart
+    over it, up to 14, people at some. (No table within 2 m of another place's.)
+  - A car dealer (`shop=car`): its forecourt in front, up to three rows of up to 14 cars
+    for sale (hatchbacks, saloons, SUVs, small cars, estates), 2.7 m apart, noses to the
+    road, each with its price on a card in the windscreen; any of them can be driven
+    off. An A-board.
+  - A garage (`shop=car_repair`, `tyres`): a car or two out front waiting, old tyres
+    stacked, a tool chest, an oil drum; a mechanic in hi-vis.
+  - A taxi rank (`amenity=taxi`): up to 3 waiting in a line along the kerb by it (its
+    taxis: see The emergency services).
+  - An electricity substation (`power=substation`, not indoors or underground, nor in a
+    building): a 2.4 m mesh fence round its compound (12 m² or more), a transformer for
+    every 45 m² of it (1 to 4), loose, heavy, sparks when it's smashed.
+  - Allotments (200 m² or more): plots 8 m by 16 m along it; at each plot's end a shed
+    (35%) or a greenhouse (8%), a water butt (half), a compost bin (a third); someone at
+    work on one in eight.
+  - A shop (`shop=florist`, `greengrocer`, `bicycle`, `newsagent`, `convenience`,
+    `vacant`, `charity`, `hardware`, `furniture`): its goods out front: buckets of
+    flowers, crates of fruit and veg, bikes in a row, a newspaper stand (and an A-board),
+    an empty one's windows boarded up (and rubbish left), bags of donations, a pallet and
+    an oil drum, a sofa.
+  - A cash machine (`amenity=atm`): a queue of none to three from its wall.
+  - An electric car's charging point (`amenity=charging_station`): its post, and a car on
+    charge beside it (three times in four).
 - **Sports pitches and courts** (`src/world/sports.ts`), by their sport (see the ground):
   each fitted with a rectangle (lined up with whichever edge gives the smallest one round
   it, then drawn in till its corners are on it).

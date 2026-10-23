@@ -78,7 +78,7 @@ export class TrafficLayer {
         let s = this.sprites.get(v);
         if (!s) {
           const shadow = this.scene.add.image(0, 0, vehicleShadow(this.scene, v.kind)).setScale(1 / ART_SCALE).setTint(0x000000).setAlpha(0.33);
-          const body = this.scene.add.image(0, 0, (v.bus ? busTexture(this.scene, v.kind, v.bus.colour, v.bus.ref) : vehicleTexture(this.scene, v.kind, v.colour, v.rider))).setScale(1 / ART_SCALE);
+          const body = this.scene.add.image(0, 0, (v.bus ? busTexture(this.scene, v.kind, v.bus.colour, v.bus.ref) : vehicleTexture(this.scene, v.kind, v.colour, v.rider, !!v.space?.sale))).setScale(1 / ART_SCALE);
           s = { body, shadow, shown: 0, painted: -Infinity };
           this.sprites.set(v, s);
         }

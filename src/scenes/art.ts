@@ -1106,6 +1106,120 @@ export function createArt(scene: Phaser.Scene): void {
     });
   });
   // A keg: steel, its rim and its fitting.
+  // A café's table and its two chairs, from above: white, black, timber, green.
+  ['#f2f0ea', '#2c2c2e', '#9a6a3c', '#3f7d4a'].forEach((top, v) => {
+    canvasTexture(scene, `${TEX.prop('cafetable')}-${v}`, 10, 10, (ctx) => {
+      for (const y of [0.4, 7]) roundRect(ctx, 3, y, 4, 2.6, 0.6, v === 1 ? '#555' : '#3a3a3c');
+      circle(ctx, 5.3, 5.3, 2.8, 'rgba(0,0,0,0.22)');
+      circle(ctx, 5, 5, 2.8, top);
+      circle(ctx, 4.4, 4.4, 1, 'rgba(255,255,255,0.25)');
+    });
+  });
+  // A delivery moped, from above, facing right: its body (red, white, black), the box on the back (teal, orange, green).
+  [['#b3241f', '#21a6a0'], ['#e8e8e4', '#e8742a'], ['#262626', '#4caf50']].forEach(([body, box], v) => {
+    canvasTexture(scene, `${TEX.prop('moped')}-${v}`, 14, 5, (ctx) => {
+      roundRect(ctx, 0.5, 1.6, 13, 1.8, 0.8, '#1d1d1d');
+      roundRect(ctx, 4, 1, 7, 3, 1.2, body);
+      roundRect(ctx, 0.3, 0.2, 4.4, 4.6, 0.5, box);
+      ctx.fillStyle = '#1d1d1d';
+      ctx.fillRect(11.5, 0.3, 0.8, 4.4);
+    });
+  });
+  // A florist's bucket of flowers: a grey bucket, the blooms (reds and pinks, yellows, whites and purples) over it.
+  [['#d7263d', '#f49ac1', '#ff5d73'], ['#ffd23f', '#f4a261', '#fff1a8'], ['#ffffff', '#9b5de5', '#c9b6e4']].forEach((blooms, v) => {
+    canvasTexture(scene, `${TEX.prop('flowers')}-${v}`, 6, 6, (ctx) => {
+      circle(ctx, 3, 3, 2.9, '#8a8f94');
+      circle(ctx, 3, 3, 2.4, '#3f6e33');
+      for (const [x, y, k] of [[2, 2, 0], [4, 2.3, 1], [3, 3.8, 2], [1.9, 3.9, 1], [4, 4, 0]]) circle(ctx, x, y, 0.9, blooms[k]);
+    });
+  });
+  // A greengrocer's crate on its stand: apples, oranges, tomatoes.
+  ['#7cb342', '#f39c12', '#d63a2f'].forEach((fruit, v) => {
+    canvasTexture(scene, `${TEX.prop('crates')}-${v}`, 9, 6, (ctx) => {
+      roundRect(ctx, 0, 0, 9, 6, 0.4, '#a87b4f');
+      roundRect(ctx, 0.6, 0.6, 7.8, 4.8, 0.3, '#5e4128');
+      for (let x = 1.4; x < 8.4; x += 1.4) for (let y = 1.4; y < 5.4; y += 1.4) circle(ctx, x, y, 0.65, fruit);
+    });
+  });
+  // A newspaper stand: a wire rack, the papers in it.
+  canvasTexture(scene, TEX.prop('newsstand'), 6, 5, (ctx) => {
+    roundRect(ctx, 0, 0, 6, 5, 0.4, '#4a4f55');
+    ['#f4f1e8', '#d8d2c0', '#e63946', '#f4f1e8'].forEach((c, k) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(0.6 + k * 1.3, 0.6, 1.1, 3.8);
+    });
+  });
+  // A vacant shop's boards: a sheet of plywood over its window, tagged.
+  canvasTexture(scene, TEX.prop('boards'), 10, 3, (ctx) => {
+    roundRect(ctx, 0, 0, 10, 3, 0.2, '#c8a46e');
+    ctx.strokeStyle = '#2f5fd0';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(1.5, 2.2);
+    ctx.bezierCurveTo(3, 0.4, 4, 2.6, 5.5, 0.8);
+    ctx.lineTo(7.5, 2.2);
+    ctx.stroke();
+  });
+  // A substation's transformer: a grey-green tank, its cooling fins along both sides, the yellow warning sign.
+  canvasTexture(scene, TEX.prop('transformer'), 18, 16, (ctx) => {
+    roundRect(ctx, 1.2, 1.2, 17, 15, 1, 'rgba(0,0,0,0.25)');
+    roundRect(ctx, 0, 0, 17, 15, 1, '#6f7d6f');
+    ctx.fillStyle = '#56635a';
+    for (let x = 1; x < 16; x += 1.6) {
+      ctx.fillRect(x, 0, 0.8, 3);
+      ctx.fillRect(x, 12, 0.8, 3);
+    }
+    roundRect(ctx, 3, 4, 11, 7, 0.6, '#7f8d7f');
+    ctx.fillStyle = '#f2c500';
+    ctx.beginPath();
+    ctx.moveTo(8.5, 5);
+    ctx.lineTo(11, 9.6);
+    ctx.lineTo(6, 9.6);
+    ctx.closePath();
+    ctx.fill();
+  });
+  // A water butt, its lid; a compost bin (black plastic, its hatch).
+  canvasTexture(scene, TEX.prop('butt'), 5, 5, (ctx) => {
+    circle(ctx, 2.5, 2.5, 2.4, '#2f4f2f');
+    circle(ctx, 2.5, 2.5, 1.6, '#3d633d');
+  });
+  canvasTexture(scene, TEX.prop('compost'), 6, 6, (ctx) => {
+    roundRect(ctx, 0, 0, 6, 6, 1.2, '#1f1f1f');
+    roundRect(ctx, 1, 1, 4, 4, 0.8, '#333');
+  });
+  // A mechanic's tool chest: red, its drawers.
+  canvasTexture(scene, TEX.prop('toolchest'), 7, 5, (ctx) => {
+    roundRect(ctx, 0, 0, 7, 5, 0.4, '#c0262c');
+    ctx.fillStyle = '#e8e8e8';
+    for (const y of [1, 2.4, 3.8]) ctx.fillRect(1, y, 5, 0.4);
+  });
+  // A street cabinet: a phone or power company's dark green steel box, its doors.
+  canvasTexture(scene, TEX.prop('cabinet'), 10, 6, (ctx) => {
+    roundRect(ctx, 0.8, 0.8, 9.2, 5.2, 0.5, 'rgba(0,0,0,0.25)');
+    roundRect(ctx, 0, 0, 9.2, 5.2, 0.5, '#2f4a3a');
+    ctx.fillStyle = '#3d5d4a';
+    ctx.fillRect(0.6, 0.6, 3.8, 4);
+    ctx.fillRect(4.8, 0.6, 3.8, 4);
+  });
+  // A CCTV camera on its pole, from above: the pole's top, the camera on its arm.
+  canvasTexture(scene, TEX.prop('cctv'), 6, 6, (ctx) => {
+    circle(ctx, 2, 3, 1.4, '#5a5f66');
+    roundRect(ctx, 2.4, 2.2, 3.4, 1.6, 0.4, '#e8e8e8');
+    ctx.fillStyle = '#222';
+    ctx.fillRect(5.2, 2.5, 0.6, 1);
+  });
+  // An electric car's charging post: a white post, its screen, a green light.
+  canvasTexture(scene, TEX.prop('charger'), 5, 4, (ctx) => {
+    roundRect(ctx, 0, 0, 5, 4, 0.6, '#eef0ee');
+    ctx.fillStyle = '#26323a';
+    ctx.fillRect(1, 1, 2.2, 2);
+    circle(ctx, 4, 2, 0.5, '#2ecc71');
+  });
+  // A railway signal on its post, from above: the post, the signal's head (its light's drawn over it: see Workings).
+  canvasTexture(scene, TEX.prop('railsignal'), 6, 6, (ctx) => {
+    circle(ctx, 3, 3, 1.2, '#5a5f66');
+    roundRect(ctx, 1.4, 1.6, 3.2, 2.8, 0.5, '#1d1d1d');
+  });
   canvasTexture(scene, TEX.prop('keg'), 6, 6, (ctx) => {
     circle(ctx, 3.3, 3.3, 2.4, 'rgba(0,0,0,0.22)');
     circle(ctx, 2.9, 2.9, 2.4, '#a8adb2');

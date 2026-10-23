@@ -21,7 +21,12 @@ export interface Wall {
   nx: number;
   ny: number;
   colour: number;
+  /** A mural painted on it (`artwork_type=mural`): its colours, in panels along it. */
+  mural?: number[];
 }
+
+/** A mural's colours: bright, as Bristol's are. */
+const MURAL = [0xe63946, 0xf4a261, 0xffd166, 0x06d6a0, 0x118ab2, 0x7b2cbf, 0xff70a6, 0x2b2d42, 0xf1faee];
 
 export interface RoofFacet {
   /** Triangles: x0, y0, x1, y1, x2, y2, ... */
@@ -230,7 +235,14 @@ export function buildingLook(b: Building, triangulate: Triangulate): BuildingLoo
       const nx = (sign * dy) / len;
       const ny = (sign * -dx) / len;
       const lit = nx * LIGHT.x + ny * LIGHT.y;
-      walls.push({ ax: ring[i], ay: ring[i + 1], bx: ring[j], by: ring[j + 1], nx, ny, colour: shade(wallColour, 0.78 + lit * 0.2) });
+      const wall: Wall = { ax: ring[i], ay: ring[i + 1], bx: ring[j], by: ring[j + 1], nx, ny, colour: shade(wallColour, 0.78 + lit * 0.2) };
+      if (r === 0 && b.murals?.includes(i / 2)) {
+        // A panel every 1.5 m or so along it, each its colour (the same each time it's drawn), lit as the wall is.
+        let s = Math.floor(((seed * 9973 + i) % 1) * 2147483646) + 1;
+        const rand = () => (s = (s * 16807) % 2147483647) / 2147483647;
+        wall.mural = Array.from({ length: Math.max(2, Math.min(24, Math.round(len / 12))) }, () => shade(MURAL[Math.floor(rand() * MURAL.length)], 0.85 + lit * 0.15));
+      }
+      walls.push(wall);
     }
   });
 

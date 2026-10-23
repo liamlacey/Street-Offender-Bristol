@@ -39,6 +39,7 @@ import { Changes } from '../world/changes';
 import type { FirstIds, Progress, Region } from '../world/region';
 import { type Obstacle, Trains } from '../world/trains';
 import { TrainLayer } from './TrainLayer';
+import { Workings } from './Workings';
 import { Streamer } from '../world/streamer';
 import { ART_SCALE, TEX, TREE_KINDS, TREE_RADIUS, createArt, wreckTexture } from './art';
 import { CarEffects } from './CarEffects';
@@ -138,7 +139,7 @@ const HOP_TIME = 0.35;
 /** At most this often your vehicle's damage is repainted, ms. */
 const REPAINT_EVERY = 250;
 /** The loose things with more than one look (which, by their `variant`). */
-const VARIED: ReadonlySet<string> = new Set(['foodcart', 'stall', 'wheelie', 'parasol', 'headstone', 'bigbin', 'container']);
+const VARIED: ReadonlySet<string> = new Set(['foodcart', 'stall', 'wheelie', 'parasol', 'headstone', 'bigbin', 'container', 'cafetable', 'moped', 'flowers', 'crates']);
 /** How many bits of what's been broken (not the benches, bins and the rest standing about) before the smallest stop being kept. */
 const MAX_PIECES = 1500;
 
@@ -238,6 +239,8 @@ export class GameScene extends Phaser.Scene {
   private boatLayer!: BoatLayer;
   private trains!: Trains;
   private trainLayer!: TrainLayer;
+  /** The level crossings, the railway signals' lights, the locks' gates (see Workings). */
+  private workings!: Workings;
   private ripples!: WaterRipples;
   private people!: People;
   private peopleLayer!: PeopleLayer;
@@ -426,6 +429,8 @@ export class GameScene extends Phaser.Scene {
     this.trainLayer = new TrainLayer(this, this.trains, (x, y, level) => this.surfaceHeight(x, y, level), (level) =>
       level === 2 ? (this.level === 2 ? DEPTH.inTunnel - 0.05 : null) : level === 1 ? DEPTH.onDeck : DEPTH.car - 0.05,
     );
+    this.workings = new Workings(this, DEPTH.props + 0.02);
+    this.workings.use(this.world.fixed, (x, y) => this.groundAt(x, y));
     this.trafficLayer = new TrafficLayer(this, this.traffic, (x, y, level) => this.surfaceHeight(x, y, level), (x, y, reach) => this.decks.atEnd(x, y, reach), {
       ground: DEPTH.car - 0.05,
       onDeck: DEPTH.onDeck,
@@ -587,6 +592,7 @@ export class GameScene extends Phaser.Scene {
       this.ripples.use(this.surfaces);
       this.boatLayer.use(this.boats);
       this.trainLayer.use(this.trains);
+      this.workings.use(this.world.fixed, (x, y) => this.groundAt(x, y));
       this.trafficLayer.use(this.traffic);
     }
   }
@@ -605,6 +611,8 @@ export class GameScene extends Phaser.Scene {
     this.shownProps.clear();
     this.shownRaised.clear();
     for (const p of this.world.fixed) {
+      // (A level crossing's barriers, a lock's gates: drawn as they move (see Workings).)
+      if (p.kind === 'levelcrossing' || p.kind === 'lockgate') continue;
       // Those on a bridge stand on its deck, and are drawn over it.
       const deck = p.level === 1 ? this.decks.over(p.x, p.y) : null;
       const z = this.surfaceHeight(p.x, p.y, p.level);
@@ -897,6 +905,7 @@ export class GameScene extends Phaser.Scene {
     this.trafficLayer.update(view, this.perspective, this.level, this.time.now / 1000);
     this.boatLayer.update(view, this.perspective, this.time.now / 1000);
     this.trainLayer.update(view, this.perspective);
+    this.workings.update(dt, view, this.perspective, this.trains.carriages(), this.time.now / 1000);
     perf.stop('cars');
     perf.start('folk');
     this.ripples.update(view, this.perspective, dt);
@@ -1498,6 +1507,8 @@ export class GameScene extends Phaser.Scene {
     // Those out in the road, for the traffic to stop for.
     this.traffic.pedestrians = this.people.inTheRoad().map((p) => ({ id: -100 - p.id, x: p.x, y: p.y, angle: p.angle, r: 0.4 * 8, length: 0.8 * 8, vx: 0, vy: 0, level: p.level }));
     // (And the trains: the traffic waits for one going over a level crossing. Not one of its own: an id below 0, as people's.)
+    // (And a level crossing shut: its barriers down across the road.)
+    for (const [k, s] of this.workings.shut.entries()) this.traffic.pedestrians.push({ id: -20_000_000 - k, x: s.x, y: s.y, angle: 0, r: s.r, length: 0, vx: 0, vy: 0, level: 0 });
     for (const c of this.trains.carriages()) {
       if (Math.abs(c.x - car.x) < view.width + 400 && Math.abs(c.y - car.y) < view.height + 400) this.traffic.pedestrians.push({ id: -10_000_000 - c.id, x: c.x, y: c.y, angle: c.angle, r: c.r, length: c.length, vx: c.vx, vy: c.vy, level: c.level });
     }
