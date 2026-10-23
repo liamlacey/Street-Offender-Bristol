@@ -755,7 +755,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.ready) return;
     const dt = Math.min(deltaMs / 1000, 0.1);
     // Gone far enough from the middle of the region: the next one made ready, a little each frame; and once it is, into it.
-    const next = this.streamer.update(this.car.x, this.car.y, MAKING);
+    const next = this.streamer.update(this.car.x, this.car.y, MAKING, this.car.vx, this.car.vy);
     if (next) this.enter(next, true);
     this.readInput();
     this.accumulator = Math.min(this.accumulator + dt, PHYSICS_DT * MAX_STEPS_PER_FRAME);
@@ -785,7 +785,7 @@ export class GameScene extends Phaser.Scene {
     this.updatePerspective();
     const view = this.cameras.main.worldView;
     perf.start('ground');
-    this.ground.update(view, this.perspective);
+    this.ground.update(view, this.perspective, false, this.car.vx, this.car.vy);
     perf.stop('ground');
     this.skids.update(view, this.perspective);
     // A bridge is drawn over the car when it's underneath, and under it when it's on top.

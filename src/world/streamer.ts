@@ -21,6 +21,16 @@ import type { World } from './world';
 export const REGION_TILES = 4;
 /** How far from the middle of the region you can go (either way), px, before the next is made ready (with room to spare: there's 2 tiles each way). */
 const MOVE_ON = 0.6 * TILE;
+/**
+ * Where you'll be this far ahead, s, says when the next region's made ready and round where (so at speed it's begun in good
+ * time); no further ahead than a tile.
+ */
+const AHEAD = 6;
+/** With the edge of the region in use this near, s (at the speed you're going), the next is made faster: more of each frame. */
+const HURRY = 9;
+const RUSH = 4;
+/** And this near, s, it's finished at once: a moment's pause, rather than driving off the edge of what's there (or seeing it). */
+const NOW = 2.5;
 
 type Painter = (world: World, bounds: Region['map']['region']) => Work<SurfaceGrid>;
 
@@ -104,11 +114,15 @@ export class Streamer {
    * about `ms` milliseconds) if you've gone far enough for it; once it is,
    * it's returned (and from then on it's the region in use), to take over.
    */
-  update(x: number, y: number, ms: number): Region | null {
+  update(x: number, y: number, ms: number, vx = 0, vy = 0): Region | null {
     if (!this.centre) return null;
     if (!this.next) {
-      if (this.inside(x, y)) return null;
-      const c = this.corner(x, y);
+      // Where you'll be in a few seconds (no more than a tile on).
+      const speed = Math.hypot(vx, vy);
+      const lead = Math.min(AHEAD * speed, TILE) / (speed || 1);
+      const [px, py] = [x + vx * lead, y + vy * lead];
+      if (this.inside(x, y) && this.inside(px, py)) return null;
+      const c = this.corner(px, py);
       if (c.x === this.centre.x && c.y === this.centre.y) return null;
       const b = this.bounds(c);
       const keys = tilesFor(this.index, b.x0, b.y0, b.x1, b.y1);
@@ -128,7 +142,12 @@ export class Streamer {
       return null;
     }
     if (!this.next.work) return null;
-    const r = runFor(this.next.work, ms);
+    // Nearing the edge of the region in use (at the speed you're going): more of each frame; about to go off it, all of it.
+    const half = (REGION_TILES / 2) * TILE;
+    const left = (v: number, at: number, mid: number) => (v > 0 ? (mid + half - at) / v : v < 0 ? (at - (mid - half)) / -v : Infinity);
+    const time = Math.min(left(vx, x, this.centre.x), left(vy, y, this.centre.y));
+    const budget = time < NOW ? Infinity : time < RUSH ? ms * 6 : time < HURRY ? ms * 2.5 : ms;
+    const r = runFor(this.next.work, budget);
     if (!r.done) return null;
     this.centre = { x: this.next.x, y: this.next.y };
     // Only the tiles of the region in use are kept.

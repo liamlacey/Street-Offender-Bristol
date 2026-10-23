@@ -18,8 +18,10 @@ const KEEP = 48;
 const MARGIN = 320;
 /** Pieces drawn per frame once the game's running, when they're drawn here (with no worker to draw them), so drawing never holds a frame up for long. */
 const PER_FRAME = 1;
+/** How far ahead, s, the way you're going, pieces are painted (before they come into view). */
+const AHEAD = 1.2;
 /** Pieces asked of the worker at once (nearest first). */
-const IN_HAND = 3;
+const IN_HAND = 4;
 
 /**
  * The ground, drawn a 512 px square at a time as the view nears it (the
@@ -73,16 +75,19 @@ export class GroundLayer {
    * Call once a frame: draws what's coming into view (all of it at once if
    * `all`), lays what's in view over the hills, and forgets what's long gone.
    */
-  update(view: Phaser.Geom.Rectangle, perspective: Perspective, all = false): void {
+  update(view: Phaser.Geom.Rectangle, perspective: Perspective, all = false, vx = 0, vy = 0): void {
     this.frame++;
     const { width, height } = this.world.map;
-    const x0 = Math.max(0, Math.floor((view.left - MARGIN) / CHUNK));
-    const y0 = Math.max(0, Math.floor((view.top - MARGIN) / CHUNK));
-    const x1 = Math.min(Math.ceil(width / CHUNK) - 1, Math.floor((view.right + MARGIN) / CHUNK));
-    const y1 = Math.min(Math.ceil(height / CHUNK) - 1, Math.floor((view.bottom + MARGIN) / CHUNK));
+    // (Out ahead too, the way you're going: where the view will be in a moment.)
+    const [ax, ay] = [vx * AHEAD, vy * AHEAD];
+    const x0 = Math.max(0, Math.floor((Math.min(view.left, view.left + ax) - MARGIN) / CHUNK));
+    const y0 = Math.max(0, Math.floor((Math.min(view.top, view.top + ay) - MARGIN) / CHUNK));
+    const x1 = Math.min(Math.ceil(width / CHUNK) - 1, Math.floor((Math.max(view.right, view.right + ax) + MARGIN) / CHUNK));
+    const y1 = Math.min(Math.ceil(height / CHUNK) - 1, Math.floor((Math.max(view.bottom, view.bottom + ay) + MARGIN) / CHUNK));
     const missing: [number, number, number][] = [];
-    const cx = view.centerX / CHUNK - 0.5;
-    const cy = view.centerY / CHUNK - 0.5;
+    // (Nearest first: to a little ahead of the middle of the view.)
+    const cx = (view.centerX + ax * 0.3) / CHUNK - 0.5;
+    const cy = (view.centerY + ay * 0.3) / CHUNK - 0.5;
     for (let i = x0; i <= x1; i++) {
       for (let j = y0; j <= y1; j++) {
         const piece = this.pieces.get(chunkKey(i, j));
