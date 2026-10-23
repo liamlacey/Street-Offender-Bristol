@@ -755,8 +755,12 @@ export class GameScene extends Phaser.Scene {
     if (!this.ready) return;
     const dt = Math.min(deltaMs / 1000, 0.1);
     // Gone far enough from the middle of the region: the next one made ready, a little each frame; and once it is, into it.
+    perf.start('stream');
     const next = this.streamer.update(this.car.x, this.car.y, MAKING, this.car.vx, this.car.vy);
+    perf.stop('stream');
+    perf.start('enter');
     if (next) this.enter(next, true);
+    perf.stop('enter');
     this.readInput();
     this.accumulator = Math.min(this.accumulator + dt, PHYSICS_DT * MAX_STEPS_PER_FRAME);
     perf.start('physics');
@@ -777,12 +781,14 @@ export class GameScene extends Phaser.Scene {
     perf.stop('physics');
     this.updateTraffic(dt);
     this.hopLeft = Math.max(0, this.hopLeft - dt);
+    perf.start('car');
     this.drawCar();
     // No tyre marks on the bridges (they'd be laid on the ground below).
     if (this.sinking < 0 && this.level === 0 && !this.onFoot) this.effects.update(this.car, this.input_, SURFACE_KIND[this.surface], dt);
     this.skids.flush();
     this.updateCamera(dt);
     this.updatePerspective();
+    perf.stop('car');
     const view = this.cameras.main.worldView;
     perf.start('ground');
     this.ground.update(view, this.perspective, false, this.car.vx, this.car.vy);
@@ -793,6 +799,7 @@ export class GameScene extends Phaser.Scene {
     // (A deck over another, higher, over it: a path along the river under the railway's bridge is under it.)
     const below = (deck: Decks['decks'][number]) => this.level === 1 || this.decks.atEnd(this.car.x, this.car.y, this.carLength() / 2 + 4, deck);
     // (See-through while you're under it, so you can still see the car, as under a tree.)
+    perf.start('decks');
     this.deckLayer.update(
       view,
       this.perspective,
@@ -809,6 +816,7 @@ export class GameScene extends Phaser.Scene {
         return distance < deck.half + this.carLength() * 0.6 && this.decks.height(deck, along) - this.groundAt(x, y) > 1.5 * 8 && !below(deck);
       },
     );
+    perf.stop('decks');
     // Down in a tunnel: everything above in the dark; the tunnel, and you, over it.
     const under = this.level === 2;
     this.dark.setVisible(under);
@@ -825,23 +833,29 @@ export class GameScene extends Phaser.Scene {
     perf.start('build');
     this.buildings.update(view, this.perspective, this.car.x, this.car.y);
     perf.stop('build');
-    perf.start('props');
+    perf.start('trees');
     // Before the trees: it moves the ones coming down.
     this.wreckage.update(view, this.perspective);
     this.updateTrees(view, dt);
+    perf.stop('trees');
+    perf.start('props');
     this.updateProps(view);
     this.updateLights(view);
+    perf.stop('props');
+    perf.start('walls');
     this.wallLayer.update(view, this.perspective);
     this.ledgeLayer.update(view, this.perspective);
-    perf.stop('props');
-    perf.start('sprites');
+    perf.stop('walls');
+    perf.start('cars');
     this.trafficLayer.update(view, this.perspective, this.level, this.time.now / 1000);
     this.boatLayer.update(view, this.perspective, this.time.now / 1000);
     this.trainLayer.update(view, this.perspective);
+    perf.stop('cars');
+    perf.start('folk');
     this.ripples.update(view, this.perspective, dt);
     this.peopleLayer.update(view, this.perspective);
     this.updateStreet(dt);
-    perf.stop('sprites');
+    perf.stop('folk');
     const speed = Math.hypot(this.car.vx, this.car.vy);
     const kind = this.ride.kind;
     this.audio?.update({

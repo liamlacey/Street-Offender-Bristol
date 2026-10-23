@@ -10,6 +10,7 @@
 
 import { type GameMap, type Pts, VEHICLE_ROADS, pointInRing, ridgeAxis } from '../map/osm';
 import { type Work, drain, every } from './work.ts';
+import { BoxGrid, distanceTo } from './geometry';
 
 const M = 8;
 /** Drawn bigger than life (as the people are), and so laid out: how much. */
@@ -75,6 +76,9 @@ export function* playgroundsWork(map: GameMap): Work<PlayThing[]> {
   // (Not on a tree's trunk; and out from under its crown, where there's room.)
   const trees: [number, number, number][] = [];
   for (let i = 0; i + 3 < (map.trees ?? []).length; i += 4) trees.push([map.trees[i], map.trees[i + 1], map.trees[i + 2]]);
+  // (Each by where it is: each playground looks only at those round it.)
+  const grids = { solid: new BoxGrid(solid), roads: new BoxGrid(roads), water: new BoxGrid(water), trees: new BoxGrid(trees.map(([x, y, r]) => ({ x0: x - r, y0: y - r, x1: x + r, y1: y + r, t: [x, y, r] as [number, number, number] }))) };
+  yield;
   const seen = new Set<string>();
   for (const a of plays) {
     if (pause()) yield;
@@ -86,12 +90,13 @@ export function* playgroundsWork(map: GameMap): Work<PlayThing[]> {
     const area = Math.abs(ringArea(ring));
     if (area < PLAY_LEAST) continue;
     const box = bounded(ring, 0);
+    const overlaps = (b: { x0: number; y0: number; x1: number; y1: number }) => b.x1 > box.x0 && b.x0 < box.x1 && b.y1 > box.y0 && b.y0 < box.y1;
     const near = {
-      solid: solid.filter((b) => b.x1 > box.x0 && b.x0 < box.x1 && b.y1 > box.y0 && b.y0 < box.y1),
-      roads: roads.filter((r) => r.x1 > box.x0 && r.x0 < box.x1 && r.y1 > box.y0 && r.y0 < box.y1),
-      water: water.filter((b) => b.x1 > box.x0 && b.x0 < box.x1 && b.y1 > box.y0 && b.y0 < box.y1),
+      solid: grids.solid.near(box.x0, box.y0, box.x1, box.y1, overlaps),
+      roads: grids.roads.near(box.x0, box.y0, box.x1, box.y1, overlaps),
+      water: grids.water.near(box.x0, box.y0, box.x1, box.y1, overlaps),
     };
-    const nearTrees = trees.filter(([x, y, r]) => x > box.x0 - r && x < box.x1 + r && y > box.y0 - r && y < box.y1 + r);
+    const nearTrees = grids.trees.near(box.x0, box.y0, box.x1, box.y1, ({ t: [x, y, r] }) => x > box.x0 - r && x < box.x1 + r && y > box.y0 - r && y < box.y1 + r).map((b) => b.t);
     const open = (x: number, y: number) =>
       !nearTrees.some(([tx, ty]) => Math.hypot(tx - x, ty - y) < 0.8 * M) &&
       a.rings.every((r, i) => pointInRing(x, y, r) === (i === 0)) &&
@@ -157,16 +162,6 @@ function ringArea(pts: Pts): number {
   return a / 2;
 }
 
-function distanceTo(x: number, y: number, pts: Pts): number {
-  let best = Infinity;
-  for (let i = 0; i + 3 < pts.length; i += 2) {
-    const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
-    const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
-    const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2)) : 0;
-    best = Math.min(best, Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y));
-  }
-  return best;
-}
 
 /** Whether two rectangles (x, y, angle, half along, half across) overlap (by their separating axes). */
 export function rectsOverlap(a: [number, number, number, number, number], b: [number, number, number, number, number]): boolean {

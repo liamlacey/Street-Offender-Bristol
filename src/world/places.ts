@@ -33,6 +33,7 @@ import { type Area, type AreaKind, type GameMap, type Place, type Pts, VEHICLE_R
 import { rectsOverlap } from './playgrounds';
 import { type SportsGame, sportsOf } from './sports';
 import { type Work, every } from './work.ts';
+import { distToSeg } from './geometry';
 
 const M = 8;
 
@@ -859,10 +860,6 @@ function nearestOnSeg(x: number, y: number, ax: number, ay: number, bx: number, 
   return [ax + (bx - ax) * t, ay + (by - ay) * t];
 }
 
-function distToSeg(x: number, y: number, ax: number, ay: number, bx: number, by: number): number {
-  const [px, py] = nearestOnSeg(x, y, ax, ay, bx, by);
-  return Math.hypot(px - x, py - y);
-}
 
 function hash(x: number, y: number): number {
   return (Math.abs(Math.round(x * 7.31 + y * 13.17) * 2654435761) % 2147483646) + 1;

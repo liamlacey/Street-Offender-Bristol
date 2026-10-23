@@ -81,7 +81,7 @@ function show(now: number): void {
   const secs = since ? (now - since) / 1000 : 1;
   since = now;
   if (!box || !frames) return;
-  const rows = [...parts].sort((a, b) => b[1].total - a[1].total).slice(0, 8);
+  const rows = [...parts].sort((a, b) => b[1].total - a[1].total).slice(0, 14);
   box.textContent = [
     `${Math.round(frames / secs)} fps · longest ${worst.toFixed(0)} ms · ${long} over ${LONG} ms`,
     ...rows.map(([name, p]) => `${name.padEnd(8)} ${(p.total / frames).toFixed(1).padStart(5)} avg ${p.most.toFixed(1).padStart(5)} max`),

@@ -12,6 +12,7 @@ import { rectsOverlap } from './playgrounds';
 import { homesWork } from './homes';
 import { placesWork } from './places';
 import { type Work, drain } from './work.ts';
+import { distanceTo } from './geometry';
 
 /** A car park's bays: how wide, how deep, and the aisle between rows, px. */
 export const BAY_WIDTH = 2.5 * 8;
@@ -321,13 +322,3 @@ export function* parkingWork(map: GameMap): Work<Space[]> {
   return out;
 }
 
-function distanceTo(x: number, y: number, pts: Pts): number {
-  let best = Infinity;
-  for (let i = 0; i + 3 < pts.length; i += 2) {
-    const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
-    const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
-    const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2)) : 0;
-    best = Math.min(best, Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y));
-  }
-  return best;
-}

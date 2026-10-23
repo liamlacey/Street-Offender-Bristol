@@ -15,6 +15,7 @@
 import { type GameMap, type Pts, VEHICLE_ROADS, pointInRing, ridgeAxis } from '../map/osm';
 import { rectsOverlap } from './playgrounds';
 import { type Work, drain, every } from './work.ts';
+import { BoxGrid, distanceTo } from './geometry';
 
 const M = 8;
 
@@ -134,6 +135,9 @@ export function* siteLifeWork(map: GameMap): Work<SiteLife> {
   const water = (map.areas ?? []).filter((a) => a.kind === 'water' || a.kind === 'pool' || a.kind === 'parking' || a.kind === 'forecourt' || a.kind === 'plaza' || a.kind === 'yard' || a.kind === 'play' || a.kind === 'pitch' || a.kind === 'platform' || a.kind === 'pier').map((a) => bounded(a.rings[0], 0));
   const trees: [number, number][] = [];
   for (let i = 0; i + 3 < (map.trees ?? []).length; i += 4) trees.push([map.trees[i], map.trees[i + 1]]);
+  // (Each by where it is: each site looks only at those round it.)
+  const grids = { solid: new BoxGrid(solid), roads: new BoxGrid(roads), water: new BoxGrid(water), trees: new BoxGrid(trees.map(([x, y]) => ({ x0: x - M, y0: y - M, x1: x + M, y1: y + M, t: [x, y] as [number, number] }))) };
+  yield;
   const seen = new Set<string>();
   for (const a of lots) {
     if (pause()) yield;
@@ -146,7 +150,12 @@ export function* siteLifeWork(map: GameMap): Work<SiteLife> {
     if (area < (site ? SITE_LEAST : TIP_LEAST)) continue;
     const box = bounded(ring, 0);
     const overlaps = (b: { x0: number; y0: number; x1: number; y1: number }) => b.x1 > box.x0 && b.x0 < box.x1 && b.y1 > box.y0 && b.y0 < box.y1;
-    const near = { solid: solid.filter(overlaps), roads: roads.filter(overlaps), water: water.filter(overlaps), trees: trees.filter(([x, y]) => x > box.x0 - M && x < box.x1 + M && y > box.y0 - M && y < box.y1 + M) };
+    const near = {
+      solid: grids.solid.near(box.x0, box.y0, box.x1, box.y1, overlaps),
+      roads: grids.roads.near(box.x0, box.y0, box.x1, box.y1, overlaps),
+      water: grids.water.near(box.x0, box.y0, box.x1, box.y1, overlaps),
+      trees: grids.trees.near(box.x0, box.y0, box.x1, box.y1, ({ t: [x, y] }) => x > box.x0 - M && x < box.x1 + M && y > box.y0 - M && y < box.y1 + M).map((b) => b.t),
+    };
     const inside = (x: number, y: number) => a.rings.every((r, i) => pointInRing(x, y, r) === (i === 0));
     // (The buildings by the 16 m squares they're in: a big site has hundreds round it.)
     const solidCells = new Map<number, typeof near.solid>();
@@ -460,13 +469,3 @@ function centroid(pts: Pts): [number, number] {
   return [x / (pts.length / 2), y / (pts.length / 2)];
 }
 
-function distanceTo(x: number, y: number, pts: Pts): number {
-  let best = Infinity;
-  for (let i = 0; i + 3 < pts.length; i += 2) {
-    const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
-    const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
-    const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2)) : 0;
-    best = Math.min(best, Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y));
-  }
-  return best;
-}

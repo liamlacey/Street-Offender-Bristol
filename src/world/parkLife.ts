@@ -10,6 +10,7 @@
 import { type GameMap, type Pts, VEHICLE_ROADS, pointInRing } from '../map/osm';
 import type { SportGame } from './sports';
 import { type Work, drain, every } from './work.ts';
+import { BoxGrid, distanceTo } from './geometry';
 
 const M = 8;
 /** A game for every this much of a park, px² (at most GAMES in one); a playing field always has one. */
@@ -65,6 +66,14 @@ export function* parkLifeWork(map: GameMap): Work<ParkLife> {
   const others = (map.areas ?? []).filter((a) => a.kind !== 'park' && a.kind !== 'pitch' && a.kind !== 'grass').map((a) => bounded(a.rings[0], M));
   const trees: [number, number, number][] = [];
   for (let i = 0; i + 3 < (map.trees ?? []).length; i += 4) trees.push([map.trees[i], map.trees[i + 1], map.trees[i + 2]]);
+  // (Each by where it is: each park looks only at those round it, not at everything in the region.)
+  const grids = {
+    solid: new BoxGrid(solid),
+    roads: new BoxGrid(roads),
+    others: new BoxGrid(others),
+    trees: new BoxGrid(trees.map(([x, y, r]) => ({ x0: x - r, y0: y - r, x1: x + r, y1: y + r, t: [x, y, r] as [number, number, number] }))),
+  };
+  yield;
   const seen = new Set<string>();
   for (const a of parks) {
     if (pause()) yield;
@@ -75,7 +84,12 @@ export function* parkLifeWork(map: GameMap): Work<ParkLife> {
     const area = Math.abs(ringArea(ring));
     const box = bounded(ring, 0);
     const overlaps = (b: { x0: number; y0: number; x1: number; y1: number }) => b.x1 > box.x0 && b.x0 < box.x1 && b.y1 > box.y0 && b.y0 < box.y1;
-    const near = { solid: solid.filter(overlaps), roads: roads.filter(overlaps), others: others.filter(overlaps), trees: trees.filter(([x, y, r]) => x > box.x0 - r && x < box.x1 + r && y > box.y0 - r && y < box.y1 + r) };
+    const near = {
+      solid: grids.solid.near(box.x0, box.y0, box.x1, box.y1, overlaps),
+      roads: grids.roads.near(box.x0, box.y0, box.x1, box.y1, overlaps),
+      others: grids.others.near(box.x0, box.y0, box.x1, box.y1, overlaps),
+      trees: grids.trees.near(box.x0, box.y0, box.x1, box.y1, (b) => b.t[0] > box.x0 - b.t[2] && b.t[0] < box.x1 + b.t[2] && b.t[1] > box.y0 - b.t[2] && b.t[1] < box.y1 + b.t[2]).map((b) => b.t),
+    };
     // (Each building's outline closed once, the first time it's near a park: it's measured from often.)
     for (const b of near.solid) b.closed ??= [...b.pts, b.pts[0], b.pts[1]];
     const inside = (x: number, y: number) => a.rings.every((r, i) => pointInRing(x, y, r) === (i === 0));
@@ -119,7 +133,10 @@ export function* parkLifeWork(map: GameMap): Work<ParkLife> {
           }
         }
       }
-      spots.sort((p, q) => Math.hypot(p[0] - cx, p[1] - cy) - Math.hypot(q[0] - cx, q[1] - cy));
+      // (Nearest the middle first: each spot's distance worked out once, not at every comparison; no more than the nearest 300 tried.)
+      const order = spots.map((p) => [p, (p[0] - cx) ** 2 + (p[1] - cy) ** 2] as const).sort((p, q) => p[1] - q[1]);
+      spots.length = 0;
+      for (const [p] of order.slice(0, 300)) spots.push(p);
       yield;
       const carts = area >= CART_PARK * 10 ? 2 : 1;
       let placed = 0;
@@ -179,13 +196,3 @@ function centroid(pts: Pts): [number, number] {
   return [x / (pts.length / 2), y / (pts.length / 2)];
 }
 
-function distanceTo(x: number, y: number, pts: Pts): number {
-  let best = Infinity;
-  for (let i = 0; i + 3 < pts.length; i += 2) {
-    const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
-    const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
-    const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2)) : 0;
-    best = Math.min(best, Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y));
-  }
-  return best;
-}

@@ -128,17 +128,25 @@ export function tunnelMouth(tunnel: Road, end: 0 | 1, roads: Road[]): number {
 
 /** Where a point is along a polyline (its distance along) and how far from it. */
 export function nearestAlong(pts: Pts, x: number, y: number): { along: number; distance: number } {
-  let best = { along: 0, distance: Infinity };
+  // (Squared till the end, and nothing made along the way: it's asked a great deal, laying the decks' edges.)
+  let [along, best] = [0, Infinity];
   let run = 0;
   for (let i = 0; i + 3 < pts.length; i += 2) {
-    const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
-    const len = Math.hypot(bx - ax, by - ay);
-    const t = len ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / (len * len))) : 0;
-    const d = Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y);
-    if (d < best.distance) best = { along: run + t * len, distance: d };
+    const ax = pts[i];
+    const ay = pts[i + 1];
+    const dx = pts[i + 2] - ax;
+    const dy = pts[i + 3] - ay;
+    const len2 = dx * dx + dy * dy;
+    const len = Math.sqrt(len2);
+    let t = len2 ? ((x - ax) * dx + (y - ay) * dy) / len2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const ex = ax + dx * t - x;
+    const ey = ay + dy * t - y;
+    const d2 = ex * ex + ey * ey;
+    if (d2 < best) [best, along] = [d2, run + t * len];
     run += len;
   }
-  return best;
+  return { along, distance: Math.sqrt(best) };
 }
 
 export class Decks {

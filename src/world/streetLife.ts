@@ -12,6 +12,7 @@
 
 import { type GameMap, type Pts, VEHICLE_ROADS, pointInRing, ridgeAxis } from '../map/osm';
 import { type Work, drain, every } from './work.ts';
+import { distanceTo } from './geometry';
 
 const M = 8;
 /** A pedestrian street is busy with this many shops and the like within 25 m of it per 100 m (Broadmead, East Street, Corn Street have 15 to 30). */
@@ -220,16 +221,6 @@ function ringArea(pts: Pts): number {
   return a / 2;
 }
 
-function distanceTo(x: number, y: number, pts: Pts): number {
-  let best = Infinity;
-  for (let i = 0; i + 3 < pts.length; i += 2) {
-    const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
-    const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
-    const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2)) : 0;
-    best = Math.min(best, Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y));
-  }
-  return best;
-}
 
 /** How far along a line the point nearest (x, y) is, and how far it is from it. */
 function nearestAlong(pts: Pts, x: number, y: number): { along: number; distance: number } {
