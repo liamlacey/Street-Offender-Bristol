@@ -98,25 +98,27 @@ describe('emergency services', () => {
   }, 120_000);
 
   it('on a call, keep no speed limit nor the rules of the road, going round what holds them up (wrong side, pavement), but hit nothing', () => {
-    // (A run where traffic holds it up, so it has to go round it.)
-    let seed = 1;
-    const traffic = new Traffic(map, { rand: () => (seed = (seed * 16807) % 2147483647) / 2147483647 });
-    const post = traffic.posts.find((p) => p.service.name === 'Bristol Royal Infirmary')!;
-    const player = { x: post.x + 40 * M, y: post.y + 40 * M, heading: 0, vx: 0, vy: 0, level: 0, length: 38, width: 18 };
-    const view = { x0: post.x - 300, y0: post.y - 140, x1: post.x + 300, y1: post.y + 140 };
+    // (Runs where traffic holds it up, so it has to go round it: a few, as how often it's held up depends on the traffic.)
     let [top, round, pulledOver, nearest] = [0, 0, 0, Infinity];
-    for (let t = 0; t < 150; t += 1 / 30) {
-      traffic.update(1 / 30, player, view, (i) => (Math.floor(t / 15 + i) % 2 ? 'green' : 'red'));
-      for (const v of traffic.vehicles) {
-        if (!v.siren) {
-          if (v.side > 0.5 * M && v.kind !== 'bike' && !v.bus && !v.parking) pulledOver++;
-          continue;
-        }
-        top = Math.max(top, v.speed);
-        if (v.passing) round++;
-        for (const o of [...traffic.vehicles, ...traffic.parked]) {
-          if (o === v || o.level !== v.level || Math.abs(o.x - v.x) > 15 * M || Math.abs(o.y - v.y) > 15 * M) continue;
-          nearest = Math.min(nearest, apart(v, o));
+    for (const start of [1, 2, 3]) {
+      let seed = start;
+      const traffic = new Traffic(map, { rand: () => (seed = (seed * 16807) % 2147483647) / 2147483647 });
+      const post = traffic.posts.find((p) => p.service.name === 'Bristol Royal Infirmary')!;
+      const player = { x: post.x + 40 * M, y: post.y + 40 * M, heading: 0, vx: 0, vy: 0, level: 0, length: 38, width: 18 };
+      const view = { x0: post.x - 300, y0: post.y - 140, x1: post.x + 300, y1: post.y + 140 };
+      for (let t = 0; t < 150; t += 1 / 30) {
+        traffic.update(1 / 30, player, view, (i) => (Math.floor(t / 15 + i) % 2 ? 'green' : 'red'));
+        for (const v of traffic.vehicles) {
+          if (!v.siren) {
+            if (v.side > 0.5 * M && v.kind !== 'bike' && !v.bus && !v.parking) pulledOver++;
+            continue;
+          }
+          top = Math.max(top, v.speed);
+          if (v.passing) round++;
+          for (const o of [...traffic.vehicles, ...traffic.parked]) {
+            if (o === v || o.level !== v.level || Math.abs(o.x - v.x) > 15 * M || Math.abs(o.y - v.y) > 15 * M) continue;
+            nearest = Math.min(nearest, apart(v, o));
+          }
         }
       }
     }

@@ -201,7 +201,11 @@ pedestrian may also get:
 for repairs in OSM, and is a footbridge here). Kind from `highway`; width
 from `width`, else `lanes` × 3.3 m, else by kind (primary 10 m, secondary 9,
 tertiary 8, streets 7, service 4.5, driveways 3.5, pedestrian streets 5, footways
-2.4). One-way and bridges from their tags. **Pavements**, 2.4 m wide, along every
+2.4). A one-way street (or tertiary, secondary, primary) tagged `lanes=1` and no
+`width`, with a bus stop's sign or platform (see Bus shelters: a disused one with its
+shelter counts) within 12 m of its kerb, alongside it, is 3 m wider: its one lane
+for the traffic, and the kerb side for the buses to pull in (The Horsefair). One-way
+and bridges from their tags. **Pavements**, 2.4 m wide, along every
 road but service roads and tracks: on both sides unless `sidewalk`,
 `sidewalk:both`, `sidewalk:left` or `sidewalk:right` say otherwise (left and right
 as the way runs); none on a side where it's `no` or `separate` (mapped as a footpath
@@ -275,7 +279,8 @@ the left side's traffic goes the way's way, the right side's against it).
   (`highway=mini_roundabout`): a white circle 4 m across.
 - **Cycle boxes** (`cycleway=asl`): terracotta red (as Bristol's are), 4.5 m deep,
   behind a line across the lanes coming in, a big white bike filling them (side on, as the driver sees it: wheels across the lane).
-- **Bus stops** (`public_transport=stop_position`; not on a way only buses may use,
+- **Bus stops** (`public_transport=stop_position`, or `disused:public_transport=stop_position`
+  with a stop's sign or platform within 30 m that still counts: see Bus shelters; not on a way only buses may use,
   as in a bus station's yard: see Bus stations): a rectangular bay 3 m deep along
   the kerb, on the side of the stop's sign or platform within 30 m (or the left,
   one-way), surfaced red with a dashed yellow edge, BUS STOP in big yellow letters.
@@ -425,7 +430,9 @@ the road onto a measured deck is brought up or down to meet it over the last
 open end, any difference left taken up over the 8 m you get on in.
 
 **Bus shelters**: a bus stop (`highway=bus_stop` or `public_transport=platform`
-node) with `shelter=yes` gets a shelter, 4 m long along the nearest road (within
+node; or a disused one, `disused:highway=bus_stop` or `disused:public_transport=platform`,
+whose `shelter=yes` says its shelter's still there: its buses have stopped, for now or
+for good, but it hasn't gone, as on The Horsefair) with `shelter=yes` gets a shelter, 4 m long along the nearest road (within
 20 m), set 1 m back from the stop away from the road; then moved onto what the
 LIDAR sees there (below). Glass, so it can be smashed. **Kiosks** (`shop=kiosk`
 or `amenity=kiosk` points not on a building) are made buildings 2.5 m square and

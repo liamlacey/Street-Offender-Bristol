@@ -764,6 +764,14 @@ export class People {
         if (near) this.stops.push([near[0], near[1]]);
       }
     }
+    // And the stops no route's buses call at (those whose buses have stopped, their shelters still there): people still wait.
+    for (const p of map.props) {
+      if (p.kind !== 'busstop') continue;
+      if (this.stops.some(([x, y]) => Math.hypot(x - p.x, y - p.y) < 15 * M)) continue;
+      if (this.platforms.some(([px, py]) => Math.hypot(px - p.x, py - p.y) < 30 * M)) continue;
+      const near = this.nearestWalk(p.x, p.y, 12 * M);
+      if (near) this.stops.push([near[0], near[1]]);
+    }
     this.platformStops();
   }
 

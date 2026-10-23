@@ -1243,6 +1243,18 @@ export function roadKind(tags: Tags): RoadKind | null {
   return kind;
 }
 
+/**
+ * A bus stop's sign or platform: in use; or disused, if its shelter's still there (a stop whose buses have stopped, for now
+ * or for good, still has its shelter, its bench, its bin and its bay at the kerb).
+ */
+export function isBusStop(t: Tags): boolean {
+  if (t.highway === 'bus_stop' || t.public_transport === 'platform') return true;
+  return (t['disused:highway'] === 'bus_stop' || t['disused:public_transport'] === 'platform') && t.shelter === 'yes';
+}
+
+/** The kinds of street a one-way, one-lane road with bus stops along it is widened for them (see `roadWidth`'s use). */
+const STOP_WIDENED = new Set<RoadKind>(['street', 'tertiary', 'secondary', 'primary']);
+
 export function roadWidth(kind: RoadKind, tags: Tags): number {
   const tagged = metres(tags.width);
   if (tagged && tagged > 1 && tagged < 40 && VEHICLE_ROADS.has(kind)) return tagged;
@@ -1572,7 +1584,7 @@ export function propKind(tags: Tags): PropKind | null {
   if (tags.amenity === 'post_box') return 'postbox';
   if (tags.amenity === 'telephone') return 'phone';
   if (tags.highway === 'traffic_signals') return 'signals';
-  if (tags.highway === 'bus_stop') return 'busstop';
+  if (tags.highway === 'bus_stop' || (tags['disused:highway'] === 'bus_stop' && tags.shelter === 'yes')) return 'busstop';
   if (tags.amenity === 'fountain') return 'fountain';
   if (tags.amenity === 'bicycle_parking') return 'bikes';
   return null;
@@ -1874,6 +1886,30 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
   /** Each road's index in `roads`, by its OSM way. */
   const roadIndexOfWay = new Map<number, number>();
   // The pavements mapped as footpaths of their own.
+  // The bus stops' signs and platforms (see `isBusStop`), for the roads they're beside.
+  const stopSigns: [number, number][] = [];
+  for (const n of data.nodes.values()) if (isBusStop(n.tags)) stopSigns.push([proj.x(n.lon), proj.y(n.lat)]);
+  /**
+   * A one-way street with one lane, tagged so (`lanes=1`, no `width`), with bus stops beside it: the lane's for the traffic, and
+   * there's a stop's width more, at the kerb, for the buses to pull in (and cars to park, where there's no stop).
+   */
+  const stopWidened = (kind: RoadKind, t: Tags, pts: Pts, width: number): number => {
+    if (!STOP_WIDENED.has(kind) || t.lanes !== '1' || t.width || !(t.oneway === 'yes' || t.oneway === '1')) return width;
+    const reach = width / 2 + 12 * PX_PER_METRE;
+    const [x0, y0, x1, y1] = [Math.min(...pts.filter((_, i) => i % 2 === 0)) - reach, Math.min(...pts.filter((_, i) => i % 2 === 1)) - reach, Math.max(...pts.filter((_, i) => i % 2 === 0)) + reach, Math.max(...pts.filter((_, i) => i % 2 === 1)) + reach];
+    for (const [x, y] of stopSigns) {
+      if (x < x0 || x > x1 || y < y0 || y > y1) continue;
+      for (let k = 0; k + 3 < pts.length; k += 2) {
+        const [ax, ay, bx, by] = [pts[k], pts[k + 1], pts[k + 2], pts[k + 3]];
+        const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
+        if (!len2) continue;
+        const u = ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2;
+        if (u < 0 || u > 1) continue;
+        if (Math.hypot(ax + (bx - ax) * u - x, ay + (by - ay) * u - y) < reach) return width + BUS_STOP_DEPTH;
+      }
+    }
+    return width;
+  };
   const sidewalks: Pts[] = [];
   for (const { way } of roadWays) {
     if (way.tags.footway !== 'sidewalk') continue;
@@ -1885,7 +1921,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     const t = way.tags;
     const pts = pointsOf(way.nodes);
     if (!pts) continue;
-    const width = roadWidth(kind, t) * PX_PER_METRE;
+    const width = stopWidened(kind, t, pts, roadWidth(kind, t) * PX_PER_METRE);
     const vehicle = VEHICLE_ROADS.has(kind);
     const oneway = t.oneway === 'yes' || t.oneway === '1' || t.junction === 'roundabout';
     const bridge = t.bridge !== undefined && t.bridge !== 'no';
@@ -2167,7 +2203,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
   // And where there's tactile paving (at crossings, and the dropped kerbs either side of them).
   const tactile: [number, number][] = [];
   for (const n of data.nodes.values()) {
-    if (n.tags.highway === 'bus_stop' || n.tags.public_transport === 'platform') stopsBeside.push([proj.x(n.lon), proj.y(n.lat)]);
+    if (isBusStop(n.tags)) stopsBeside.push([proj.x(n.lon), proj.y(n.lat)]);
     if (n.tags.tactile_paving === 'yes' || n.tags.tactile_paving === 'partial') tactile.push([proj.x(n.lon), proj.y(n.lat)]);
   }
   // Which nodes are on buildings' outlines, and each road's ways through each node, for gates.
@@ -2371,7 +2407,9 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       if (at && t.highway === 'give_way') paint.push(...giveWayTriangles(node.id, t.direction));
     }
     if (t.highway === 'mini_roundabout') paint.push({ kind: 'mini', x: round(x), y: round(y), angle: 0, width: 4 * PX_PER_METRE });
-    if (t.public_transport === 'stop_position' && (t.bus === 'yes' || !t.tram) && !waysOfNode.get(node.id)?.some((w) => busOnly(w.way.tags))) {
+    // (A disused stop's too, where its shelter's still there: see `isBusStop`.)
+    const stopPosition = t.public_transport === 'stop_position' || (t['disused:public_transport'] === 'stop_position' && stopSigns.some(([sx, sy]) => Math.hypot(sx - x, sy - y) < 30 * PX_PER_METRE));
+    if (stopPosition && (t.bus === 'yes' || !t.tram) && !waysOfNode.get(node.id)?.some((w) => busOnly(w.way.tags))) {
       const box = busStopBox(node.id, x, y);
       if (box) paint.push({ kind: 'busstop', ...box });
     }
@@ -2385,7 +2423,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       continue;
     }
     // A bus shelter at a stop (`shelter=yes`): 4 m along the nearest road, set back a metre from where the stop is (the LIDAR finds it, if it can: see enrich.ts).
-    if (t.shelter === 'yes' && (t.highway === 'bus_stop' || t.public_transport === 'platform')) {
+    if (t.shelter === 'yes' && isBusStop(t)) {
       const along = nearestRoadDirection(x, y);
       if (along) {
         const [ux, uy, nx, ny] = along;
