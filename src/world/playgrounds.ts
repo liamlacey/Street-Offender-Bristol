@@ -48,6 +48,11 @@ export interface PlayThing {
 
 const cache = new WeakMap<GameMap, PlayThing[]>();
 
+/** What's been laid out for a map elsewhere (in the layout worker: see layout.ts), taken as worked out here. */
+export function primePlaygrounds(map: GameMap, value: PlayThing[]): void {
+  cache.set(map, value);
+}
+
 /** What's in the playgrounds on a map (worked out once for each). */
 export function playgrounds(map: GameMap): PlayThing[] {
   return drain(playgroundsWork(map));

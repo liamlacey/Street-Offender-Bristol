@@ -107,6 +107,11 @@ const SOLID_CELL = 16 * M;
 
 const cache = new WeakMap<GameMap, SiteLife>();
 
+/** What's been laid out for a map elsewhere (in the layout worker: see layout.ts), taken as worked out here. */
+export function primeSites(map: GameMap, value: SiteLife): void {
+  cache.set(map, value);
+}
+
 /** What's on a map's building sites and brownfield (worked out once for each). */
 export function siteLife(map: GameMap): SiteLife {
   return drain(siteLifeWork(map));

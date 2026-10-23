@@ -38,6 +38,11 @@ export interface ParkLife {
 
 const cache = new WeakMap<GameMap, ParkLife>();
 
+/** What's been laid out for a map elsewhere (in the layout worker: see layout.ts), taken as worked out here. */
+export function primeParkLife(map: GameMap, value: ParkLife): void {
+  cache.set(map, value);
+}
+
 /** The park life on a map (worked out once for each). */
 export function parkLife(map: GameMap): ParkLife {
   return drain(parkLifeWork(map));

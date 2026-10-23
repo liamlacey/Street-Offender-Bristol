@@ -141,6 +141,15 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
 /** The maps whose gardens' drives and patios have been put in with their areas. */
 const withHomes = new WeakSet<GameMap>();
 
+/** The gardens' drives and patios, and what's laid out round the places, put down on the map with its own areas (once). */
+export function layDown(map: GameMap, homes: { drives: Pts[]; patios: Pts[] }, places: { areas: GameMap['areas'] }): void {
+  if (withHomes.has(map)) return;
+  withHomes.add(map);
+  for (const pts of homes.drives) map.areas.push({ kind: 'drive', rings: [pts] });
+  for (const pts of homes.patios) map.areas.push({ kind: 'patio', rings: [pts] });
+  map.areas.push(...places.areas);
+}
+
 /** Which of the food carts sells ice cream (see CARTS). */
 const ICE_CREAM = 2;
 
@@ -591,12 +600,7 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   // And round the places (see places.ts): a school's playground and its courts.
   const homes = yield* homesWork(map);
   const places = yield* placesWork(map);
-  if (!withHomes.has(map)) {
-    withHomes.add(map);
-    for (const pts of homes.drives) map.areas.push({ kind: 'drive', rings: [pts] });
-    for (const pts of homes.patios) map.areas.push({ kind: 'patio', rings: [pts] });
-    map.areas.push(...places.areas);
-  }
+  layDown(map, homes, places);
   const ground: Wall[] = [];
   const deck: Wall[] = [];
   const addRing = (to: Wall[], ring: Pts, r: number, closed: boolean, level: number, kind?: WallKind, height?: number) => {

@@ -14,6 +14,8 @@ import { TileStore, fetchJson } from '../map/tileStore';
 import type { Overview } from './overview';
 import { type FirstIds, type Progress, type Region, regionWork } from './region';
 import type { SurfaceGrid } from './surface';
+import { type Layout, useLayout } from './layout';
+import type { FromLayout, ToLayout } from './layoutWorker';
 import { type Work, runFor } from './work.ts';
 import type { World } from './world';
 
@@ -37,8 +39,15 @@ type Painter = (world: World, bounds: Region['map']['region']) => Work<SurfaceGr
 export class Streamer {
   /** The middle of the region in use, px (a corner of the tiles). */
   private centre: { x: number; y: number } | null = null;
-  /** The next, being made ready: where, its tiles, and the work (or the tiles still on their way). */
-  private next: { x: number; y: number; keys: string[]; work: Work<Region> | null } | null = null;
+  /**
+   * The next, being made ready: where, its tiles (once they're here), its layout from the worker (null: none to be had;
+   * undefined: still coming), and the work (once it's begun: when they're both here, or time's short).
+   */
+  private next: { x: number; y: number; keys: string[]; bounds: Region['map']['region']; tiles: Tile[] | null; layout: Layout | null | undefined; work: Work<Region> | null } | null = null;
+  /** The layout worker (see layoutWorker.ts), if there's one; what's been asked of it, by request. */
+  private layouts: Worker | null = null;
+  private readonly asked = new Map<number, (layout: Layout | null) => void>();
+  private requests = 0;
   /** How far along making the next one is. */
   readonly making: Progress = { done: 0, label: '' };
 
@@ -51,7 +60,38 @@ export class Streamer {
 
   /** The map's index, fetched; a streamer for it. */
   static async open(paint: Painter, ids: () => FirstIds, base = 'map/'): Promise<Streamer> {
-    return new Streamer(base, await TileStore.open(base), paint, ids);
+    const streamer = new Streamer(base, await TileStore.open(base), paint, ids);
+    try {
+      if (typeof Worker !== 'undefined' && typeof location !== 'undefined') {
+        const worker = new Worker(new URL('./layoutWorker.ts', import.meta.url), { type: 'module' });
+        worker.onmessage = (e: MessageEvent<FromLayout>) => {
+          streamer.asked.get(e.data.id)?.(e.data.layout);
+          streamer.asked.delete(e.data.id);
+        };
+        // (If it can't, the game lays each region out itself.)
+        worker.onerror = () => {
+          streamer.layouts = null;
+          for (const done of streamer.asked.values()) done(null);
+          streamer.asked.clear();
+        };
+        streamer.layouts = worker;
+      }
+    } catch {
+      streamer.layouts = null;
+    }
+    return streamer;
+  }
+
+  /** A region's layout, from the worker (null, if there's no worker or it couldn't). */
+  private layout(keys: string[], bounds: Region['map']['region']): Promise<Layout | null> {
+    const worker = this.layouts;
+    if (!worker) return Promise.resolve(null);
+    const id = ++this.requests;
+    return new Promise((done) => {
+      this.asked.set(id, done);
+      const m: ToLayout = { id, base: new URL(this.base, location.href).href, keys, bounds };
+      worker.postMessage(m);
+    });
   }
 
   get index(): MapIndex {
@@ -103,9 +143,11 @@ export class Streamer {
   }
 
   /** A region from its tiles, a little at a time. */
-  private *make(tiles: Tile[], b: Region['map']['region'], progress: Progress, underway?: number): Work<Region> {
+  private *make(tiles: Tile[], b: Region['map']['region'], progress: Progress, underway?: number, layout?: Layout | null): Work<Region> {
     Object.assign(progress, { done: 0, label: 'Reading the map' });
     const map = yield* assembleWork(this.index, tiles, b);
+    // (Laid out already, in the worker: taken as it is.)
+    if (layout) useLayout(map, layout);
     return yield* regionWork(map, this.ids(), this.paint, progress, underway);
   }
 
@@ -126,12 +168,16 @@ export class Streamer {
       if (c.x === this.centre.x && c.y === this.centre.y) return null;
       const b = this.bounds(c);
       const keys = tilesFor(this.index, b.x0, b.y0, b.x1, b.y1);
-      const next: NonNullable<Streamer['next']> = { ...c, keys, work: null };
+      const next: NonNullable<Streamer['next']> = { ...c, keys, bounds: b, tiles: null, layout: undefined, work: null };
       this.next = next;
+      // Laid out in the worker meanwhile.
+      this.layout(keys, b).then((layout) => {
+        if (this.next === next) next.layout = layout;
+      });
       this.store.get(keys).then(
         (tiles) => {
           if (this.next !== next) return;
-          next.work = this.make(tiles, b, this.making, 0);
+          next.tiles = tiles;
         },
         (e) => {
           // (The phone's lost its connection: tried again, once you've moved on a bit.)
@@ -141,13 +187,16 @@ export class Streamer {
       );
       return null;
     }
-    if (!this.next.work) return null;
     // Nearing the edge of the region in use (at the speed you're going): more of each frame; about to go off it, all of it.
     const half = (REGION_TILES / 2) * TILE;
     const left = (v: number, at: number, mid: number) => (v > 0 ? (mid + half - at) / v : v < 0 ? (at - (mid - half)) / -v : Infinity);
     const time = Math.min(left(vx, x, this.centre.x), left(vy, y, this.centre.y));
+    const n = this.next;
+    // Begun once its tiles are here and its layout (or that there's none to be had); or now, without it, if time's short.
+    if (!n.work && n.tiles && (n.layout !== undefined || time < HURRY)) n.work = this.make(n.tiles, n.bounds, this.making, 0, n.layout);
+    if (!n.work) return null;
     const budget = time < NOW ? Infinity : time < RUSH ? ms * 6 : time < HURRY ? ms * 2.5 : ms;
-    const r = runFor(this.next.work, budget);
+    const r = runFor(n.work, budget);
     if (!r.done) return null;
     this.centre = { x: this.next.x, y: this.next.y };
     // Only the tiles of the region in use are kept.

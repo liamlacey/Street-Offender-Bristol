@@ -99,6 +99,11 @@ const CELL = 16 * M;
 
 const cache = new WeakMap<GameMap, PlaceLife>();
 
+/** What's been laid out for a map elsewhere (in the layout worker: see layout.ts), taken as worked out here. */
+export function primePlaces(map: GameMap, value: PlaceLife): void {
+  cache.set(map, value);
+}
+
 /** What goes on round a map's places (worked out once for each), a little at a time (see work.ts). */
 export function* placesWork(map: GameMap): Work<PlaceLife> {
   const had = cache.get(map);

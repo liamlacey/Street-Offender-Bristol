@@ -53,6 +53,11 @@ export interface StreetLife {
 
 const cache = new WeakMap<GameMap, StreetLife>();
 
+/** What's been laid out for a map elsewhere (in the layout worker: see layout.ts), taken as worked out here. */
+export function primeStreetLife(map: GameMap, value: StreetLife): void {
+  cache.set(map, value);
+}
+
 /** How busy each pedestrian street is: the shops and the like within 25 m of it, per 100 m of it (counted as at least 50 m). */
 export function pedestrianBusy(map: GameMap, pts: Pts): number {
   const v = map.venues ?? [];

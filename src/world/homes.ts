@@ -120,6 +120,11 @@ const STEP = 1 * M;
 
 const cache = new WeakMap<GameMap, Homes>();
 
+/** What's been laid out for a map elsewhere (in the layout worker: see layout.ts), taken as worked out here. */
+export function primeHomes(map: GameMap, value: Homes): void {
+  cache.set(map, value);
+}
+
 /** The gardens of the houses on a map (worked out once for each), a little at a time (see work.ts). */
 export function* homesWork(map: GameMap): Work<Homes> {
   const had = cache.get(map);
