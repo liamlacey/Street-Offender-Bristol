@@ -377,7 +377,11 @@ function ringsDistance(x: number, y: number, rings: Pts[]): number {
   for (const ring of rings) {
     for (let i = 0; i < ring.length; i += 2) {
       const j = (i + 2) % ring.length;
-      const [ax, ay, bx, by] = [ring[i], ring[i + 1], ring[j], ring[j + 1]];
+      // (Plain numbers, not taken apart from an array: this is called a great many times, and the arrays were garbage.)
+      const ax = ring[i];
+      const ay = ring[i + 1];
+      const bx = ring[j];
+      const by = ring[j + 1];
       const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
       const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2)) : 0;
       best = Math.min(best, Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y));
@@ -391,7 +395,10 @@ function wayDistance(x: number, y: number, r: Road, max: number): number {
   let best = Infinity;
   const p = r.pts;
   for (let i = 0; i + 3 < p.length; i += 2) {
-    const [ax, ay, bx, by] = [p[i], p[i + 1], p[i + 2], p[i + 3]];
+    const ax = p[i];
+    const ay = p[i + 1];
+    const bx = p[i + 2];
+    const by = p[i + 3];
     if (x < Math.min(ax, bx) - max || x > Math.max(ax, bx) + max || y < Math.min(ay, by) - max || y > Math.max(ay, by) + max) continue;
     const len2 = (bx - ax) ** 2 + (by - ay) ** 2;
     const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2)) : 0;
@@ -405,8 +412,9 @@ function insideRings(x: number, y: number, rings: Pts[]): boolean {
   let inside = false;
   for (const ring of rings) {
     for (let i = 0, n = ring.length, j = n - 2; i < n; j = i, i += 2) {
-      const [xi, yi, xj, yj] = [ring[i], ring[i + 1], ring[j], ring[j + 1]];
-      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+      const yi = ring[i + 1];
+      const yj = ring[j + 1];
+      if (yi > y !== yj > y && x < ((ring[j] - ring[i]) * (y - yi)) / (yj - yi) + ring[i]) inside = !inside;
     }
   }
   return inside;

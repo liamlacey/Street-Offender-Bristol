@@ -2961,9 +2961,14 @@ export class Traffic {
   /** The vehicles (driving and parked) within `reach` of a point. */
   near(x: number, y: number, reach: number): Vehicle[] {
     const out: Vehicle[] = [];
-    for (const list of [this.vehicles, this.parked]) for (const v of list) if (Math.abs(v.x - x) < reach && Math.abs(v.y - y) < reach) out.push(v);
+    for (const v of this.vehicles) if (Math.abs(v.x - x) < reach && Math.abs(v.y - y) < reach) out.push(v);
+    // The parked: by where they are (see parkedIn), once they've been indexed; till then (a new region's first step), all of them.
+    const parked = this.restingSeen.length || !this.parked.length ? this.parkedIn(x - reach, y - reach, x + reach, y + reach, this.nearParked) : this.parked;
+    for (const v of parked) if (Math.abs(v.x - x) < reach && Math.abs(v.y - y) < reach) out.push(v);
     return out;
   }
+
+  private readonly nearParked: Vehicle[] = [];
 
   /** Those knocked about, or finding their way back: they bump into things. */
   loose(): Vehicle[] {
@@ -3257,19 +3262,26 @@ export class Traffic {
     this.started = true;
   }
 
+  private busLanes: { x: number; y: number; near: number; candidates: [{ route: number; lane: Lane; leg: number }, number][]; length: number } | null = null;
+
   /** Buses on the routes round you: about one every BUS_EVERY px of them, coming into being out of sight on one of them, partway along. */
   private spawnBuses(player: Player, view: TrafficView, near: number): void {
     const buses = this.vehicles.filter((v) => v.bus).length;
-    const candidates: [{ route: number; lane: Lane; leg: number }, number][] = [];
-    let length = 0;
-    this.routeLanes.forEach((lanes, route) => {
-      for (const { lane, leg } of lanes) {
-        const [x0, y0] = [lane.pts[0], lane.pts[1]];
-        if (Math.hypot(x0 - player.x, y0 - player.y) > near + lane.length) continue;
-        candidates.push([{ route, lane, leg }, lane.length]);
-        length += lane.length;
-      }
-    });
+    // (The routes' lanes round you: looked for again only once you've gone a little way, not every frame.)
+    let had = this.busLanes;
+    if (!had || Math.hypot(had.x - player.x, had.y - player.y) > 30 * M || had.near !== near) {
+      const candidates: [{ route: number; lane: Lane; leg: number }, number][] = [];
+      let length = 0;
+      this.routeLanes.forEach((lanes, route) => {
+        for (const { lane, leg } of lanes) {
+          if (Math.hypot(lane.pts[0] - player.x, lane.pts[1] - player.y) > near + lane.length) continue;
+          candidates.push([{ route, lane, leg }, lane.length]);
+          length += lane.length;
+        }
+      });
+      this.busLanes = had = { x: player.x, y: player.y, near, candidates, length };
+    }
+    const { candidates, length } = had;
     // Routes share roads (a dozen along the main streets): a bus for every so much road, not route.
     const target = Math.min(this.maxBuses, Math.round(Math.sqrt(length / BUS_EVERY) * 2));
     for (let k = 0; k < (this.started ? 2 : target * 4) && this.vehicles.filter((v) => v.bus).length < Math.max(target, buses); k++) {
