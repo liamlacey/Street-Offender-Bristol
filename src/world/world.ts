@@ -177,6 +177,8 @@ export function beacons(map: GameMap): { x: number; y: number }[] {
 export interface Post extends Circle {
   thing: ThingKind;
   index: number;
+  /** Knocked hard and broken, but still standing (see damage.ts's REMAINS): in the way, and going nowhere. */
+  broken?: boolean;
 }
 
 /** A wall: a building's (no kind: it won't break), or a garden wall, hedge, fence or railing (which will). */

@@ -9,6 +9,8 @@ import {
   type Material,
   THINGS,
   type Toughness,
+  BROKEN_STAND,
+  REMAINS,
   WALLS,
   breaks,
   crumble,
@@ -219,15 +221,26 @@ export class Wreckage {
   }
 
   private toughness(post: Post): Toughness {
+    if (post.broken) return BROKEN_STAND;
     if (post.thing === 'tree') return treeToughness(this.hooks.treeHeight(post.index) / 8);
     return THINGS[post.thing];
   }
 
   private knockDown(post: Post, car: CarState, tough: Toughness, speed: number, level: number): void {
-    post.gone = true;
+    // (A statue's plinth and a fountain's basin are left standing, broken: see REMAINS.)
+    if (REMAINS.has(post.thing)) post.broken = true;
+    else post.gone = true;
     this.hooks.knockedDown(post, level);
     const rand = this.rand.frac.bind(this.rand);
     const z = this.hooks.groundAt(post.x, post.y);
+    if (post.thing === 'fountain') {
+      // Its basin cracked open where it stands, and the stone broken off it strewn the way it was hit.
+      for (const d of fallen('fountain', post.x, post.y, car.vx, car.vy, rand)) this.hooks.addDebris(d, level);
+      this.effects.burst('stone', post.x, post.y, 18);
+      this.hooks.audio()?.shatter('stone', speed);
+      giveWay(car, tough, this.hooks.weight());
+      return;
+    }
     if (post.thing === 'tree') {
       // It splits at the foot and goes over the way it was hit, leaving a stump; the rest comes down over a second or so.
       const height = this.hooks.treeHeight(post.index);
@@ -254,7 +267,8 @@ export class Wreckage {
       const look = TOPPLE[thing];
       const [x, y, vx, vy] = [post.x, post.y, car.vx, car.vy];
       const angle = Math.atan2(vy, vx);
-      const texture = thing === 'signal' ? TEX.light('off') : thing === 'beacon' ? TEX.beacon(false) : TEX.prop(thing);
+      // (Off a statue's plinth: only its figure.)
+      const texture = thing === 'signal' ? TEX.light('off') : thing === 'beacon' ? TEX.beacon(false) : thing === 'statue' ? TEX.debris('figure') : TEX.prop(thing);
       const top = this.scene.add.image(x, y, texture).setScale(thing === 'signal' || thing === 'beacon' ? 1.3 / ART_SCALE : 1 / ART_SCALE).setRotation(angle).setDepth(this.aboveDepth);
       this.topple({
         x,

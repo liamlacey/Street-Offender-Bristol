@@ -406,6 +406,36 @@ export function createArt(scene: Phaser.Scene): void {
     circle(ctx, 15, 15, 5, '#bdb4a2');
     circle(ctx, 15, 15, 3, '#cfe9f5');
   });
+  // A fountain smashed: its rim broken through, the water run out (a puddle left), its middle broken off to a stump, cracked.
+  canvasTexture(scene, `${TEX.prop('fountain')}-broken`, 30, 30, (ctx) => {
+    circle(ctx, 15, 15, 14.5, '#bdb4a2');
+    circle(ctx, 15, 15, 12.5, '#8d877c');
+    ctx.fillStyle = '#4c9fc4';
+    ctx.beginPath();
+    ctx.ellipse(11, 18, 6, 4, 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    // (The gap broken through its rim.)
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.moveTo(15, 15);
+    ctx.arc(15, 15, 15, -0.55, 0.15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    circle(ctx, 15, 15, 3.4, '#a59d8e');
+    circle(ctx, 14.4, 14.4, 1.4, '#c9c0ae');
+    ctx.strokeStyle = '#6e675c';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(4, 9);
+    ctx.lineTo(8, 11.5);
+    ctx.lineTo(9.5, 15);
+    ctx.moveTo(18, 22);
+    ctx.lineTo(20.5, 25);
+    ctx.lineTo(19.5, 28.5);
+    ctx.stroke();
+  });
   canvasTexture(scene, TEX.prop('bench'), 16, 6, (ctx) => {
     roundRect(ctx, 0.5, 0.5, 15, 5, 1, '#5a3a22');
     ctx.fillStyle = '#8a5a32';
@@ -1409,6 +1439,29 @@ export function createArt(scene: Phaser.Scene): void {
     ctx.fill();
   });
   // A bike lying on its side: both wheels, its frame, the bars and saddle.
+  // A statue's bronze figure, lying on its side: its head, its body, an arm out.
+  canvasTexture(scene, TEX.debris('figure'), 16, 7, (ctx) => {
+    ctx.fillStyle = '#3f4a3c';
+    ctx.beginPath();
+    ctx.ellipse(8.5, 3.5, 5.5, 2.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    circle(ctx, 2.4, 3.4, 1.9, '#3f4a3c');
+    ctx.strokeStyle = '#3f4a3c';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(6, 2);
+    ctx.lineTo(9, 0.6);
+    ctx.moveTo(13, 3);
+    ctx.lineTo(15.5, 2.4);
+    ctx.moveTo(13, 4.4);
+    ctx.lineTo(15.5, 5.2);
+    ctx.stroke();
+    ctx.fillStyle = '#5b6b55';
+    ctx.beginPath();
+    ctx.ellipse(8, 2.6, 3.5, 1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    circle(ctx, 2, 2.8, 0.7, '#7f9077');
+  });
   canvasTexture(scene, TEX.debris('bike'), 16, 7, (ctx) => {
     ctx.lineWidth = 0.7;
     ctx.strokeStyle = '#161616';
@@ -1595,6 +1648,34 @@ export function createArt(scene: Phaser.Scene): void {
     circle(ctx, 11, 11, 5.5, '#3f4a3c');
     circle(ctx, 9.8, 9.6, 3.2, '#5b6b55');
     circle(ctx, 9, 8.8, 1.2, '#7f9077');
+  });
+  // Its plinth, the figure knocked off it: the stumps of its feet, the stone cracked and a corner broken away.
+  canvasTexture(scene, `${TEX.prop('statue')}-broken`, 22, 22, (ctx) => {
+    roundRect(ctx, 0.5, 0.5, 21, 21, 1.5, '#9c9488');
+    roundRect(ctx, 2.5, 2.5, 17, 17, 1, '#bdb4a2');
+    ctx.fillStyle = '#8c8478';
+    ctx.beginPath();
+    ctx.moveTo(15, 21.5);
+    ctx.lineTo(21.5, 21.5);
+    ctx.lineTo(21.5, 14.5);
+    ctx.lineTo(18.5, 16);
+    ctx.lineTo(16.5, 19);
+    ctx.closePath();
+    ctx.fill();
+    circle(ctx, 9.4, 11, 1.6, '#3f4a3c');
+    circle(ctx, 12.6, 11.4, 1.6, '#3f4a3c');
+    circle(ctx, 9.1, 10.6, 0.6, '#7f9077');
+    ctx.strokeStyle = '#6e675c';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(4, 6);
+    ctx.lineTo(7.5, 8.5);
+    ctx.lineTo(9, 13);
+    ctx.lineTo(7, 17.5);
+    ctx.moveTo(13, 12.5);
+    ctx.lineTo(16, 15);
+    ctx.lineTo(16.5, 18.5);
+    ctx.stroke();
   });
   // A concrete block, and a stone planter with its shrubs.
   canvasTexture(scene, TEX.prop('block'), 10, 10, (ctx) => {

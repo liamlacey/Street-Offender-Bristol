@@ -596,7 +596,7 @@ export class GameScene extends Phaser.Scene {
       // (A bike rack with the bikes locked to it.)
       const make = () => {
         const image = this.add
-          .image(p.x, p.y, p.kind === 'bikes' ? `${TEX.prop('bikes')}-${racked(p.x, p.y)}` : p.tower ? `${TEX.prop('crane')}-tower` : TEX.prop(p.kind))
+          .image(p.x, p.y, p.kind === 'bikes' ? `${TEX.prop('bikes')}-${racked(p.x, p.y)}` : p.tower ? `${TEX.prop('crane')}-tower` : entry.broken ? `${TEX.prop(p.kind)}-broken` : TEX.prop(p.kind))
           .setScale(1 / ART_SCALE)
           .setRotation(p.angle ?? 0)
           .setDepth(deck ? DEPTH.onDeck : DEPTH.props);
@@ -604,7 +604,8 @@ export class GameScene extends Phaser.Scene {
         if (p.kind === 'ladder') image.setOrigin(0, 0.5);
         return image;
       };
-      this.props.push({ x: p.x, y: p.y, z, image: null, make });
+      const entry: Shown = { x: p.x, y: p.y, z, image: null, make };
+      this.props.push(entry);
       if (p.kind === 'crane' && p.height && p.tower) {
         // A tower crane on a building site: its mast up from its foot, and its jib at the top, turning slowly round.
         const height = p.height;
@@ -2025,6 +2026,15 @@ export class GameScene extends Phaser.Scene {
       case 'tree':
       case 'stump':
         break;
+      case 'statue':
+      case 'fountain': {
+        // Left standing, broken: drawn so.
+        const t = this.props[post.index];
+        t.broken = true;
+        t.image?.destroy();
+        t.image = null;
+        break;
+      }
       default:
         this.props[post.index].gone = true;
         this.props[post.index].image?.setVisible(false);
@@ -2363,6 +2373,8 @@ interface Shown {
   image: Phaser.GameObjects.Image | null;
   make?: () => Phaser.GameObjects.Image;
   gone?: boolean;
+  /** Broken, still standing (a statue's plinth, a fountain's basin: see damage.ts's REMAINS): drawn as it's left. */
+  broken?: boolean;
 }
 
 /** Whether (x, y) is in (or just round) the view. */

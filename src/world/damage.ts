@@ -19,6 +19,10 @@ export type Material = 'wood' | 'electric' | 'metal' | 'iron' | 'glass' | 'stone
 export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'mooring' | 'postbox' | 'phone' | 'meter' | 'pump' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'crane' | 'stump';
 /** What doesn't topple like the street furniture: a tree (it splits and falls its own way), and what's left of one (low enough to drive over). */
 export type Structure = 'tree' | 'stump';
+/** What's left standing, broken, knocked hard enough (and won't break further, or move): a statue's plinth, a fountain's basin. */
+export const REMAINS = new Set<ThingKind>(['statue', 'fountain']);
+export const BROKEN_STAND: Toughness = { material: 'stone', strength: Infinity, absorb: 0 };
+
 /** Walls, by what OSM calls them (and a bridge's parapets). */
 export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing' | 'gate' | 'liftgate' | 'chain' | 'shelter' | 'parapet' | 'heras' | 'mesh' | 'prison' | 'net';
 
@@ -147,7 +151,7 @@ export function gapFor(kind: WallKind, speed: number, weight = 1): number {
   return w.gap * Math.min(2, Math.max(1, (speed * weight) / w.strength));
 }
 
-export type DebrisKind = 'pump' | 'meter' | 'clockface' | 'post' | 'ring' | 'plastic' | 'arm' | 'log' | 'billet' | 'splinter' | 'plank' | 'foliage' | 'twig' | 'glass' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head' | 'bumper' | 'mirror' | 'hubcap' | 'lens' | 'bike';
+export type DebrisKind = 'pump' | 'meter' | 'clockface' | 'post' | 'ring' | 'plastic' | 'arm' | 'log' | 'billet' | 'splinter' | 'plank' | 'foliage' | 'twig' | 'glass' | 'rubble' | 'brick' | 'rail' | 'pole' | 'shortpole' | 'bollard' | 'postbox' | 'phonebox' | 'head' | 'bumper' | 'mirror' | 'hubcap' | 'lens' | 'bike' | 'figure';
 
 /** A piece of what's broken, flying off: it ends up somewhere, in the way. */
 export interface Debris {
@@ -195,6 +199,8 @@ const PIECES: Record<DebrisKind, { r: number; length?: number; invMass: number }
   lens: { r: 0.8, invMass: 40 },
   // A bike on its side: off a cyclist knocked down, or out of a rack knocked over.
   bike: { r: 2.4, length: 13, invMass: 12 },
+  // A statue's bronze figure, knocked off its plinth: heavy.
+  figure: { r: 3.5, length: 16, invMass: 1.2 },
 };
 
 /** How many bikes are locked to a rack (the same each time for the same rack): none to four. */
@@ -274,7 +280,8 @@ export function fallen(kind: Exclude<ThingKind, Structure>, x: number, y: number
     case 'fountain':
       return [lying('rubble', 0, 0.2), lying('rubble', 6, 0.3), lying('rubble', 12, 0.35), lying('brick', 4, 0.4), lying('brick', 9, 0.45), lying('rubble', -5, 0.15)];
     case 'statue':
-      return [lying('rubble', 2, 0.15), lying('rubble', 9, 0.2), lying('brick', 14, 0.25), lying('rubble', 18, 0.3)];
+      // Its figure, off the plinth (which is left standing: see REMAINS), and stone broken off with it.
+      return [lying('figure', 16, 0.15), lying('rubble', 6, 0.2), lying('brick', 22, 0.25), lying('rubble', 26, 0.3)];
     case 'crane':
       return [lying('rubble', 2, 0.05), lying('pole', 16, 0.05), lying('pole', 42, 0.05), lying('rail', 28, 0.08), lying('rail', 56, 0.08), lying('shortpole', 66, 0.1)];
   }
