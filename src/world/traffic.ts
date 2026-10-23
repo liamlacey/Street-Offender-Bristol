@@ -418,6 +418,25 @@ function makePath(pts: Pts, level: number): Path {
   return { pts, at, length: at[at.length - 1], level };
 }
 
+/**
+ * A lane's line, with any fold in it taken out: where its way's line has a short piece by a corner (it's been cut off just past
+ * one), moved over to the lane, that piece can come out pointing back the way it came (a step backwards). The traffic turned
+ * right round on it, and the turns into it looped round to come at it that way.
+ */
+export function unfold(pts: Pts): Pts {
+  const out = pts.slice();
+  for (let k = 2; k + 3 < out.length; ) {
+    const [ax, ay] = [out[k] - out[k - 2], out[k + 1] - out[k - 1]];
+    const [bx, by] = [out[k + 2] - out[k], out[k + 3] - out[k + 1]];
+    // (Turning back more than 130°, or a point on top of the last: it goes.)
+    if ((ax === 0 && ay === 0) || ax * bx + ay * by < -0.64 * Math.hypot(ax, ay) * Math.hypot(bx, by)) {
+      out.splice(k, 2);
+      k = Math.max(2, k - 2);
+    } else k += 2;
+  }
+  return out;
+}
+
 function reversed(pts: Pts): Pts {
   const out: Pts = [];
   for (let k = pts.length - 2; k >= 0; k -= 2) out.push(pts[k], pts[k + 1]);
@@ -588,7 +607,7 @@ export function* lanesWork(map: GameMap, paths = false, joins: Join[] = []): Wor
         const kerb = parked(r, dir) ? 1.25 * M : 1.1 * M;
         const offset = Math.max(left - resLeft - (index + 0.5) * each, r.oneway || count > 1 ? -Infinity : Math.min(left - resLeft - kerb, left * 0.6));
         const pts = dir === 1 ? offsetLine(middle, offset) : reversed(offsetLine(middle, -offset));
-        const path = makePath(pts.map(round1), r.bridge ? 1 : 0);
+        const path = makePath(unfold(pts.map(round1)), r.bridge ? 1 : 0);
         path.bends = bendsOf(path, 8 * M);
         const lane: Lane = {
           ...path,
@@ -849,12 +868,28 @@ function cycling(r: Road, dir: 1 | -1, index: number, left: number, offset: numb
   return { cycleAt: Math.max(0, left - bays - BIKE_KERB - offset), cycleLane: false };
 }
 
+/** Of the lanes on from the end of one, the one that starts nearest where it ends. */
+function onFrom(a: Lane, lanes: Lane[]): Lane {
+  const [ex, ey] = [a.pts[a.pts.length - 2], a.pts[a.pts.length - 1]];
+  let best = lanes[0];
+  for (const l of lanes) if (Math.hypot(l.pts[0] - ex, l.pts[1] - ey) < Math.hypot(best.pts[0] - ex, best.pts[1] - ey)) best = l;
+  return best;
+}
+
 /** The turn from the end of one lane to the start of the next: a smooth curve, and where it's sharpest. */
 export function turnBetween(a: Lane, b: Lane): Path {
-  const [ax, ay, aux, auy] = pathAt(a, a.length);
-  const [bx, by, bux, buy] = pathAt(b, 0);
+  // Which way each's going at its end: over the last (and first) couple of metres, not just the last piece of its line.
+  const way = (l: Lane, s: number, t: number): [number, number, number, number] => {
+    const [x, y, ux, uy] = pathAt(l, s);
+    const [tx, ty] = pathAt(l, t);
+    const d = Math.hypot(tx - x, ty - y);
+    return d > 0.5 ? [x, y, ((tx - x) / d) * Math.sign(t - s), ((ty - y) / d) * Math.sign(t - s)] : [x, y, ux, uy];
+  };
+  const [ax, ay, aux, auy] = way(a, a.length, Math.max(0, a.length - 2 * M));
+  const [bx, by, bux, buy] = way(b, 0, Math.min(b.length, 2 * M));
   const gap = Math.hypot(bx - ax, by - ay);
-  const handle = Math.max(gap * 0.45, b.edge === a.edge ? 2.5 * M : 0);
+  // (Turning round, back the way it came: room to. Not a way that comes round to where it began, onto itself.)
+  const handle = Math.max(gap * 0.45, b.edge === a.edge && b.dir !== a.dir ? 2.5 * M : 0);
   const [c1x, c1y, c2x, c2y] = [ax + aux * handle, ay + auy * handle, bx - bux * handle, by - buy * handle];
   const steps = Math.max(2, Math.ceil((gap + handle) / 6));
   const pts: Pts = [];
@@ -1301,7 +1336,8 @@ export class Traffic {
       const on = out.filter((l) => l.road === leg >> 1 && l.dir === (leg & 1 ? -1 : 1));
       if (!on.length) continue;
       bus.leg = k;
-      return on.sort((p, q) => p.index - q.index)[0];
+      // On along the same road: the lane on from the one it's in (not across into another in a few metres); onto another, the kerb's.
+      return on[0].road === a.road ? onFrom(a, on) : on.sort((p, q) => p.index - q.index)[0];
     }
     bus.lost = true;
     return this.next(a, false, true);
@@ -1798,6 +1834,10 @@ export class Traffic {
     if (bike && (ux * vx + uy * vy >= 0.7 || cross < 0)) return byKerb[0];
     // Turning left from the kerb lane, right from the one nearest the middle; straight on, any.
     if (ux * vx + uy * vy < 0.7) return cross < 0 ? byKerb[0] : byKerb[byKerb.length - 1];
+    // Straight on along the same road, or across a junction only a few metres wide: the lane on from the one it's in (moving
+    // across into another there was a swerve, sharp as a turn). Across a wider one, any.
+    const [ex, ey] = [a.pts[a.pts.length - 2], a.pts[a.pts.length - 1]];
+    if (choice[0].road === a.road || Math.hypot(choice[0].pts[0] - ex, choice[0].pts[1] - ey) < 10 * M) return onFrom(a, choice);
     return byKerb[Math.floor(this.rand() * byKerb.length)];
   }
 
@@ -2792,7 +2832,8 @@ export class Traffic {
     if (v.bus) v.bus.yield = blocked;
     const step = Math.max(-rate * dt, Math.min(rate * dt, want - v.side));
     v.side += step;
-    v.sideRate = dt > 0 ? step / dt : 0;
+    // (Eased: how it's turned as it moves over goes by it, and starting, stopping or changing its mind isn't a twitch of the wheel.)
+    if (dt > 0) v.sideRate += (step / dt - v.sideRate) * Math.min(1, dt * 10);
     // In at the kerb: parked.
     if (v.parking && v.spot && Math.abs(v.side - v.spot.off) < 0.05 * M) {
       const [post, spot] = [v.post!, v.spot];
