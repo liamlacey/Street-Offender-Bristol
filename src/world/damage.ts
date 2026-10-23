@@ -85,6 +85,12 @@ export const WALLS: Record<WallKind, Toughness & { /** How much of it a hit at i
   net: { material: 'plastic', strength: 40, absorb: 0.05, gap: 20 * 8 },
 };
 
+/**
+ * A hut (a small building: a shed, a kiosk, a garage, a monument: see world.ts's `isHut`): brought down all at once, hit hard
+ * enough (a little harder than a garden wall), and much of the speed lost doing it.
+ */
+export const HUT: Toughness = { material: 'stone', strength: 230, absorb: 0.5 };
+
 /** A bench smashes if hit this hard; slower, it's just shoved. */
 export const BENCH_SMASH = 150;
 

@@ -83,6 +83,18 @@ export class GroundLayer {
     const felled: number[] = [];
     for (let i = 0; i < trees.length; i += 4) if (trees[i + 2] === 0) felled.push(i / 4);
     if (felled.length) this.tell({ type: 'felled', felled });
+    // And the huts knocked down (see world.ts's `ruin`).
+    const ruined: number[] = [];
+    world.map.buildings.forEach((b, k) => {
+      if (b.ruined) ruined.push(k);
+    });
+    if (ruined.length) this.tell({ type: 'ruined', ruined });
+  }
+
+  /** A hut's been knocked down (the map's building `k`): what's under its shadow, round (x, y), painted again. */
+  ruined(k: number, x: number, y: number, reach: number): void {
+    this.tell({ type: 'ruined', ruined: [k] });
+    this.again(x, y, reach);
   }
 
   /**
@@ -207,6 +219,11 @@ export class GroundLayer {
   /** Paints again the pieces of ground within `reach` px of (x, y) that are in use: something on them has changed (a tree's fallen). */
   repaint(x: number, y: number, reach: number): void {
     if (this.worker) this.tell({ type: 'trees', trees: this.world.map.trees });
+    this.again(x, y, reach);
+  }
+
+  /** Paints again the pieces in use within `reach` px of (x, y). */
+  private again(x: number, y: number, reach: number): void {
     for (let i = Math.floor((x - reach) / CHUNK); i <= Math.floor((x + reach) / CHUNK); i++) {
       for (let j = Math.floor((y - reach) / CHUNK); j <= Math.floor((y + reach) / CHUNK); j++) {
         if (!this.pieces.has(chunkKey(i, j))) continue;

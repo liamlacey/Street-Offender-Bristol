@@ -490,6 +490,8 @@ export interface Building {
   roofMaterial?: string;
   /** A petrol station's canopy over its pumps. */
   fuel?: boolean;
+  /** A hut that's been knocked down: what's left of it (see world.ts's `ruin`). */
+  ruined?: boolean;
 }
 
 export type PropKind =

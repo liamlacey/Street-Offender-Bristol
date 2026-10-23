@@ -9,7 +9,8 @@
 
 import { REMAINS } from './damage';
 import type { CircleGrid, SegmentGrid } from '../physics/collisions';
-import type { Post, Wall } from './world';
+import type { GameMap } from '../map/osm';
+import { type Post, type Wall, ruin } from './world';
 
 /** A fallen tree: where its crown is, how high it is (px), how big, which way it lies, whether it's been torn up. */
 export interface Felled {
@@ -38,6 +39,33 @@ export class Changes {
   private readonly posts: { thing: Post['thing']; x: number; y: number; level: number }[] = [];
   /** The fallen trees, by their ids in the whole map. */
   readonly trees = new Map<number, Felled>();
+  /** The huts knocked down, by their ids in the whole map (and where, and how far their walls reach from there, px). */
+  private readonly huts = new Map<number, { x: number; y: number; reach: number }>();
+
+  /** A hut's been knocked down (see world.ts's `isHut`). */
+  hutGone(id: number, x: number, y: number, reach: number): void {
+    this.huts.set(id, { x, y, reach });
+  }
+
+  /**
+   * Knocks down a region's huts as they've been knocked down: their walls gone, and what's left of them (see world.ts's `ruin`)
+   * in its map. Which of its map's buildings they are.
+   */
+  ruins(map: GameMap, walls: [SegmentGrid, SegmentGrid, SegmentGrid]): number[] {
+    if (!this.huts.size) return [];
+    const ids = (map as GameMap & { ids?: { buildings: number[] } }).ids?.buildings;
+    const out: number[] = [];
+    map.buildings.forEach((b, k) => {
+      const id = ids?.[k] ?? k;
+      if (!this.huts.has(id)) return;
+      ruin(b);
+      out.push(k);
+    });
+    for (const [id, { x, y, reach }] of this.huts) {
+      for (const grid of walls) for (const w of grid.near(x, y, reach) as Wall[]) if (w.hut === id) w.gone = true;
+    }
+    return out;
+  }
 
   /** A wall's been knocked through (one of the map's: what's been added since keeps its own `gone`). */
   wallGone(w: Wall): void {

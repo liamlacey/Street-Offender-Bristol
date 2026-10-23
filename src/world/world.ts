@@ -7,7 +7,8 @@
  */
 
 import type { Body, Circle, Segment } from '../physics/collisions';
-import type { Building, GameMap, LineKind, Prop, PropKind, Pts, Road } from '../map/osm';
+import { type Building, type GameMap, type LineKind, type Prop, type PropKind, type Pts, type Road, pointInRing, ringArea } from '../map/osm';
+import { BoxGrid } from './geometry';
 import { Decks, waterOf } from './decks';
 import { trolleyRows } from './parking';
 import { streetLifeWork } from './streetLife';
@@ -189,6 +190,26 @@ export interface Wall extends Segment {
   height?: number;
   /** Not the map's: put there since (what's left of a broken wall, a fallen tree's trunk). */
   added?: boolean;
+  /** One of a hut's walls (a small building that can be driven through: see `isHut`): its id in the whole map. */
+  hut?: number;
+}
+
+/** The biggest a building can be (its footprint, m²) and still be a hut, driven through (a shed, a kiosk, a garage, a monument). */
+export const HUT_AREA = 30;
+/** What's lived in, however small: never driven through. */
+const LIVED_IN = new Set(['house', 'residential', 'apartments', 'semidetached_house', 'detached', 'terrace', 'bungalow', 'flats', 'dormitory', 'houseboat']);
+
+/** Whether a building's a hut: small enough to be driven through (and knocked down), as a garden wall can be. */
+export function isHut(b: Building, pxPerMetre: number): boolean {
+  return b.solid && b.drawn && !b.landmark && !LIVED_IN.has(b.kind) && Math.abs(ringArea(b.rings[0])) < HUT_AREA * pxPerMetre * pxPerMetre;
+}
+
+/** How high what's left of a hut knocked down stands, px: knee high, rubble over it. */
+export const RUIN_HEIGHT = 0.7 * 8;
+
+/** A hut knocked down: what's left of it (low, flat, rubble over it), drawn and its shadow cast so. */
+export function ruin(b: Building): void {
+  Object.assign(b, { ruined: true, top: RUIN_HEIGHT, bottom: 0, roof: '#8a7f70', roofShape: 'flat', roofMaterial: 'stone', roofAcross: false });
 }
 
 export interface LooseProp extends Body {
@@ -652,15 +673,37 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
     since = now;
     return true;
   };
-  for (const b of map.buildings) {
+  // (A building by its id in the whole map, in a region of it: the same hut, knocked down, in the next region it's in.)
+  const buildingIds = (map as GameMap & { ids?: { buildings: number[] } }).ids?.buildings;
+  // The bigger buildings, by where they are: a small one inside one of them (a stair tower, a lift's housing, up on its roof) is
+  // part of it, not a hut.
+  const bigger = new BoxGrid(
+    map.buildings.filter((b) => b.drawn && Math.abs(ringArea(b.rings[0])) >= HUT_AREA * map.pxPerMetre ** 2).map((b) => {
+      const [x0, y0, x1, y1] = bounds(b.rings[0]);
+      return { x0, y0, x1, y1, ring: b.rings[0] };
+    }),
+  );
+  const within = (b: Building) => {
+    const [x0, y0, x1, y1] = bounds(b.rings[0]);
+    const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2];
+    return bigger.near(cx, cy, cx, cy, (o) => cx >= o.x0 && cx <= o.x1 && cy >= o.y0 && cy <= o.y1 && pointInRing(cx, cy, o.ring)).length > 0;
+  };
+  yield;
+  for (const [k, b] of map.buildings.entries()) {
     if (due()) yield;
     if (!b.solid) continue;
     const [x0, y0, x1, y1] = bounds(b.rings[0]);
     const near = waysNear({ ax: x0, ay: y0, bx: x1, by: y1, r: 0 });
     const onGround = near.filter((r) => !r.bridge);
     const walls = yield* buildingWallsWork(b.rings, onGround, 0, joined, due);
+    const up = onGround.length === near.length ? walls : yield* buildingWallsWork(b.rings, near, 1, joined, due);
+    if (isHut(b, map.pxPerMetre) && !within(b)) {
+      const hut = buildingIds?.[k] ?? k;
+      for (const w of walls) w.hut = hut;
+      for (const w of up) w.hut = hut;
+    }
     buildings.push(...walls);
-    buildingsUp.push(...(onGround.length === near.length ? walls : yield* buildingWallsWork(b.rings, near, 1, joined, due)));
+    buildingsUp.push(...up);
   }
   // Garden walls, fences and railings: on a bridge if they run along one (its handrails), otherwise on the ground.
   for (const line of map.lines) {

@@ -10,6 +10,7 @@ import {
   THINGS,
   type Toughness,
   BROKEN_STAND,
+  HUT,
   REMAINS,
   WALLS,
   breaks,
@@ -88,6 +89,8 @@ export interface WreckageHooks {
   weight(): number;
   /** A wall's been knocked through, from one point to another (a bridge's parapet: the gap's cut out of its deck's picture). */
   wallBroken?(kind: WallKind, from: [number, number], to: [number, number], level: number): void;
+  /** A hut's been knocked down (see world.ts's `isHut`): its id in the whole map, where, and how far its walls reach from there. */
+  hutGone?(id: number, x: number, y: number, reach: number): void;
 }
 
 /**
@@ -143,6 +146,12 @@ export class Wreckage {
     // A copy: knocking a wall down changes what the grid holds.
     for (const wall of [...(this.walls[level].near(car.x, car.y, car.length ?? CAR_LENGTH) as Wall[])]) {
       const trunk = this.trunks.get(wall);
+      if (wall.hut !== undefined) {
+        const [px, py] = nearestOnSegment(car.x, car.y, wall);
+        const speed = impactSpeed(car, px, py, wall.r + 1);
+        if (speed > 0 && breaks(HUT, speed, weight)) this.knockDownHut(wall.hut, car, speed, level);
+        continue;
+      }
       if (!wall.kind && !trunk) continue;
       const [px, py] = nearestOnSegment(car.x, car.y, wall);
       const speed = impactSpeed(car, px, py, wall.r + 1);
@@ -327,6 +336,31 @@ export class Wreckage {
     this.effects.burst(material, mx, my, kind === 'hedge' ? 30 : 18);
     this.hooks.audio()?.shatter(material, speed);
     giveWay(car, WALLS[kind], this.hooks.weight());
+  }
+
+  /**
+   * A hut hit hard enough (see world.ts's `isHut`): its walls all come down at once (on both levels: it's in the way of both),
+   * and what it was built of goes everywhere, the way it was hit; what's left of it's drawn (see world.ts's `ruin`).
+   */
+  private knockDownHut(id: number, car: CarState, speed: number, level: number): void {
+    const near = this.walls[level].near(car.x, car.y, 40 * 8) as Wall[];
+    const mine = near.filter((w) => w.hut === id);
+    if (!mine.length) return;
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const w of mine) [x0, y0, x1, y1] = [Math.min(x0, w.ax, w.bx), Math.min(y0, w.ay, w.by), Math.max(x1, w.ax, w.bx), Math.max(y1, w.ay, w.by)];
+    const [x, y] = [(x0 + x1) / 2, (y0 + y1) / 2];
+    const reach = Math.hypot(x1 - x0, y1 - y0) / 2 + 8;
+    for (const grid of this.walls) for (const w of grid.near(x, y, reach) as Wall[]) if (w.hut === id) w.gone = true;
+    this.hooks.hutGone?.(id, x, y, reach);
+    // Rubble and bricks (more, the bigger it was), its roof's timbers, its windows.
+    const size = Math.min(1, (x1 - x0) * (y1 - y0) / (30 * 64));
+    const rand = this.rand.frac.bind(this.rand);
+    for (const [piece, count] of [['rubble', 4 + Math.round(size * 6)], ['brick', 3 + Math.round(size * 4)], ['plank', 2], ['glass', 3]] as [Parameters<typeof debris>[0], number][]) {
+      for (const d of debris(piece, count, x, y, car.vx * 0.6, car.vy * 0.6, rand, reach)) this.hooks.addDebris(d, 0);
+    }
+    this.effects.burst('stone', x, y, 30);
+    this.hooks.audio()?.shatter('stone', speed);
+    giveWay(car, HUT, this.hooks.weight());
   }
 
   /** Starts something toppling over. */

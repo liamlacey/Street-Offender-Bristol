@@ -34,7 +34,7 @@ import { Perspective } from '../world/perspective';
 import { Terrain } from '../world/terrain';
 import { SURFACE_KIND, Surface, type SurfaceGrid } from '../world/surface';
 import { type Light, lightAt } from '../world/lights';
-import { CHUNK, type LooseProp, type Post, type World, beacons, chunkKey, homeOf } from '../world/world';
+import { CHUNK, type LooseProp, type Post, type World, beacons, chunkKey, homeOf, ruin, shadowOffset } from '../world/world';
 import { Changes } from '../world/changes';
 import type { FirstIds, Progress, Region } from '../world/region';
 import { type Obstacle, Trains } from '../world/trains';
@@ -401,6 +401,19 @@ export class GameScene extends Phaser.Scene {
       wallBroken: (kind, from, to) => {
         if (kind === 'parapet') this.deckLayer.breakParapet(from, to);
       },
+      hutGone: (id, x, y, reach) => {
+        this.changes.hutGone(id, x, y, reach);
+        // What's left of it, drawn so, and its shadow (short now) painted again (as far as it fell before).
+        const { map } = this.world;
+        const ids = (map as typeof map & { ids?: { buildings: number[] } }).ids?.buildings;
+        const k = ids ? ids.indexOf(id) : id;
+        const b = map.buildings[k];
+        if (!b) return;
+        const [sx, sy] = shadowOffset(b.top);
+        ruin(b);
+        this.buildings.ruined(id);
+        this.ground.ruined(k, x, y, reach + Math.hypot(sx, sy));
+      },
     }, DEPTH.props - 0.1, DEPTH.trees);
     this.peopleLayer = new PeopleLayer(this, this.people, (x, y, level) => this.surfaceHeight(x, y, level), {
       ground: DEPTH.props + 0.05,
@@ -534,6 +547,8 @@ export class GameScene extends Phaser.Scene {
     const old = this.region === r ? undefined : this.region;
     const keep = carry && old ? this.keepView() : null;
     const down = this.changes.apply(r.walls, r.posts, r.map.region);
+    // The huts knocked down: their walls gone, and what's left of them (before the ground's painted).
+    this.changes.ruins(r.map, r.walls);
     // The trees felled: their shadows gone (before the ground's painted).
     const ids = r.map.ids.trees;
     ids.forEach((id, i) => {

@@ -14,7 +14,7 @@ import { Terrain } from './terrain';
 import { assembleWork } from '../map/regions';
 import { TileStore } from '../map/tileStore';
 import { layOut } from './layout';
-import { type World, indexChunks } from './world';
+import { type World, indexChunks, ruin } from './world';
 import { drain } from './work.ts';
 
 export type ToWorker =
@@ -23,6 +23,7 @@ export type ToWorker =
   | { type: 'use'; id: number }
   | { type: 'trees'; trees: number[] }
   | { type: 'felled'; felled: number[] }
+  | { type: 'ruined'; ruined: number[] }
   | { type: 'paint'; i: number; j: number; id: number };
 export type FromWorker = { type: 'painted'; id: number; i: number; j: number; picture: ImageBitmap } | { type: 'need'; id: number };
 
@@ -73,6 +74,8 @@ async function handle(m: ToWorker): Promise<void> {
     if (world) world.map.trees = m.trees;
   } else if (m.type === 'felled') {
     if (world) for (const i of m.felled) world.map.trees[i * 4 + 2] = 0;
+  } else if (m.type === 'ruined') {
+    if (world) for (const i of m.ruined) if (world.map.buildings[i]) ruin(world.map.buildings[i]);
   } else {
     if (!world) return;
     const canvas = newCanvas(PIECE, PIECE) as unknown as OffscreenCanvas;

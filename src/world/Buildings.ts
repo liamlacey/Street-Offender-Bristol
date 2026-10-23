@@ -54,6 +54,11 @@ export class Buildings {
     this.index = index;
   }
 
+  /** A hut's been knocked down (by its id in the whole map): its look worked out again, as what's left of it. */
+  ruined(id: number): void {
+    for (const e of this.index.all) if (e.id === id) e.look = null;
+  }
+
   /** A building's look: worked out the first time it's needed. */
   private lookOf(i: number): BuildingLook & { ground: number } {
     const e = this.index.all[i];
