@@ -746,7 +746,7 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
 }
 
 /** Which chunks each thing reaches into (with its shadow, for buildings). */
-function* indexChunks(map: GameMap): Work<Map<string, ChunkIndex>> {
+export function* indexChunks(map: GameMap): Work<Map<string, ChunkIndex>> {
   const pause = every(800);
   const chunks = new Map<string, ChunkIndex>();
   const add = (list: keyof ChunkIndex, i: number, x0: number, y0: number, x1: number, y1: number) => {

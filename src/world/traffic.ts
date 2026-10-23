@@ -1904,12 +1904,19 @@ export class Traffic {
   private restingSeen: Vehicle[] = [];
   private restingAt: number[] = [];
 
+  /** The parked cars that aren't standing still, or have their alarm going: those looked at each step (see indexResting). */
+  readonly restless: Vehicle[] = [];
+
   private indexResting(): void {
     const parked = this.parked;
     let same = parked.length === this.restingSeen.length;
-    for (let k = 0; same && k < parked.length; k++) {
+    // (One pass: whether they're as they were, and those that aren't standing still.)
+    const restless = this.restless;
+    restless.length = 0;
+    for (let k = 0; k < parked.length; k++) {
       const v = parked[k];
-      same = v === this.restingSeen[k] && (v.mode === 'parked' ? v.x : NaN) === this.restingAt[k * 2] && v.y === this.restingAt[k * 2 + 1];
+      if (v.mode !== 'parked' || v.alarm > 0) restless.push(v);
+      if (same) same = v === this.restingSeen[k] && (v.mode === 'parked' ? v.x : NaN) === this.restingAt[k * 2] && v.y === this.restingAt[k * 2 + 1];
     }
     if (same) return;
     this.restingCells.clear();
@@ -2052,7 +2059,7 @@ export class Traffic {
         this.remove(v);
       }
     }
-    for (const v of this.parked) {
+    for (const v of this.restless) {
       if (v.mode === 'knocked') this.slide(v, dt);
       if (v.alarm > 0) v.alarm = Math.max(0, v.alarm - dt);
     }
@@ -2961,7 +2968,26 @@ export class Traffic {
   /** Those knocked about, or finding their way back: they bump into things. */
   loose(): Vehicle[] {
     const out: Vehicle[] = [];
-    for (const list of [this.vehicles, this.parked]) for (const v of list) if (v.mode === 'knocked' || v.mode === 'rejoin') out.push(v);
+    // (A parked one knocked about is among the restless: see indexResting.)
+    for (const list of [this.vehicles, this.restless]) for (const v of list) if (v.mode === 'knocked' || v.mode === 'rejoin') out.push(v);
+    return out;
+  }
+
+  /**
+   * The parked cars within a box (as of the last step): those standing still, by where they are, and the restless. (Rather than
+   * all of them, thousands, looked through: see GameScene, TrafficLayer.)
+   */
+  parkedIn(x0: number, y0: number, x1: number, y1: number, out: Vehicle[] = []): Vehicle[] {
+    out.length = 0;
+    for (let i = Math.floor(x0 / OBSTACLE_CELL); i <= Math.floor(x1 / OBSTACLE_CELL); i++) {
+      for (let j = Math.floor(y0 / OBSTACLE_CELL); j <= Math.floor(y1 / OBSTACLE_CELL); j++) {
+        for (const o of this.restingCells.get(i * 100003 + j) ?? []) {
+          const v = o as Vehicle;
+          if (v.x >= x0 && v.x <= x1 && v.y >= y0 && v.y <= y1) out.push(v);
+        }
+      }
+    }
+    for (const v of this.restless) if (v.x >= x0 && v.x <= x1 && v.y >= y0 && v.y <= y1 && !out.includes(v)) out.push(v);
     return out;
   }
 

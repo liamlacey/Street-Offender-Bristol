@@ -35,6 +35,8 @@ export class TrafficLayer {
   private readonly sprites = new Map<Vehicle, { body: Phaser.GameObjects.Image; shadow: Phaser.GameObjects.Image; shown: number; painted: number }>();
   /** Those drawn this frame (kept from frame to frame). */
   private readonly seen = new Set<Vehicle>();
+  /** The parked cars near the view, asked of the traffic each frame (the same list: no garbage). */
+  private readonly nearParked: Vehicle[] = [];
   private readonly lamps: [Phaser.GameObjects.Graphics, Phaser.GameObjects.Graphics];
 
   constructor(
@@ -69,7 +71,7 @@ export class TrafficLayer {
     const depthOf = (onDeck: boolean) => (level === 0 ? (onDeck ? this.depths.onDeck : this.depths.ground) : onDeck ? this.depths.beside : this.depths.below);
     this.lamps[0].setDepth(depthOf(false) + 0.01);
     this.lamps[1].setDepth(depthOf(true) + 0.01);
-    for (const list of [this.traffic.parked, this.traffic.vehicles]) {
+    for (const list of [this.traffic.parkedIn(view.left - pad, view.top - pad, view.right + pad, view.bottom + pad, this.nearParked), this.traffic.vehicles]) {
       for (const v of list) {
         if (v.x < view.left - pad || v.x > view.right + pad || v.y < view.top - pad || v.y > view.bottom + pad) continue;
         seen.add(v);

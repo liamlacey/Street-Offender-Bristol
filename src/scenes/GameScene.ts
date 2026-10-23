@@ -170,6 +170,8 @@ export class GameScene extends Phaser.Scene {
   /** Falling (off a drop, a bridge, a quay): how high above the ground below, px, how fast, px/s (up), and from how high. */
   private air: { z: number; vz: number; drop: number } | null = null;
   private deckLayer!: DeckLayer;
+  /** The parked cars near somewhere, asked of the traffic (see parkedIn): the same list each time, no garbage. */
+  private readonly nearParked: Vehicle[] = [];
   /** Which level the car's on: 0 the ground, 1 a bridge's deck. */
   private level = 0;
   private car!: CarState;
@@ -338,6 +340,7 @@ export class GameScene extends Phaser.Scene {
     createArt(this);
     this.assign(region);
     this.ground = new GroundLayer(this, this.world, this.terrain, DEPTH.ground);
+    this.streamer.prepare = (keys, bounds) => this.ground.prepare(keys, bounds);
     this.skids = new SkidMarks(this, this.terrain, DEPTH.skids);
     this.effects = new CarEffects(this, this.skids, DEPTH.effects);
     this.buildings = new Buildings(this, region.buildings, DEPTH.buildings);
@@ -531,7 +534,7 @@ export class GameScene extends Phaser.Scene {
     for (const { post } of down) this.showDown(post);
     this.people.useSeats(this.loose.map((l) => l.body));
     if (old) {
-      this.ground.use(this.world, this.terrain);
+      this.ground.use(this.world, this.terrain, r.prepared);
       this.skids.use(this.terrain);
       this.buildings.use(r.buildings);
       this.ledgeLayer.use(this.ledges);
@@ -1230,7 +1233,8 @@ export class GameScene extends Phaser.Scene {
     }
     // Smoke from wrecked engines (yours too); car alarms beeping.
     const seen = (x: number, y: number) => x > view.left - 40 && x < view.right + 40 && y > view.top - 40 && y < view.bottom + 40;
-    for (const list of [this.traffic.vehicles, this.traffic.parked]) for (const v of list) {
+    const parked = this.traffic.parkedIn(view.left - 40, view.top - 40, view.right + 40, view.bottom + 40, this.nearParked);
+    for (const list of [this.traffic.vehicles, parked]) for (const v of list) {
       if (!seen(v.x, v.y)) continue;
       if ((v.broken || (v.limping && v.wreck && v.wreck.taken.front > 60)) && Math.random() < dt * (v.broken ? 9 : 4)) {
         this.effects.smokeAt(v.x + Math.cos(v.angle) * v.length * 0.35, v.y + Math.sin(v.angle) * v.length * 0.35);
@@ -1266,7 +1270,8 @@ export class GameScene extends Phaser.Scene {
       o.level = level;
     };
     add(this.car.x, this.car.y, this.carWidth() / 2 + 2, this.level);
-    for (const list of [this.traffic.vehicles, this.traffic.parked]) for (const v of list) if (near(v.x, v.y)) add(v.x, v.y, v.r, v.level);
+    const parked = this.traffic.parkedIn(view.left - 900, view.top - 900, view.right + 900, view.bottom + 900, this.nearParked);
+    for (const list of [this.traffic.vehicles, parked]) for (const v of list) if (near(v.x, v.y)) add(v.x, v.y, v.r, v.level);
     for (const p of this.people.people) if (p.mode !== 'down' && near(p.x, p.y)) add(p.x, p.y, 1.5, p.level);
     obstacles.length = n;
     try {
@@ -1366,7 +1371,8 @@ export class GameScene extends Phaser.Scene {
         m.fresh = c.train.dwell > 0 && c.train.fresh;
       }
     }
-    for (const list of [this.traffic.vehicles, this.traffic.parked]) {
+    // (Those parked and standing still aren't movers: only the restless among them.)
+    for (const list of [this.traffic.vehicles, this.traffic.restless]) {
       for (const v of list) {
         if (Math.abs(v.x - car.x) > view.width + 400 || Math.abs(v.y - car.y) > view.height + 400) continue;
         if (v.mode === 'parked' && v.vx === 0 && v.vy === 0) continue;
@@ -1396,7 +1402,7 @@ export class GameScene extends Phaser.Scene {
     // What's standing still near the view (parked, left, stopped; you, stopped): walked round.
     const blocks: Block[] = [];
     const [bx0, by0, bx1, by1] = [view.left - 100, view.top - 100, view.right + 100, view.bottom + 100];
-    for (const list of [this.traffic.parked, this.traffic.vehicles]) {
+    for (const list of [this.traffic.parkedIn(bx0, by0, bx1, by1, this.nearParked), this.traffic.vehicles]) {
       for (const v of list) {
         if (v.x < bx0 || v.x > bx1 || v.y < by0 || v.y > by1 || v.kind === 'bike') continue;
         if (Math.hypot(v.vx, v.vy) > 4 || (v.mode === 'drive' && v.speed > 4)) continue;

@@ -43,11 +43,13 @@ export class Streamer {
    * The next, being made ready: where, its tiles (once they're here), its layout from the worker (null: none to be had;
    * undefined: still coming), and the work (once it's begun: when they're both here, or time's short).
    */
-  private next: { x: number; y: number; keys: string[]; bounds: Region['map']['region']; tiles: Tile[] | null; layout: Layout | null | undefined; work: Work<Region> | null } | null = null;
+  private next: { x: number; y: number; prepared?: number; keys: string[]; bounds: Region['map']['region']; tiles: Tile[] | null; layout: Layout | null | undefined; work: Work<Region> | null } | null = null;
   /** The layout worker (see layoutWorker.ts), if there's one; what's been asked of it, by request. */
   private layouts: Worker | null = null;
   private readonly asked = new Map<number, (layout: Layout | null) => void>();
   private requests = 0;
+  /** Told of the next region as soon as it's chosen (its tiles and where it is), to make ready elsewhere too: by what id it's to be known (on the Region). */
+  prepare: ((keys: string[], bounds: Region['map']['region']) => number | undefined) | null = null;
   /** How far along making the next one is. */
   readonly making: Progress = { done: 0, label: '' };
 
@@ -170,6 +172,7 @@ export class Streamer {
       const keys = tilesFor(this.index, b.x0, b.y0, b.x1, b.y1);
       const next: NonNullable<Streamer['next']> = { ...c, keys, bounds: b, tiles: null, layout: undefined, work: null };
       this.next = next;
+      next.prepared = this.prepare?.(keys, b);
       // Laid out in the worker meanwhile.
       this.layout(keys, b).then((layout) => {
         if (this.next === next) next.layout = layout;
@@ -199,6 +202,7 @@ export class Streamer {
     const r = runFor(n.work, budget);
     if (!r.done) return null;
     this.centre = { x: this.next.x, y: this.next.y };
+    r.value.prepared = this.next.prepared;
     // Only the tiles of the region in use are kept.
     this.store.keep(this.next.keys);
     this.next = null;

@@ -23,6 +23,8 @@ import type { Work } from './work.ts';
 import { type World, worldWork } from './world';
 
 export interface Region {
+  /** What it was asked for as, of the workers that make things ready for it ahead (see Streamer's `prepare`). */
+  prepared?: number;
   map: RegionMap;
   world: World;
   terrain: Terrain;

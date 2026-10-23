@@ -50,7 +50,12 @@ export class GroundLayer {
     try {
       if (typeof OffscreenCanvas !== 'undefined' && typeof Worker !== 'undefined' && typeof createImageBitmap !== 'undefined') {
         this.worker = new Worker(new URL('./groundWorker.ts', import.meta.url), { type: 'module' });
-        this.worker.onmessage = (e: MessageEvent<FromWorker>) => this.painted_(e.data);
+        this.worker.onmessage = (e: MessageEvent<FromWorker>) => {
+          const m = e.data;
+          if (m.type === 'painted') this.painted_(m);
+          // (It couldn't make the region ready itself: it's sent.)
+          else this.tell({ type: 'map', map: this.world.map, chunks: this.world.chunks });
+        };
         // If it can't paint after all, the pieces are painted here.
         this.worker.onerror = () => this.noWorker();
         this.tell({ type: 'map', map: world.map, chunks: world.chunks });
@@ -65,10 +70,30 @@ export class GroundLayer {
    * The next region of the map (see streamer.ts). The pieces already drawn are
    * kept: they're the same (they're only ever round the view, well inside both).
    */
-  use(world: World, terrain: Terrain): void {
+  use(world: World, terrain: Terrain, prepared?: number): void {
     this.world = world;
     this.terrain = terrain;
-    this.tell({ type: 'map', map: world.map, chunks: world.chunks });
+    if (prepared === undefined) {
+      this.tell({ type: 'map', map: world.map, chunks: world.chunks });
+      return;
+    }
+    // Made ready in the worker already (see `prepare`): only the trees felled (their shadows gone) told it.
+    this.tell({ type: 'use', id: prepared });
+    const trees = world.map.trees;
+    const felled: number[] = [];
+    for (let i = 0; i < trees.length; i += 4) if (trees[i + 2] === 0) felled.push(i / 4);
+    if (felled.length) this.tell({ type: 'felled', felled });
+  }
+
+  /**
+   * The next region (its tiles, by `keys`, and where it is), made ready in the worker ahead of being moved into: its id, to
+   * `use` it by (or undefined: there's no worker, and it's sent).
+   */
+  prepare(keys: string[], bounds: { x0: number; y0: number; x1: number; y1: number }): number | undefined {
+    if (!this.worker) return undefined;
+    const id = ++this.requests;
+    this.tell({ type: 'prepare', id, base: new URL('map/', location.href).href, keys, bounds });
+    return id;
   }
 
   /**
@@ -161,7 +186,7 @@ export class GroundLayer {
   }
 
   /** The worker's painted a piece: in it goes (unless it's been asked for again since, or it's no longer wanted). */
-  private painted_({ id, i, j, picture }: FromWorker): void {
+  private painted_({ id, i, j, picture }: Extract<FromWorker, { type: 'painted' }>): void {
     const key = chunkKey(i, j);
     if (this.asked.get(key) !== id) {
       picture.close();
