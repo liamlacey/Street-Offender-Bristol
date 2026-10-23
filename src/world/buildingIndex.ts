@@ -19,6 +19,8 @@ export const cellKey = (cx: number, cy: number) => (cx + 1024) * 4096 + (cy + 10
 /** A building: its box, the height of the ground it stands on, px, its solar panels; and its look, once it's been near the view. */
 export interface BuildingEntry {
   b: Building;
+  /** Its id in the whole map (the same building, in each region it's in). */
+  id: number;
   x0: number;
   y0: number;
   x1: number;
@@ -43,7 +45,8 @@ export function buildingIndex(world: World, terrain: Terrain): BuildingIndex {
 export function* buildingIndexWork(world: World, terrain: Terrain): Work<BuildingIndex> {
   const pause = every(400);
   const all: BuildingEntry[] = [];
-  for (const b of world.map.buildings) {
+  const ids = (world.map as { ids?: { buildings: number[] } }).ids?.buildings;
+  for (const [k, b] of world.map.buildings.entries()) {
     if (!b.drawn) continue;
     if (pause()) yield;
     // Its lowest corner, so it never floats above the ground on a slope.
@@ -54,7 +57,7 @@ export function* buildingIndexWork(world: World, terrain: Terrain): Work<Buildin
       ground = Math.min(ground, terrain.at(ring[i], ring[i + 1]) * terrain.px);
       [x0, y0, x1, y1] = [Math.min(x0, ring[i]), Math.min(y0, ring[i + 1]), Math.max(x1, ring[i]), Math.max(y1, ring[i + 1])];
     }
-    all.push({ b, x0, y0, x1, y1, ground, panels: [], look: null });
+    all.push({ b, id: ids?.[k] ?? k, x0, y0, x1, y1, ground, panels: [], look: null });
   }
   all.sort((a, b) => a.ground + a.b.top - (b.ground + b.b.top));
   yield;

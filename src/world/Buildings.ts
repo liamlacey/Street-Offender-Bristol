@@ -3,7 +3,6 @@ import { type BuildingLook, FLOOR, buildingLook } from './buildingLook';
 import { type BuildingEntry, type BuildingIndex, CELL, cellKey } from './buildingIndex';
 import { pointInRing } from '../map/osm';
 import type { Perspective } from './perspective';
-import type { Building } from '../map/osm';
 
 /** How far beyond the view a building is still drawn (its walls lean in from out there), px. */
 const PAD = 60;
@@ -38,16 +37,18 @@ export class Buildings {
 
   /** The next region's buildings (see streamer.ts): those in both keep their looks, worked out already. */
   use(index: BuildingIndex): void {
-    const looks = new Map<Building, BuildingEntry['look']>();
+    // (By their ids in the whole map: each region's buildings are its own copies. Worked out again, every one round the view at
+    // once, it held the game up for tens of milliseconds.)
+    const looks = new Map<number, NonNullable<BuildingEntry['look']>>();
     for (const i of this.looked) {
       const e = this.index.all[i];
-      if (e.look) looks.set(e.b, e.look);
+      if (e.look) looks.set(e.id, e.look);
     }
     this.looked.clear();
     index.all.forEach((e, i) => {
-      const look = looks.get(e.b);
+      const look = looks.get(e.id);
       if (!look) return;
-      e.look = look;
+      e.look = { ...look, ground: e.ground };
       this.looked.add(i);
     });
     this.index = index;
