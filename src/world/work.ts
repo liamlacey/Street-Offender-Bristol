@@ -26,8 +26,19 @@ export function runFor<T>(work: Work<T>, ms: number): { done: true; value: T } |
   }
 }
 
-/** A pause every `n` times it's called (for the long loops): `if (tick()) yield;`. */
+/** When any of them last paused, ms (see `every`). */
+let paused = 0;
+/** No pause sooner than this after the last, ms: each one's a little garbage, and some loops pause every time round. */
+const BETWEEN = 0.25;
+
+/** A pause every `n` times it's called (for the long loops), if it's been a moment since the last: `if (tick()) yield;`. */
 export function every(n: number): () => boolean {
   let k = 0;
-  return () => ++k % n === 0;
+  return () => {
+    if (++k % n !== 0) return false;
+    const now = performance.now();
+    if (now - paused < BETWEEN) return false;
+    paused = now;
+    return true;
+  };
 }
