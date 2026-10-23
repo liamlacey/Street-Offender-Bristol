@@ -53,7 +53,7 @@ export class GroundLayer {
         this.worker.onmessage = (e: MessageEvent<FromWorker>) => this.painted_(e.data);
         // If it can't paint after all, the pieces are painted here.
         this.worker.onerror = () => this.noWorker();
-        this.tell({ type: 'map', map: world.map });
+        this.tell({ type: 'map', map: world.map, chunks: world.chunks });
       }
     } catch {
       this.noWorker();
@@ -68,7 +68,7 @@ export class GroundLayer {
   use(world: World, terrain: Terrain): void {
     this.world = world;
     this.terrain = terrain;
-    this.tell({ type: 'map', map: world.map });
+    this.tell({ type: 'map', map: world.map, chunks: world.chunks });
   }
 
   /**
@@ -104,9 +104,17 @@ export class GroundLayer {
     if (all || !this.worker) {
       for (const [i, j] of all ? missing : missing.slice(0, PER_FRAME)) this.draw(i, j).update(perspective);
     } else {
+      // Any in sight the worker's not got to (it's behind, at speed, or busy with a new region's map): painted here, now
+      // (a moment's pause, rather than the road not there); the worker's, when it comes, let go.
+      // (Two at most a frame: a row of them coming into sight at once.)
+      const seen = missing.filter(([i, j]) => (i + 1) * CHUNK > view.left && i * CHUNK < view.right && (j + 1) * CHUNK > view.top && j * CHUNK < view.bottom);
+      for (const [i, j] of seen.slice(0, 2)) {
+        this.asked.delete(chunkKey(i, j));
+        this.draw(i, j).update(perspective);
+      }
       for (const [i, j] of missing) {
         if (this.asked.size >= IN_HAND) break;
-        if (!this.asked.has(chunkKey(i, j))) this.ask(i, j);
+        if (!this.asked.has(chunkKey(i, j)) && !this.pieces.has(chunkKey(i, j))) this.ask(i, j);
       }
     }
     for (const piece of this.pieces.values()) piece.sheet.setVisible(piece.used === this.frame);
