@@ -10,6 +10,8 @@ import {
   THINGS,
   type Toughness,
   HUT,
+  REMAINS_TOUGH,
+  WRECK_EASIER,
   REMAINS,
   WALLS,
   breaks,
@@ -137,7 +139,10 @@ export class Wreckage {
    */
   hit(car: CarState, level: number): void {
     const weight = this.hooks.weight();
+    const now = this.scene.time.now / 1000;
     for (const post of this.posts[level].near(car.x, car.y, car.length ?? CAR_LENGTH) as Post[]) {
+      // (What's only just been broken isn't broken again by the same hit.)
+      if (post.broken && now - (post.brokenAt ?? -Infinity) < FRESH) continue;
       const tough = this.toughness(post);
       const speed = impactSpeed(car, post.x, post.y, post.r + 1);
       if (speed > 0 && breaks(tough, speed, weight)) this.knockDown(post, car, tough, speed, level);
@@ -180,15 +185,18 @@ export class Wreckage {
    * into smaller pieces.
    */
   smash(body: LooseProp, car: CarState, speed: number): boolean {
-    const b = BREAKUP[body.kind as keyof typeof BREAKUP];
-    if (!b || !breaks(b, speed, this.hooks.weight())) return false;
+    const found = BREAKUP[body.kind as keyof typeof BREAKUP];
+    if (!found) return false;
+    // (A wreck breaks up again, more easily.)
+    const b = body.wrecked ? { ...found, strength: found.strength * WRECK_EASIER } : found;
+    if (!breaks(b, speed, this.hooks.weight())) return false;
     // Not what's only just broken off, in front of the car that broke it: it'd break up again at once.
     if (body.born !== undefined && this.scene.time.now / 1000 - body.born < FRESH) return false;
-    // (A wreck's only shoved after.)
-    if (body.wrecked) return false;
-    // Something that stood there (a bench, a cabin, a skip, a slide, the rubbish dumped): its wreck's left where it was. A bit of what's broken breaks into smaller bits.
-    const wreck = !!body.home;
-    if (wreck) body.wrecked = true;
+    // Something that stood there (a bench, a cabin, a skip, a slide, the rubbish dumped): its wreck's left where it was. A bit
+    // of what's broken, or a wreck hit again, breaks into smaller bits.
+    const wreck = !!body.home && !body.wrecked;
+    // (A wreck's only just been made: not broken again by the same hit.)
+    if (wreck) Object.assign(body, { wrecked: true, born: this.scene.time.now / 1000 });
     else body.gone = true;
     const rand = this.rand.frac.bind(this.rand);
     const size = body.r + (body.length ?? 0) / 2;
@@ -229,16 +237,29 @@ export class Wreckage {
   }
 
   private toughness(post: Post): Toughness {
+    if (post.broken) return REMAINS_TOUGH;
     if (post.thing === 'tree') return treeToughness(this.hooks.treeHeight(post.index) / 8);
     return THINGS[post.thing];
   }
 
   private knockDown(post: Post, car: CarState, tough: Toughness, speed: number, level: number): void {
-    // (A statue's plinth and a fountain's basin are left, broken, low enough to drive over: see REMAINS.)
-    post.gone = true;
-    if (REMAINS.has(post.thing)) post.broken = true;
-    this.hooks.knockedDown(post, level);
     const rand = this.rand.frac.bind(this.rand);
+    if (post.broken) {
+      // What was left of a statue's plinth or a fountain's basin, hit again: smashed to rubble.
+      post.gone = true;
+      this.hooks.knockedDown(post, level);
+      for (const [kind, count] of [['rubble', 6], ['brick', 4]] as [Parameters<typeof debris>[0], number][]) {
+        for (const d of debris(kind, count, post.x, post.y, car.vx * 0.6, car.vy * 0.6, rand, post.r)) this.hooks.addDebris(d, level);
+      }
+      this.effects.burst('stone', post.x, post.y, 24);
+      this.hooks.audio()?.shatter('stone', speed);
+      giveWay(car, tough, this.hooks.weight());
+      return;
+    }
+    // (A statue's plinth and a fountain's basin are left, broken, still in the way: see REMAINS.)
+    if (REMAINS.has(post.thing)) Object.assign(post, { broken: true, brokenAt: this.scene.time.now / 1000 });
+    else post.gone = true;
+    this.hooks.knockedDown(post, level);
     const z = this.hooks.groundAt(post.x, post.y);
     if (post.thing === 'fountain') {
       // Its basin cracked open where it stands, and the stone broken off it strewn the way it was hit.

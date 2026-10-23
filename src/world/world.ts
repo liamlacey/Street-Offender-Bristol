@@ -178,8 +178,10 @@ export function beacons(map: GameMap): { x: number; y: number }[] {
 export interface Post extends Circle {
   thing: ThingKind;
   index: number;
-  /** Knocked down, but what's left of it's still there, broken (see damage.ts's REMAINS): drawn so, and driven over. */
+  /** Knocked down, but what's left of it's still there, broken (see damage.ts's REMAINS): drawn so, and in the way. */
   broken?: boolean;
+  /** When it was broken, s (not broken again by the same hit). */
+  brokenAt?: number;
 }
 
 /** A wall: a building's (no kind: it won't break), or a garden wall, hedge, fence or railing (which will). */

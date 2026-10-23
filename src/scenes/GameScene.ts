@@ -2043,9 +2043,10 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'statue':
       case 'fountain': {
-        // Left standing, broken: drawn so.
+        // Left standing, broken: drawn so; smashed after that, gone.
         const t = this.props[post.index];
         t.broken = true;
+        t.gone = post.gone;
         t.image?.destroy();
         t.image = null;
         break;

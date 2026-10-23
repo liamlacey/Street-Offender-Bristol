@@ -105,9 +105,9 @@ export class Changes {
       if (!inside(p.x, p.y)) continue;
       const same = (posts[p.level].near(p.x, p.y, 1) as Post[]).find((q) => q.thing === p.thing && q.x === p.x && q.y === p.y);
       if (!same) continue;
-      same.gone = true;
-      // (A statue's plinth, a fountain's basin: still there, broken, to be driven over.)
-      if (REMAINS.has(same.thing)) same.broken = true;
+      // (A statue's plinth, a fountain's basin: still there, broken, the first time it's knocked; smashed, the second.)
+      if (REMAINS.has(same.thing) && !same.broken) same.broken = true;
+      else same.gone = true;
       down.push({ post: same, level: p.level });
     }
     return down;
