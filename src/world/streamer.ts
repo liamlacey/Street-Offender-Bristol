@@ -198,7 +198,7 @@ export class Streamer {
     // Begun once its tiles are here and its layout (or that there's none to be had); or now, without it, if time's short.
     if (!n.work && n.tiles && (n.layout !== undefined || time < HURRY)) n.work = this.make(n.tiles, n.bounds, this.making, 0, n.layout);
     if (!n.work) return null;
-    const budget = time < NOW ? Infinity : time < RUSH ? ms * 6 : time < HURRY ? ms * 2.5 : ms;
+    const budget = time < NOW ? Infinity : time < RUSH ? Math.max(ms, 5) * 4 : time < HURRY ? Math.max(ms, 5) * 1.5 : ms;
     const r = runFor(n.work, budget);
     if (!r.done) return null;
     this.centre = { x: this.next.x, y: this.next.y };

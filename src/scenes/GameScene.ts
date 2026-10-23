@@ -280,6 +280,13 @@ export class GameScene extends Phaser.Scene {
   private keys!: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'space' | 'r' | 'f' | 'e' | 'p' | 'esc', Phaser.Input.Keyboard.Key>;
   private input_: CarInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   private accumulator = 0;
+  /**
+   * How long a frame's taken of late, ms, besides making the next region ready (and moving into it), the rendering included:
+   * what's left of the frame is what making it ready gets (see `making`). When it started, this frame; how long that's had.
+   */
+  private busy = 10;
+  private frameBegan = 0;
+  private streamed = 0;
   /** Where the car was before the last physics step: it's drawn (and followed) between that and where it is now, by how far into the next step the frame is, so it moves smoothly whatever the screen's refresh rate. */
   private prev = { x: 0, y: 0, heading: 0 };
   /** Where it's drawn this frame. */
@@ -470,13 +477,32 @@ export class GameScene extends Phaser.Scene {
     // Web Audio only (the old HTML5 audio fallback can't synthesise).
     const sound = this.sound as Phaser.Sound.WebAudioSoundManager;
     if ('context' in sound && sound.context) this.audio = new CarAudio(sound.context, sound.destination);
+    const began = () => {
+      this.frameBegan = performance.now();
+      this.streamed = 0;
+    };
+    const ended = () => {
+      if (!this.frameBegan) return;
+      const took = performance.now() - this.frameBegan - this.streamed;
+      // (Quick to rise, slow to fall: a busy stretch is made room for straight away.)
+      this.busy = took > this.busy ? took * 0.5 + this.busy * 0.5 : took * 0.1 + this.busy * 0.9;
+    };
+    this.game.events.on(Phaser.Core.Events.PRE_STEP, began);
+    this.game.events.on(Phaser.Core.Events.POST_RENDER, ended);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.game.events.off(Phaser.Core.Events.PRE_STEP, began);
+      this.game.events.off(Phaser.Core.Events.POST_RENDER, ended);
       this.audio?.destroy();
       this.audio = null;
       this.events.off(RESET_EVENT, this.resetCar, this);
       this.events.off(ACTION_EVENT, this.getInOrOut, this);
       this.events.off(PAUSE_EVENT, this.openMenu, this);
     });
+  }
+
+  /** How long, ms, the next region's made ready for this frame: what's left of a frame, as long as they've been taking. */
+  private making(): number {
+    return Math.min(MAKING[1], Math.max(MAKING[0], FRAME - SPARE - this.busy));
   }
 
   /** Where the next region's ids start: well on from this one's (see the systems' `adopt`). */
@@ -758,12 +784,14 @@ export class GameScene extends Phaser.Scene {
     if (!this.ready) return;
     const dt = Math.min(deltaMs / 1000, 0.1);
     // Gone far enough from the middle of the region: the next one made ready, a little each frame; and once it is, into it.
+    const t0 = performance.now();
     perf.start('stream');
-    const next = this.streamer.update(this.car.x, this.car.y, MAKING, this.car.vx, this.car.vy);
+    const next = this.streamer.update(this.car.x, this.car.y, this.making(), this.car.vx, this.car.vy);
     perf.stop('stream');
     perf.start('enter');
     if (next) this.enter(next, true);
     perf.stop('enter');
+    this.streamed = performance.now() - t0;
     this.readInput();
     this.accumulator = Math.min(this.accumulator + dt, PHYSICS_DT * MAX_STEPS_PER_FRAME);
     perf.start('physics');
@@ -2247,8 +2275,13 @@ const shapes = new Map<string, Shape>();
 const GET_OUT_SPEED = 3 * 8;
 /** Round the view, how far what's there is carried over from one region of the map to the next, px (see `enter`). */
 const KEEP = 100 * 8;
-/** How long the next region's made ready for each frame, ms (see streamer.ts). */
-const MAKING = 5;
+/**
+ * How long a frame is, ms (60 a second), and how much of it's kept spare (it's not all ours: the browser's, the phone's); the
+ * least and most of each frame the next region's made ready for, ms (see streamer.ts), whatever's spare.
+ */
+const FRAME = 1000 / 60;
+const SPARE = 2.5;
+const MAKING = [1.5, 8];
 
 /** Waits `n` frames (for the loading screen to be drawn). */
 async function frames(n: number): Promise<void> {
