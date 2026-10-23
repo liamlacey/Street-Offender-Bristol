@@ -108,12 +108,23 @@ export function* playgroundsWork(map: GameMap): Work<PlayThing[]> {
     const want = Math.min(PLAY_MOST, Math.max(1, Math.floor(area / PER)));
     let tries = 0;
     const shaded = (x: number, y: number) => nearTrees.some(([tx, ty, r]) => Math.hypot(tx - x, ty - y) < r);
+    // In the open first, then under the trees (the same for each thing put down: worked out once).
+    const open1: [number, number, number][] = [];
+    const under: [number, number, number][] = [];
+    for (const [k, p] of spots.entries()) {
+      (shaded(p[0], p[1]) ? under : open1).push(p);
+      if (k % 400 === 399) yield;
+    }
+    yield;
+    const order = [...open1, ...under];
     for (const kind of ORDER) {
       if (placed.length >= want) break;
+      if (pause()) yield;
       const [len, wide] = PLAY_SIZE[kind];
-      // Turned along the playground or across it, by where it is; in the open first, then under the trees.
-      for (const [x, y, h] of [...spots.filter(([x, y]) => !shaded(x, y)), ...spots.filter(([x, y]) => shaded(x, y))]) {
+      // Turned along the playground or across it, by where it is.
+      for (const [x, y, h] of order) {
         if (++tries > 4000) break;
+        if (tries % 150 === 0) yield;
         const turn = angle + (h % 2 ? Math.PI / 2 : 0) + (h % 4 >= 2 ? Math.PI : 0);
         const [hl, hw] = [len / 2, wide / 2];
         const [cx, cy] = [Math.cos(turn), Math.sin(turn)];

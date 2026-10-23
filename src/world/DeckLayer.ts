@@ -4,6 +4,7 @@ import { drawDeck } from './ground';
 import { artPalette } from './groundArt';
 import type { Perspective } from './perspective';
 import { TerrainSheet } from './TerrainSheet';
+import { softTexture } from './canvas';
 
 /** The pieces a deck's picture is drawn in, px (a long bridge on the slant would be a huge picture in one). */
 const PIECE = 512;
@@ -77,16 +78,17 @@ export class DeckLayer {
     const deck = this.decks.decks[i];
     const [w, h] = [Math.ceil(Math.min(PIECE, s.x1 - px)), Math.ceil(Math.min(PIECE, s.y1 - py))];
     const key = `deck:${this.made++}`;
-    const texture = this.scene.textures.createCanvas(key, w, h)!;
+    const texture = softTexture(this.scene, key, w, h);
     const ctx = texture.context;
     ctx.translate(-px, -py);
     drawDeck(ctx, deck.road, this.palette, this.decks.raised(deck), this.decks.edges(deck));
+    // (Its parapet's broken stretches cut out first: then sent to the GPU once.)
+    for (const [ax, ay, bx, by] of s.broken) if (touches(px, py, w, h, ax, ay, bx, by)) this.cutPiece(texture, px, py, [ax, ay], [bx, by]);
     texture.refresh();
     // Each corner at the deck's height where it is (beyond its ends, the end's height).
     const height = (x: number, y: number) => this.decks.height(deck, nearestAlong(deck.road.pts, x, y).along);
     const sheet = new TerrainSheet(this.scene, key, px, py, w, h, 0, height);
     s.pieces.set(at, { sheet, key, texture });
-    for (const [ax, ay, bx, by] of s.broken) this.cutPiece(texture, px, py, [ax, ay], [bx, by]);
     return sheet;
   }
 
@@ -122,14 +124,17 @@ export class DeckLayer {
     });
     for (const s of best < 0 ? [] : [this.sheets[best]]) {
       s.broken.push([from[0], from[1], to[0], to[1]]);
+      // (Only the pieces it's in: each sent to the GPU again, once.)
       for (const [at, p] of s.pieces) {
         const [px, py] = at.split(',').map(Number);
+        if (!touches(px, py, p.texture.width, p.texture.height, from[0], from[1], to[0], to[1])) continue;
         this.cutPiece(p.texture, px, py, from, to);
+        p.texture.refresh();
       }
     }
   }
 
-  /** That stretch of a parapet cut out of a piece of its deck's picture. */
+  /** That stretch of a parapet cut out of a piece of its deck's picture (not yet sent to the GPU: the caller refreshes it). */
   private cutPiece(texture: Phaser.Textures.CanvasTexture, px: number, py: number, from: [number, number], to: [number, number]): void {
     const ctx = texture.context;
     ctx.save();
@@ -150,7 +155,6 @@ export class DeckLayer {
       ctx.fill();
     }
     ctx.restore();
-    texture.refresh();
   }
 
   /** Every piece out of sight (a tunnel's, while you're not down in it). */
@@ -194,6 +198,12 @@ export class DeckLayer {
       }
     }
   }
+}
+
+/** Whether a stretch of parapet (its broken ends a little round it) reaches into a piece's picture, w by h at (px, py). */
+function touches(px: number, py: number, w: number, h: number, ax: number, ay: number, bx: number, by: number): boolean {
+  const pad = 6;
+  return Math.max(ax, bx) > px - pad && Math.min(ax, bx) < px + w + pad && Math.max(ay, by) > py - pad && Math.min(ay, by) < py + h + pad;
 }
 
 /** Whether a line comes within `pad` px of a PIECE square (its corner at (px, py)). */

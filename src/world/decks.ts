@@ -394,7 +394,7 @@ export class Decks {
     const walls: Segment[] = [];
     for (const d of this.decks) {
       yield;
-      walls.push(...this.edges(d).parapets);
+      walls.push(...(yield* this.edgesWork(d)).parapets);
     }
     return walls;
   }
@@ -409,6 +409,11 @@ export class Decks {
    * a cycleway or a pavement within a road's, nothing: there's no edge there).
    */
   edges(d: Deck): DeckEdges {
+    return drain(this.edgesWork(d));
+  }
+
+  /** The same, a little at a time (see work.ts): a long viaduct, with others beside it, takes a while. */
+  *edgesWork(d: Deck): Work<DeckEdges> {
     const had = this.edgesOf.get(d);
     if (had) return had;
     const edges: DeckEdges = { parapets: [], joins: [] };
@@ -462,6 +467,7 @@ export class Decks {
             else if (what !== 'on') edges.joins.push({ ...seg, nx: ox, ny: oy, gap: Math.max(...gaps) + PARAPET_OUT });
           };
           for (let k = 1; k <= n; k++) {
+            if (k % 25 === 0) yield;
             const now = beside(t0 + ((t1 - t0) * k) / n);
             const same = now === what || (typeof now === 'number' && typeof what === 'number');
             if (same) {

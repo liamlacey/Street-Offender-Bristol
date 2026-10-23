@@ -86,7 +86,8 @@ export function* regionWork(map: RegionMap, ids: FirstIds, surfaces: (world: Wor
     }
   }
   stage(0.3, 'Putting up the buildings');
-  const decks = new Decks(map.roads, (x, y) => terrain.at(x, y) * terrain.px, waterOf(map));
+  // (The world's, their edges worked out as it was made: not again, all at once, as each is first drawn.)
+  const decks = world.decks ?? new Decks(map.roads, (x, y) => terrain.at(x, y) * terrain.px, waterOf(map));
   const tunnels = new Decks(map.roads, (x, y) => terrain.at(x, y) * terrain.px, () => false, true);
   yield;
   const ledges = new Ledges(map);

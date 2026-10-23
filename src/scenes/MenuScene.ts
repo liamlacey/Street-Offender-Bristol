@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser';
 import { type Going, OVERVIEW_SCALE, type Overview, type OverviewRoad, type Spot, drawOverview, jumpSpot } from '../world/overview';
+import { softTexture } from '../world/canvas';
 
 /** What the game hands the menu as it pauses. */
 export interface MenuData {
@@ -134,7 +135,7 @@ export class MenuScene extends Phaser.Scene {
           .overview()
           .then((o) => {
             const s = Math.min(OVERVIEW_SCALE, MOST_SIDE / Math.max(o.width, o.height));
-            const tex = this.textures.createCanvas(OVERVIEW, Math.ceil(o.width * s), Math.ceil(o.height * s))!;
+            const tex = softTexture(this, OVERVIEW, Math.ceil(o.width * s), Math.ceil(o.height * s));
             drawOverview(tex.context, o, s);
             tex.refresh();
             this.upscale = OVERVIEW_SCALE / s;

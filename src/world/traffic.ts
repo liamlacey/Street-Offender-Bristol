@@ -1572,7 +1572,7 @@ export class Traffic {
     }
     if (r.s === 0) {
       // Then going once there's nothing in it (but those in their bays, out of the way).
-      for (const o of obstacles) {
+      for (const o of this.obstaclesNear(obstacles, v.x, v.y, r.path.length + v.length, this.nearFor.back)) {
         if (o.id === v.id || (o.id >= 0 && this.inBay(o as Vehicle))) continue;
         if (this.inZone(r, o)) return;
       }
@@ -1580,7 +1580,7 @@ export class Traffic {
       // (And stopping, if anything's got behind it: not what's waiting for it, stopped.)
       const [x, y, ux, uy] = pathAt(r.path, Math.min(r.path.length, r.s + 1.5 * M));
       const [bx, by] = [x + (ux * v.length) / 2, y + (uy * v.length) / 2];
-      for (const o of obstacles) {
+      for (const o of this.obstaclesNear(obstacles, bx, by, v.length + 4 * M, this.nearFor.back)) {
         if (o.id === v.id || (o.id >= 0 && (this.inBay(o as Vehicle) || (o as Vehicle).behind === v.id))) continue;
         if (Math.abs(o.x - bx) < o.length && Math.abs(o.y - by) < o.length && distToBody(o, bx, by) < v.r + 0.3 * M) return;
       }
@@ -1896,10 +1896,40 @@ export class Traffic {
     }
   }
 
-  private obstaclesNear(obstacles: Obstacle[], x: number, y: number, reach: number): Obstacle[] {
-    // (Few about, or the index not made: all of them.)
-    if (!this.obstacleCells.size) return obstacles;
-    const out = this.nearBuf;
+  /**
+   * The parked cars standing still, by which square they're in: made again only when one's moved, been knocked (or come to
+   * rest), or come or gone (there are thousands of them: indexing them every step held each frame up).
+   */
+  private restingCells = new Map<number, Obstacle[]>();
+  private restingSeen: Vehicle[] = [];
+  private restingAt: number[] = [];
+
+  private indexResting(): void {
+    const parked = this.parked;
+    let same = parked.length === this.restingSeen.length;
+    for (let k = 0; same && k < parked.length; k++) {
+      const v = parked[k];
+      same = v === this.restingSeen[k] && (v.mode === 'parked' ? v.x : NaN) === this.restingAt[k * 2] && v.y === this.restingAt[k * 2 + 1];
+    }
+    if (same) return;
+    this.restingCells.clear();
+    this.restingSeen = [...parked];
+    this.restingAt = [];
+    for (const v of parked) {
+      // (A NaN for one that isn't standing still: it's moving, and never the same, till it is again.)
+      this.restingAt.push(v.mode === 'parked' ? v.x : NaN, v.y);
+      if (v.mode !== 'parked') continue;
+      const key = Math.floor(v.x / OBSTACLE_CELL) * 100003 + Math.floor(v.y / OBSTACLE_CELL);
+      let list = this.restingCells.get(key);
+      if (!list) this.restingCells.set(key, (list = []));
+      list.push(v);
+    }
+  }
+
+  /** What's within `reach` of a point (and a little more), moving or standing still: into `out` (each caller its own, so one's list isn't changed under it by another). */
+  private obstaclesNear(obstacles: Obstacle[], x: number, y: number, reach: number, out: Obstacle[] = this.nearBuf): Obstacle[] {
+    // (The index not made: all of them, and those standing still.)
+    if (!this.obstacleCells.size && !this.restingCells.size) return obstacles;
     out.length = 0;
     // (Anything long, a bus, reaches a little into the next square: looked for a square further round.)
     const pad = reach + 20 * M;
@@ -1907,10 +1937,17 @@ export class Traffic {
       for (let j = Math.floor((y - pad) / OBSTACLE_CELL); j <= Math.floor((y + pad) / OBSTACLE_CELL); j++) {
         const list = this.obstacleCells.get(i * 100003 + j);
         if (list) for (let k = 0; k < list.length; k++) out.push(list[k]);
+        const still = this.restingCells.get(i * 100003 + j);
+        if (still) for (let k = 0; k < still.length; k++) out.push(still[k]);
       }
     }
     return out;
   }
+
+  /** The obstacles this step (see update), for what's asked between steps. */
+  private lastObstacles: Obstacle[] = [];
+  /** Each check's own list of what's near (see obstaclesNear). */
+  private readonly nearFor = { clear: [] as Obstacle[], oncoming: [] as Obstacle[], beside: [] as Obstacle[], back: [] as Obstacle[], rejoin: [] as Obstacle[], behind: [] as Obstacle[], bump: [] as Obstacle[] };
 
   /** The point `d` px on (or back) from where it is along its way. */
   private along(v: Vehicle, d: number): [number, number, number] {
@@ -1986,6 +2023,8 @@ export class Traffic {
     }
     const obstacles = this.obstacles(player);
     this.indexObstacles(obstacles);
+    this.indexResting();
+    this.lastObstacles = obstacles;
     this.sirens = this.vehicles.filter((v) => v.siren && v.mode === 'drive');
     this.frame++;
     const order = this.order;
@@ -2028,8 +2067,9 @@ export class Traffic {
     const out: Obstacle[] = [{ id: -1, x: player.x, y: player.y, angle: player.heading, r: player.width / 2, length: player.length, vx: player.vx, vy: player.vy, level: player.level }, ...this.pedestrians];
     for (const v of this.vehicles) out.push(v);
     // The parked cars too: by the kerb, they're out of the way of what's in its lane (see `drive`), but not of anything out of
-    // it, overtaking or going round (or one on a call, weaving through).
-    for (const v of this.parked) out.push(v);
+    // it, overtaking or going round (or one on a call, weaving through). Those standing still are kept by where they are apart
+    // (see `indexResting`: there are thousands, and they hardly ever move): only those knocked about are here.
+    for (const v of this.parked) if (v.mode !== 'parked') out.push(v);
     return out;
   }
 
@@ -2044,10 +2084,21 @@ export class Traffic {
     // Points along the way ahead (and which level each is on: what's under a bridge isn't in the way of what's on it), as x, y, level, d.
     const samples = this.sampleAhead(v, front, look);
     const count = this.sampled;
+    // (The box they're in: anything well out of it can't be in the way, and isn't looked at point by point.)
+    let [bx0, by0, bx1, by1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let k = 0; k < count; k += 4) {
+      if (samples[k] < bx0) bx0 = samples[k];
+      if (samples[k] > bx1) bx1 = samples[k];
+      if (samples[k + 1] < by0) by0 = samples[k + 1];
+      if (samples[k + 1] > by1) by1 = samples[k + 1];
+    }
     const mine = laneOf(v);
     for (const o of this.obstaclesNear(obstacles, v.x, v.y, look + 60)) {
       if (o.id === v.id) continue;
       if (Math.abs(o.x - v.x) > look + 60 || Math.abs(o.y - v.y) > look + 60) continue;
+      // (Nowhere near the way ahead: out of the box its points are in, by more than it and we could reach.)
+      const far = v.r + o.r + o.length / 2;
+      if (o.x < bx0 - far || o.x > bx1 + far || o.y < by0 - far || o.y > by1 + far) continue;
       // (A car parked in its bay is no matter to one in its lane: only to one out of it.)
       if (atKerb(o) && !v.passing && !v.siren) continue;
       // (A bus in its bay at a bus station is out of the way, its tail by the way round: till it starts backing out.)
@@ -2070,6 +2121,7 @@ export class Traffic {
       // (Not one turning off it, though, or about to: it's coming across.)
       if (oncoming && theirs && mine && theirs.road !== mine.road && !this.turningAcross(o as Vehicle)) continue;
       const reach = oncoming ? (v.r + o.r) * 0.8 : v.r + o.r * 0.85;
+      const reach2 = reach * reach;
       for (let k = 0; k < count; k += 4) {
         const x = samples[k];
         const y = samples[k + 1];
@@ -2078,7 +2130,8 @@ export class Traffic {
         if (d >= gap) break;
         if (level !== o.level) continue;
         const t = Math.max(-end, Math.min(end, (x - o.x) * cx + (y - o.y) * cy));
-        if (Math.hypot(x - o.x - cx * t, y - o.y - cy * t) > reach) continue;
+        const [ex, ey] = [x - o.x - cx * t, y - o.y - cy * t];
+        if (ex * ex + ey * ey > reach2) continue;
         // It's in the way here.
         const [, , ux, uy] = this.direction(v, d + front);
         gap = Math.max(0, d - o.r * 0.5);
@@ -2455,8 +2508,8 @@ export class Traffic {
   /** Whether there's room to back up a few metres: nothing close behind. */
   private roomBehind(v: Vehicle): boolean {
     const [cx, cy] = [Math.cos(v.angle), Math.sin(v.angle)];
-    for (const o of [...this.vehicles, ...this.parked]) {
-      if (o === v || o.level !== v.level) continue;
+    for (const o of this.obstaclesNear(this.lastObstacles, v.x, v.y, v.length + 6 * M, this.nearFor.behind)) {
+      if (o === v || o.id < 0 || o.level !== v.level) continue;
       const [dx, dy] = [o.x - v.x, o.y - v.y];
       const behind = -(dx * cx + dy * cy);
       const across = Math.abs(dx * cy - dy * cx);
@@ -2692,7 +2745,8 @@ export class Traffic {
     const [cx, cy] = [Math.cos(v.angle), Math.sin(v.angle)];
     const speed = Math.max(v.speed, 6 * M);
     const time = length / speed + 1.5;
-    for (const o of obstacles) {
+    // (Within 200 m ahead: what's round the middle of that.)
+    for (const o of this.obstaclesNear(obstacles, v.x + cx * 100 * M, v.y + cy * 100 * M, 105 * M, this.nearFor.oncoming)) {
       if (o.id === v.id || o.level !== v.level) continue;
       const ahead = (o.x - v.x) * cx + (o.y - v.y) * cy;
       if (ahead < -v.length || ahead > 200 * M) continue;
@@ -2744,7 +2798,7 @@ export class Traffic {
   /** Whether anything's beside it on one side (+1 its left, -1 its right) within `reach` px of moving over. */
   private beside(v: Vehicle, obstacles: Obstacle[], side: number, reach: number): boolean {
     const [cx, cy] = [Math.cos(v.angle), Math.sin(v.angle)];
-    for (const o of obstacles) {
+    for (const o of this.obstaclesNear(obstacles, v.x, v.y, v.length + reach + 4 * M, this.nearFor.beside)) {
       if (o.id === v.id || o.level !== v.level) continue;
       const [dx, dy] = [o.x - v.x, o.y - v.y];
       const along = dx * cx + dy * cy;
@@ -2769,7 +2823,7 @@ export class Traffic {
   /** Whether it's clear to go at the end of a lane that gives way: nothing coming to the junction, or in it. */
   private clearAt(v: Vehicle, lane: Lane, obstacles: Obstacle[], hurry = false): boolean {
     const node = this.nodes[lane.to];
-    for (const o of obstacles) {
+    for (const o of this.obstaclesNear(obstacles, node.x, node.y, SIGHT, this.nearFor.clear)) {
       if (o.id === v.id || o.level !== v.level) continue;
       const dx = node.x - o.x;
       const dy = node.y - o.y;
@@ -2852,7 +2906,7 @@ export class Traffic {
     // Something in the way of where it's going: wait.
     const [hx, hy] = [Math.cos(v.angle) * (reverse ? -1 : 1), Math.sin(v.angle) * (reverse ? -1 : 1)];
     const reach = v.length / 2 + 1.2 * M;
-    const blocked = obstacles.some((o) => o.id !== v.id && o.level === v.level && Math.hypot(v.x + hx * reach - o.x, v.y + hy * reach - o.y) < o.r + o.length / 2);
+    const blocked = this.obstaclesNear(obstacles, v.x + hx * reach, v.y + hy * reach, v.length, this.nearFor.rejoin).some((o) => o.id !== v.id && o.level === v.level && Math.hypot(v.x + hx * reach - o.x, v.y + hy * reach - o.y) < o.r + o.length / 2);
     const speed = blocked ? 0 : reverse ? -CREEP * 0.6 : CREEP;
     const steer = Math.max(-0.6, Math.min(0.6, reverse ? -err : err));
     v.angle += (speed / (v.length * 0.6)) * Math.tan(steer) * dt;
@@ -2868,9 +2922,11 @@ export class Traffic {
   private bump(): void {
     const loose = this.loose();
     if (!loose.length) return;
-    const all = [...this.vehicles, ...this.parked];
     for (const a of loose) {
-      for (const b of all) {
+      // (The vehicles round it: driving, parked, knocked about; not you, nor anyone on foot.)
+      for (const o of this.obstaclesNear(this.lastObstacles, a.x, a.y, a.length, this.nearFor.bump)) {
+        if (o.id < 0 || (this.byId.get(o.id) !== o && this.parkedById.get(o.id) !== o)) continue;
+        const b = o as Vehicle;
         if (a === b || a.level !== b.level) continue;
         if (Math.abs(a.x - b.x) > (a.length + b.length) / 2 || Math.abs(a.y - b.y) > (a.length + b.length) / 2) continue;
         const at = { x: 0, y: 0 };
@@ -2904,7 +2960,9 @@ export class Traffic {
 
   /** Those knocked about, or finding their way back: they bump into things. */
   loose(): Vehicle[] {
-    return [...this.vehicles, ...this.parked].filter((v) => v.mode === 'knocked' || v.mode === 'rejoin');
+    const out: Vehicle[] = [];
+    for (const list of [this.vehicles, this.parked]) for (const v of list) if (v.mode === 'knocked' || v.mode === 'rejoin') out.push(v);
+    return out;
   }
 
   /** Its damage has changed (see dents.ts): badly enough, it limps along with its hazards on; worse, it's broken down where it is, smoking. */

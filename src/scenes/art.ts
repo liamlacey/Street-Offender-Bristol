@@ -6,6 +6,7 @@
 
 import * as Phaser from 'phaser';
 import { VEHICLES } from '../world/traffic';
+import { softTexture } from '../world/canvas';
 
 /** Texture px per game px. */
 export const ART_SCALE = 2;
@@ -69,7 +70,7 @@ export function wreckTexture(scene: Phaser.Scene, key: string): string {
   if (scene.textures.exists(out)) return out;
   const src = scene.textures.get(key).getSourceImage() as HTMLCanvasElement;
   const [w, h] = [src.width, src.height];
-  const texture = scene.textures.createCanvas(out, w, h)!;
+  const texture = softTexture(scene, out, w, h);
   const ctx = texture.context;
   let seed = 7;
   for (const ch of key) seed = (seed * 31 + ch.charCodeAt(0)) % 2147483647;
@@ -125,7 +126,7 @@ export function wreckTexture(scene: Phaser.Scene, key: string): string {
 
 export function canvasTexture(scene: Phaser.Scene, key: string, w: number, h: number, draw: (ctx: Ctx) => void): void {
   if (scene.textures.exists(key)) return;
-  const texture = scene.textures.createCanvas(key, Math.ceil(w * ART_SCALE), Math.ceil(h * ART_SCALE))!;
+  const texture = softTexture(scene, key, Math.ceil(w * ART_SCALE), Math.ceil(h * ART_SCALE));
   const ctx = texture.context;
   ctx.scale(ART_SCALE, ART_SCALE);
   draw(ctx);

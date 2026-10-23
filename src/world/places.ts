@@ -102,7 +102,7 @@ const cache = new WeakMap<GameMap, PlaceLife>();
 export function* placesWork(map: GameMap): Work<PlaceLife> {
   const had = cache.get(map);
   if (had) return had;
-  const pause = every(4);
+  const pause = every(1);
   const out: PlaceLife = { things: [], lines: [], areas: [], spots: [], rings: [], spaces: [], games: [] };
   const places = map.places ?? [];
   const ground = new Ground(map);
@@ -117,7 +117,7 @@ export function* placesWork(map: GameMap): Work<PlaceLife> {
     switch (place.kind) {
       case 'school':
       case 'nursery':
-        school(place, ground, out);
+        yield* school(place, ground, out);
         break;
       case 'pub':
         pub(place, ground, out);
@@ -280,7 +280,7 @@ class Ground {
 }
 
 /** A school's (or a nursery's) grounds laid out, and who's about them. */
-function school(place: Place, ground: Ground, out: PlaceLife): void {
+function* school(place: Place, ground: Ground, out: PlaceLife): Work {
   const ring = place.rings[0];
   if (!ring || ring.length < 6) return;
   const nursery = place.kind === 'nursery';
@@ -305,10 +305,12 @@ function school(place: Place, ground: Ground, out: PlaceLife): void {
   const { ux, uy } = ridgeAxis(ring);
   const square = Math.atan2(uy, ux);
   // Something this big (half along, half across) at the first spot it fits, square to the grounds (or across them).
-  const fit = (hl: number, hw: number, apart: number, tries = 1500): [number, number, number] | null => {
+  // (A pause every so often: a big school's grounds take a while.)
+  const fit = function* (hl: number, hw: number, apart: number, tries = 1500): Work<[number, number, number] | null> {
     let n = 0;
     for (const [x, y] of order) {
       if (++n > tries) break;
+      if (n % 40 === 0) yield;
       for (const angle of [square, square + Math.PI / 2]) {
         const [c, s] = [Math.cos(angle), Math.sin(angle)];
         const pts = [[-1, -1], [1, -1], [1, 1], [-1, 1], [0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].map(([a, b]) => [x + c * hl * a - s * hw * b, y + s * hl * a + c * hw * b]);
@@ -324,7 +326,7 @@ function school(place: Place, ground: Ground, out: PlaceLife): void {
   // The courts: one (two, on big grounds) of the biggest that fit; netball at a primary, five-a-side at a secondary.
   for (let k = 0; k < (area > 6000 * M * M ? 2 : 1) && !nursery; k++) {
     for (const [len, wide] of COURTS) {
-      const at = fit(len / 2, wide / 2, 1.5 * M);
+      const at = yield* fit(len / 2, wide / 2, 1.5 * M);
       if (!at) continue;
       out.areas.push(court(at, len, wide, primary && k === 0 ? 'netball' : 'football'));
       break;
@@ -332,25 +334,25 @@ function school(place: Place, ground: Ground, out: PlaceLife): void {
   }
   // Hopscotch (two at a primary, one at a nursery), by the building.
   for (let k = 0; k < (primary ? 2 : 0); k++) {
-    const at = fit(2.2 * M, 0.7 * M, 0.5 * M);
+    const at = yield* fit(2.2 * M, 0.7 * M, 0.5 * M);
     if (at) out.areas.push(hopscotch(at));
   }
   // The climbing frame, the slide, the spring riders; picnic benches.
-  const put = (kind: string, hl: number, hw: number, apart = 1.2 * M) => {
-    const at = fit(hl, hw, apart);
+  const put = function* (kind: string, hl: number, hw: number, apart = 1.2 * M): Work {
+    const at = yield* fit(hl, hw, apart);
     if (at) out.things.push({ kind, x: r1(at[0]), y: r1(at[1]), angle: +at[2].toFixed(3) });
   };
   if (primary) {
-    put('climbframe', 2 * M, 2 * M);
-    if (rand() < 0.7) put('slide', 3.2 * M, 1.1 * M);
-    put('springy', 1 * M, 1 * M);
-    if (rand() < 0.6) put('springy', 1 * M, 1 * M);
-    if (nursery) put('sandpit', 2.1 * M, 2.1 * M);
+    yield* put('climbframe', 2 * M, 2 * M);
+    if (rand() < 0.7) yield* put('slide', 3.2 * M, 1.1 * M);
+    yield* put('springy', 1 * M, 1 * M);
+    if (rand() < 0.6) yield* put('springy', 1 * M, 1 * M);
+    if (nursery) yield* put('sandpit', 2.1 * M, 2.1 * M);
   }
-  for (let k = 0, n = nursery ? 1 : 2 + Math.floor(rand() * 3); k < n; k++) put('picnic', 1.1 * M, 0.9 * M, 1.5 * M);
+  for (let k = 0, n = nursery ? 1 : 2 + Math.floor(rand() * 3); k < n; k++) yield* put('picnic', 1.1 * M, 0.9 * M, 1.5 * M);
   // The bikes, in a row (a secondary school's).
   if (!primary) {
-    const at = fit(4 * M, 1.1 * M, 0.6 * M);
+    const at = yield* fit(4 * M, 1.1 * M, 0.6 * M);
     if (at) {
       const [x, y, angle] = at;
       const [c, s] = [Math.cos(angle), Math.sin(angle)];

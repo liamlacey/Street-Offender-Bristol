@@ -46,7 +46,7 @@ export function parkLife(map: GameMap): ParkLife {
 export function* parkLifeWork(map: GameMap): Work<ParkLife> {
   const had = cache.get(map);
   if (had) return had;
-  const pause = every(4);
+  const pause = every(1);
   const life: ParkLife = { games: [], carts: [], flocks: [] };
   const bounded = (pts: Pts, pad: number) => {
     let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
@@ -60,7 +60,7 @@ export function* parkLifeWork(map: GameMap): Work<ParkLife> {
     cache.set(map, life);
     return life;
   }
-  const solid = (map.buildings ?? []).filter((b) => !b.bottom).map((b) => bounded(b.rings[0], 3 * M));
+  const solid: (ReturnType<typeof bounded> & { closed?: Pts })[] = (map.buildings ?? []).filter((b) => !b.bottom).map((b) => bounded(b.rings[0], 3 * M));
   const roads = map.roads.filter((r) => !r.bridge && !r.tunnel).map((r) => ({ ...bounded(r.pts, r.width / 2 + 3 * M), reach: r.width / 2 + (VEHICLE_ROADS.has(r.kind) || r.kind === 'rail' ? 5 : 2) * M, path: r.kind === 'footway' || r.kind === 'cycleway' || r.kind === 'pedestrian' }));
   const others = (map.areas ?? []).filter((a) => a.kind !== 'park' && a.kind !== 'pitch' && a.kind !== 'grass').map((a) => bounded(a.rings[0], M));
   const trees: [number, number, number][] = [];
@@ -76,11 +76,13 @@ export function* parkLifeWork(map: GameMap): Work<ParkLife> {
     const box = bounded(ring, 0);
     const overlaps = (b: { x0: number; y0: number; x1: number; y1: number }) => b.x1 > box.x0 && b.x0 < box.x1 && b.y1 > box.y0 && b.y0 < box.y1;
     const near = { solid: solid.filter(overlaps), roads: roads.filter(overlaps), others: others.filter(overlaps), trees: trees.filter(([x, y, r]) => x > box.x0 - r && x < box.x1 + r && y > box.y0 - r && y < box.y1 + r) };
+    // (Each building's outline closed once, the first time it's near a park: it's measured from often.)
+    for (const b of near.solid) b.closed ??= [...b.pts, b.pts[0], b.pts[1]];
     const inside = (x: number, y: number) => a.rings.every((r, i) => pointInRing(x, y, r) === (i === 0));
     /** Open grass: in the park, not by a building or a road or on a path, not in anything else (a playground, a pond), not under a tree. */
     const grass = (x: number, y: number) =>
       inside(x, y) &&
-      !near.solid.some((b) => within(x, y, b) && (pointInRing(x, y, b.pts) || distanceTo(x, y, [...b.pts, b.pts[0], b.pts[1]]) < 3 * M)) &&
+      !near.solid.some((b) => within(x, y, b) && (pointInRing(x, y, b.pts) || distanceTo(x, y, b.closed!) < 3 * M)) &&
       !near.roads.some((r) => within(x, y, r) && distanceTo(x, y, r.pts) < r.reach) &&
       !near.others.some((b) => within(x, y, b) && pointInRing(x, y, b.pts)) &&
       !near.trees.some(([tx, ty, r]) => Math.hypot(tx - x, ty - y) < r + 1 * M);
@@ -89,6 +91,8 @@ export function* parkLifeWork(map: GameMap): Work<ParkLife> {
     // The games: on open grass, room all round.
     const want = a.kind === 'pitch' ? 1 : Math.min(GAMES, Math.floor(area / PER_GAME));
     for (let k = 0, tries = 0; k < want && tries < want * 40; tries++) {
+      // (A pause now and then: a big park, with a lot round it, takes a while.)
+      if (tries % 10 === 9) yield;
       const kind: ParkGame = a.kind === 'pitch' || rand() < 0.55 ? 'football' : 'frisbee';
       const [x, y] = [box.x0 + rand() * (box.x1 - box.x0), box.y0 + rand() * (box.y1 - box.y0)];
       const room = ROOM[kind];
@@ -106,6 +110,7 @@ export function* parkLifeWork(map: GameMap): Work<ParkLife> {
       const spots: [number, number, number, number][] = [];
       for (const r of paths) {
         for (let i = 0; i + 3 < r.pts.length; i += 2) {
+          if (i % 16 === 14) yield;
           const [ax, ay, bx, by] = [r.pts[i], r.pts[i + 1], r.pts[i + 2], r.pts[i + 3]];
           const len = Math.hypot(bx - ax, by - ay);
           for (let d = 0; d < len; d += 4 * M) {
@@ -115,10 +120,13 @@ export function* parkLifeWork(map: GameMap): Work<ParkLife> {
         }
       }
       spots.sort((p, q) => Math.hypot(p[0] - cx, p[1] - cy) - Math.hypot(q[0] - cx, q[1] - cy));
+      yield;
       const carts = area >= CART_PARK * 10 ? 2 : 1;
       let placed = 0;
+      let tried = 0;
       for (const [x, y, ux, uy] of spots) {
         if (placed >= carts) break;
+        if (++tried % 6 === 0) yield;
         // To one side of the path, on the grass, its serving side to the path.
         for (const side of [1, -1]) {
           const [px, py] = [x - uy * side * 2.6 * M, y + ux * side * 2.6 * M];
@@ -135,7 +143,9 @@ export function* parkLifeWork(map: GameMap): Work<ParkLife> {
     // The pigeons: on the grass near the middle (or anywhere open).
     if (area >= FLOCK_PARK) {
       const [cx, cy] = centroid(ring);
+      yield;
       for (let tries = 0; tries < 30; tries++) {
+        if (tries % 10 === 9) yield;
         const [x, y] = tries ? [box.x0 + rand() * (box.x1 - box.x0), box.y0 + rand() * (box.y1 - box.y0)] : [cx, cy];
         if (!grass(x, y) || life.games.some((g) => Math.hypot(g.x - x, g.y - y) < ROOM[g.kind] + 4 * M)) continue;
         life.flocks.push({ x: r1(x), y: r1(y) });

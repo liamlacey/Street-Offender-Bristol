@@ -8,6 +8,7 @@
 import * as Phaser from 'phaser';
 import type { Mark, Wreck } from '../car/dents';
 import { ART_SCALE } from './art';
+import { softTexture } from '../world/canvas';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -25,7 +26,7 @@ export function paintWreck(scene: Phaser.Scene, key: string, body: Body, wreck: 
   const { length: L, width: W } = body;
   const [cw, ch] = [Math.ceil(L * ART_SCALE), Math.ceil(W * ART_SCALE)];
   let texture = scene.textures.exists(key) ? (scene.textures.get(key) as Phaser.Textures.CanvasTexture) : null;
-  if (!texture) texture = scene.textures.createCanvas(key, cw, ch)!;
+  if (!texture) texture = softTexture(scene, key, cw, ch);
   // (The same picture for something else, a different size: you've got out of one vehicle and into another.)
   else if (texture.width !== cw || texture.height !== ch) texture.setSize(cw, ch);
   const ctx = texture.context;

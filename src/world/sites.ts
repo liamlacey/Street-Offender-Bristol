@@ -115,7 +115,7 @@ export function siteLife(map: GameMap): SiteLife {
 export function* siteLifeWork(map: GameMap): Work<SiteLife> {
   const had = cache.get(map);
   if (had) return had;
-  const pause = every(4);
+  const pause = every(1);
   const life: SiteLife = { tips: [], things: [], fences: [], cranes: [], workers: [], sites: [], wastes: [], gulls: [], wanderers: [] };
   const bounded = (pts: Pts, pad: number) => {
     let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
@@ -226,9 +226,11 @@ export function* siteLifeWork(map: GameMap): Work<SiteLife> {
     const step = Math.max(M, Math.ceil(Math.sqrt(area / SPOTS) / M) * M);
     for (let x = box.x0 + M; x < box.x1; x += step) for (let y = box.y0 + M; y < box.y1; y += step) if (inside(x, y)) grid.push([x, y]);
     const shuffled = grid.map((p) => [p, hash(p[0], p[1])] as const).sort((p, q) => p[1] - q[1]).map(([p]) => p);
+    yield;
     const edgeDist = (x: number, y: number) => distanceTo(x, y, edge);
     // (Each spot's distance from the edge, worked out once.)
     const fromEdge = new Map(shuffled.map((p) => [p, edgeDist(p[0], p[1])]));
+    yield;
     const byEdge = (reach: number) => shuffled.filter((p) => fromEdge.get(p)! < reach);
     if (!site) {
       life.wastes.push(ring);
@@ -241,6 +243,7 @@ export function* siteLifeWork(map: GameMap): Work<SiteLife> {
         if (piled.some(([x, y]) => Math.hypot(x - px, y - py) < 9 * M)) continue;
         if (!open(px, py)) continue;
         piled.push([px, py]);
+        yield;
         const n = 3 + Math.floor(rand() * 5);
         for (let k = 0; k < n; k++) {
           const kind = TIP_KINDS[Math.floor(rand() * TIP_KINDS.length)];
@@ -324,12 +327,14 @@ export function* siteLifeWork(map: GameMap): Work<SiteLife> {
     if (area >= DIGGER_SITE) wants.push('pallet', 'pallet', 'skip');
     if (area >= CRANE_SITE) wants.push('cabin', 'pallet', 'pallet', 'pipes');
     for (const kind of wants) {
+      yield;
       const t = put(kind, kind === 'cabin' || kind === 'portaloo' ? byGate : byEdge(10 * M), along);
       if (t) life.things.push(t);
     }
     // The machines, out in the middle.
     const middle = shuffled.filter((p) => fromEdge.get(p)! > 4 * M);
     for (const kind of [...(area >= DIGGER_SITE ? ['digger'] : []), ...(area >= DUMPER_SITE ? ['dumper'] : [])] as SiteKind[]) {
+      yield;
       const t = put(kind, middle, () => rand() * Math.PI * 2, 2 * M);
       if (t) life.things.push(t);
     }

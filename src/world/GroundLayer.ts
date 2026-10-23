@@ -10,6 +10,7 @@ import type { Terrain } from './terrain';
 import { TerrainSheet } from './TerrainSheet';
 import { CHUNK, type ChunkIndex, type World, chunkKey } from './world';
 import { type Work, drain } from './work.ts';
+import { softTexture } from './canvas';
 
 /** How many pieces of ground are kept drawn at once (each is 1 MB of texture). */
 const KEEP = 48;
@@ -123,7 +124,7 @@ export class GroundLayer {
   private place(i: number, j: number, paint: (ctx: CanvasRenderingContext2D) => void): TerrainSheet {
     // A new name each time it's painted: a texture made under an old one's name can come out as the old one.
     const key = `ground:${i},${j}:${this.painted++}`;
-    const texture = this.scene.textures.createCanvas(key, PIECE, PIECE)!;
+    const texture = softTexture(this.scene, key, PIECE, PIECE);
     paint(texture.context);
     texture.refresh();
     const [x0, y0] = [i * CHUNK - BLEED, j * CHUNK - BLEED];

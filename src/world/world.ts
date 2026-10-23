@@ -238,6 +238,8 @@ export interface World {
   /** The props that are fixed or painted on (all but the loose ones). */
   fixed: FixedProp[];
   chunks: Map<string, ChunkIndex>;
+  /** The bridges' decks, their edges worked out (for the region's use: see region.ts). */
+  decks?: Decks;
 }
 
 export function chunkKey(cx: number, cy: number): string {
@@ -736,7 +738,7 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   }
 
   yield;
-  return { map, walls, posts, loose, fixed, chunks: yield* indexChunks(map) };
+  return { map, walls, posts, loose, fixed, chunks: yield* indexChunks(map), decks };
 }
 
 /** Which chunks each thing reaches into (with its shadow, for buildings). */
