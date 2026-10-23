@@ -9,7 +9,6 @@ import {
   type Material,
   THINGS,
   type Toughness,
-  BROKEN_STAND,
   HUT,
   REMAINS,
   WALLS,
@@ -230,15 +229,14 @@ export class Wreckage {
   }
 
   private toughness(post: Post): Toughness {
-    if (post.broken) return BROKEN_STAND;
     if (post.thing === 'tree') return treeToughness(this.hooks.treeHeight(post.index) / 8);
     return THINGS[post.thing];
   }
 
   private knockDown(post: Post, car: CarState, tough: Toughness, speed: number, level: number): void {
-    // (A statue's plinth and a fountain's basin are left standing, broken: see REMAINS.)
+    // (A statue's plinth and a fountain's basin are left, broken, low enough to drive over: see REMAINS.)
+    post.gone = true;
     if (REMAINS.has(post.thing)) post.broken = true;
-    else post.gone = true;
     this.hooks.knockedDown(post, level);
     const rand = this.rand.frac.bind(this.rand);
     const z = this.hooks.groundAt(post.x, post.y);

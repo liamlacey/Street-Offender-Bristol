@@ -19,9 +19,8 @@ export type Material = 'wood' | 'electric' | 'metal' | 'iron' | 'glass' | 'stone
 export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'mooring' | 'postbox' | 'phone' | 'meter' | 'pump' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'crane' | 'stump';
 /** What doesn't topple like the street furniture: a tree (it splits and falls its own way), and what's left of one (low enough to drive over). */
 export type Structure = 'tree' | 'stump';
-/** What's left standing, broken, knocked hard enough (and won't break further, or move): a statue's plinth, a fountain's basin. */
+/** What's left where it stood, broken, knocked hard enough (low enough to drive over): a statue's plinth, a fountain's basin. */
 export const REMAINS = new Set<ThingKind>(['statue', 'fountain']);
-export const BROKEN_STAND: Toughness = { material: 'stone', strength: Infinity, absorb: 0 };
 
 /** Walls, by what OSM calls them (and a bridge's parapets). */
 export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing' | 'gate' | 'liftgate' | 'chain' | 'shelter' | 'parapet' | 'heras' | 'mesh' | 'prison' | 'net';

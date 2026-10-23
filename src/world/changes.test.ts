@@ -5,7 +5,7 @@ import type { GameMap } from '../map/osm';
 import { type Post, buildWorld } from './world';
 
 describe('what\'s broken', () => {
-  it('leaves a statue\'s plinth and a fountain\'s basin standing, broken, in the next region; a lamp post gone', () => {
+  it('leaves a statue\'s plinth and a fountain\'s basin there, broken (out of the way), in the next region; a lamp post gone', () => {
     const made = (): Post[] => [
       { x: 100, y: 100, r: 10, thing: 'statue', index: 0 },
       { x: 300, y: 100, r: 14, thing: 'fountain', index: 1 },
@@ -20,8 +20,8 @@ describe('what\'s broken', () => {
     const down = changes.apply(walls, grids, { x0: 0, y0: 0, x1: 1000, y1: 1000 });
     expect(down).toHaveLength(3);
     expect(posts.map((p) => [p.thing, !!p.gone, !!p.broken])).toEqual([
-      ['statue', false, true],
-      ['fountain', false, true],
+      ['statue', true, true],
+      ['fountain', true, true],
       ['lamp', true, false],
     ]);
   });
