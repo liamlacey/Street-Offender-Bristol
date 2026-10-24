@@ -31,7 +31,7 @@
 
 import { type Area, type AreaKind, type GameMap, type Place, type Pts, VEHICLE_ROADS, pointInRing, ridgeAxis } from '../map/osm';
 import { rectsOverlap } from './playgrounds';
-import { type SportsGame, sportsOf } from './sports';
+import { type SportsGame, frameOf, sportsOf } from './sports';
 import { type Work, every } from './work.ts';
 import { distToSeg } from './geometry';
 
@@ -72,14 +72,23 @@ export interface PlaceSpot {
   /** A soldier, in camouflage (see military); and the way round that a squad marches or runs, or a skater rides (x, y, ...). */
   soldier?: boolean;
   loop?: number[];
+  /** How far from the spot they swim about (a lake's swimmers, near where they got in), px. */
+  reach?: number;
 }
 
 /**
  * What someone's at (see people.ts): a prisoner in the yard (see prison), fighting, at the weights, the pull-up bar, press-ups; a
  * soldier (see military), marching in a squad, running in one, PT (press-ups in rows), on guard at the gate; a skater, riding
- * round a skate park (see skating).
+ * round a skate park (see skating); swimming, paddling, sunbathing (see Bathing).
  */
-export type Drill = 'fight' | 'lift' | 'pullup' | 'pushup' | 'march' | 'run' | 'pt' | 'sentry' | 'skate';
+export type Drill = 'fight' | 'lift' | 'pullup' | 'pushup' | 'march' | 'run' | 'pt' | 'sentry' | 'skate' | Bathing;
+
+/**
+ * Who's at somewhere to swim outdoors (see swim): doing lengths of a pool, up their lane and back (its `loop`); swimming about a
+ * lake (in its water, `loop`, within `reach` of where they got in); paddling about a paddling pool (children, in its water,
+ * `loop`); lying in the sun on a towel by the water.
+ */
+export type Bathing = 'swim' | 'dip' | 'paddle' | 'bathe';
 
 export interface PlaceLife {
   things: PlaceThing[];
@@ -228,6 +237,9 @@ export function* placesWork(map: GameMap): Work<PlaceLife> {
         break;
       case 'military':
         military(place, ground, out);
+        break;
+      case 'swim':
+        swim(place, ground, out);
         break;
     }
   }
@@ -1400,8 +1412,12 @@ function repairs(place: Place, ground: Ground, out: PlaceLife): void {
 
 /** A taxi rank: those waiting for one, in a line along the kerb by it (the taxis are the traffic's: see posts.ts). */
 function rank(place: Place, ground: Ground, out: PlaceLife): void {
-  // The nearest pavement to it (it's mapped on the road, or at its edge), and the way along the road.
-  const road = ground.nearestRoad(place.x, place.y, 20 * M);
+  // The nearest pavement to it (it's mapped on the road, or at its edge), and the way along the road. (Off the street, a
+  // station's forecourt, a car park: no traffic comes by for its cabs to park along the kerb (see traffic.ts's posts), so its
+  // own cabs wait in it, nose to tail; and the way along it is its service road's.)
+  const street = ground.nearestRoad(place.x, place.y, 20 * M);
+  if (!street && place.rings[0] && Math.abs(ringArea(place.rings[0])) > 15 * M * M) cabs(place.rings[0], out);
+  const road = street ?? ground.nearestRoad(place.x, place.y, 20 * M, true);
   if (!road) return;
   let best: [number, number] | null = null;
   for (let d = 0; d <= 8 * M && !best; d += 0.5 * M) {
@@ -1417,6 +1433,36 @@ function rank(place: Place, ground: Ground, out: PlaceLife): void {
   for (let k = 0, n = Math.floor(rand() * 4); k < n; k++) {
     const [x, y] = [best[0] + sx * k * 0.9 * M, best[1] + sy * k * 0.9 * M];
     if (!ground.onCarriageway(x, y, 0.4 * M) && !ground.inBuilding(x, y)) out.spots.push({ x: r1(x), y: r1(y), angle: +Math.atan2(-sy, -sx).toFixed(3), weight: 0.8, group: false });
+  }
+}
+
+/** A taxi's length, and the room between them waiting nose to tail in a rank (see cabs). */
+const CAB = 4.8 * 1.1 * M;
+const CAB_GAP = 1 * M;
+
+/**
+ * An off-street taxi rank's cabs (most there: see PlaceLife's spaces), nose to tail along it: down its middle (where it bends,
+ * the middle of it across, each cab facing on to the next), as many as fit, up to six.
+ */
+function cabs(ring: Pts, out: PlaceLife): void {
+  const { cx, cy, ux, uy, a0, a1, b0, b1 } = shape(ring);
+  // Its middle, across it, at a point along it (where it's 1.5 m wide or more: a lay-by mapped tight to its kerb); or null.
+  const middle = (a: number): [number, number] | null => {
+    let [lo, hi] = [Infinity, -Infinity];
+    for (let b = b0; b <= b1; b += 0.25 * M) {
+      if (!pointInRing(cx + ux * a - uy * b, cy + uy * a + ux * b, ring)) continue;
+      [lo, hi] = [Math.min(lo, b), Math.max(hi, b)];
+    }
+    if (hi - lo < 1.5 * M) return null;
+    const b = (lo + hi) / 2;
+    return [cx + ux * a - uy * b, cy + uy * a + ux * b];
+  };
+  let n = 0;
+  for (let a = a0 + CAB / 2 + 0.5 * M; a <= a1 - CAB / 2 - 0.5 * M && n < 6; a += CAB + CAB_GAP) {
+    const [here, back, front] = [middle(a), middle(a - CAB / 2), middle(a + CAB / 2)];
+    if (!here || !back || !front) continue;
+    out.spaces.push({ x: r1(here[0]), y: r1(here[1]), angle: +Math.atan2(front[1] - back[1], front[0] - back[0]).toFixed(3), length: CAB + CAB_GAP, taken: 0.85, endOn: false, kind: 'taxi' });
+    n++;
   }
 }
 
@@ -1607,6 +1653,134 @@ function yard(place: Place, ring: Pts, ground: Ground, out: PlaceLife): void {
     const drill: Drill | undefined = k < 3 ? 'fight' : r < 0.08 ? 'pushup' : undefined;
     out.spots.push({ x: r1(x), y: r1(y), angle: rand() * Math.PI * 2, weight: drill === 'fight' ? 8 : 3, group: !drill && r < 0.35, inmate: true, ...(drill ? { drill } : {}) });
   }
+}
+
+/** A lane at a pool (2.5 m), its lane lines' and ropes' paint; a lake's swimmers, how far off they swim from where they got in. */
+const LANE = 2.5 * M;
+const LANE_LINE = '#1f4f8c';
+const ROPE: [string, string] = ['#d8342c', '#f2f2ee'];
+const DIP_REACH = 45 * M;
+
+/**
+ * Somewhere to swim outdoors (its water: a pool mapped as the place itself; or, a place mapped as a point, the lake or pond it's
+ * by, within 80 m): a pool long enough for lengths has its lanes (painted lines along its floor, ropes between) and swimmers
+ * doing lengths up and down them, a couple to a lane; a paddling pool, children paddling about it, their parents round it; a
+ * lake, swimmers about it near the club (where it's mapped). Round the water, people lying out on their towels in the sun.
+ * (Nothing at a pool under a roof: a building's, mapped round it.)
+ */
+function swim(place: Place, ground: Ground, out: PlaceLife): void {
+  const own = place.rings[0];
+  if (!own) return;
+  const rand = seeded(hash(place.x, place.y));
+  // Its water: itself; or, a point, the water nearest it.
+  let water: Pts | null = Math.abs(ringArea(own)) > 40 * M * M ? own : null;
+  if (!water) {
+    let best = 80 * M;
+    for (const a of ground.map.areas) {
+      if (a.kind !== 'water' && a.kind !== 'pool') continue;
+      const d = pointInRing(place.x, place.y, a.rings[0]) ? 0 : distToRing(a.rings[0], place.x, place.y);
+      if (d < best) [best, water] = [d, a.rings[0]];
+    }
+  }
+  if (!water) return;
+  const ring = water;
+  const [cx, cy] = centreOf(ring);
+  const roofed = (x: number, y: number) => {
+    const i = ground.buildingAt(x, y);
+    return i >= 0 && ground.map.buildings[i].rings.every((r, k) => pointInRing(x, y, r) === (k === 0));
+  };
+  if (pointInRing(cx, cy, ring) && roofed(cx, cy)) return;
+  const wet = (x: number, y: number) => ground.map.areas.some((a) => (a.kind === 'water' || a.kind === 'pool') && pointInRing(x, y, a.rings[0]));
+  const dry = (x: number, y: number) => !wet(x, y) && !roofed(x, y) && !ground.onRoad(x, y, M) && !ground.byTree(x, y, 1.5 * M);
+  const bather = (x: number, y: number, angle: number) => out.spots.push({ x: r1(x), y: r1(y), angle: +angle.toFixed(3), weight: 3, group: false, drill: 'bathe' });
+  const area = Math.abs(ringArea(ring));
+  const frame = frameOf(ring, 0.6);
+  const lake = water !== own && area > 2000 * M * M;
+  if (lake) {
+    // Where they get in: the water nearest the club, a little way out.
+    let [bx, by, bd] = [0, 0, Infinity];
+    for (let dx = -60 * M; dx <= 60 * M; dx += 2 * M) {
+      for (let dy = -60 * M; dy <= 60 * M; dy += 2 * M) {
+        const [x, y] = [place.x + dx, place.y + dy];
+        if (!pointInRing(x, y, ring) || distToRing(ring, x, y) < 8 * M) continue;
+        const d = Math.hypot(dx, dy);
+        if (d < bd) [bx, by, bd] = [x, y, d];
+      }
+    }
+    if (bd === Infinity) return;
+    const n = 6 + Math.floor(rand() * 5);
+    for (let k = 0; k < n; k++) out.spots.push({ x: r1(bx), y: r1(by), angle: 0, weight: 3, group: false, drill: 'dip', loop: ring, reach: DIP_REACH });
+    // On the bank near the club, out in the sun.
+    let laid = 0;
+    for (let tries = 0; tries < 80 && laid < 6; tries++) {
+      const a = rand() * Math.PI * 2;
+      const r = (6 + rand() * 30) * M;
+      const [x, y] = [place.x + Math.cos(a) * r, place.y + Math.sin(a) * r];
+      if (!dry(x, y) || distToRing(ring, x, y) > 14 * M) continue;
+      bather(x, y, rand() * Math.PI * 2);
+      laid++;
+    }
+    return;
+  }
+  // A paddling pool (or one too small for lengths): children paddling about it, their parents stood round it.
+  if (/paddl/i.test(place.name ?? '') || !frame || frame.hl < 7 * M) {
+    const n = Math.max(3, Math.min(10, Math.round(area / (20 * M * M))));
+    for (let k = 0; k < n; k++) out.spots.push({ x: r1(cx), y: r1(cy), angle: 0, weight: 3, group: false, drill: 'paddle', loop: ring, child: 0.6 + rand() * 0.15 });
+    const step = 2 * Math.max(1, Math.floor(ring.length / 16));
+    for (let i = 0, k = 0; k < 4 && i < ring.length; i += step) {
+      const d = Math.hypot(ring[i] - cx, ring[i + 1] - cy) || 1;
+      const [x, y] = [ring[i] + ((ring[i] - cx) / d) * 1.8 * M, ring[i + 1] + ((ring[i + 1] - cy) / d) * 1.8 * M];
+      if (!dry(x, y) || rand() < 0.4) continue;
+      out.spots.push({ x: r1(x), y: r1(y), angle: Math.atan2(cy - y, cx - x), weight: 2, group: rand() < 0.4 });
+      k++;
+    }
+    return;
+  }
+  // A pool for lengths: its lanes, their lines and ropes; swimmers up and down each (up one side of it, back down the other).
+  const { cx: fx, cy: fy, ux, uy, hl, hw } = frame;
+  const at = (a: number, b: number): [number, number] => [fx + ux * a - uy * b, fy + uy * a + ux * b];
+  const lanes = Math.max(1, Math.min(8, Math.floor((2 * hw) / LANE)));
+  const wide = (2 * hw) / lanes;
+  const lines: number[] = [];
+  const ropes: [number[], number[]] = [[], []];
+  for (let k = 0; k < lanes; k++) {
+    const b = -hw + (k + 0.5) * wide;
+    // Its line along the floor, a T at each end.
+    lines.push(...at(-hl + 2 * M, b), ...at(hl - 2 * M, b));
+    for (const a of [-hl + 2 * M, hl - 2 * M]) lines.push(...at(a, b - 0.5 * M), ...at(a, b + 0.5 * M));
+    // The rope on the far side of it (red and white floats), but the last.
+    if (k < lanes - 1) for (let a = -hl + 0.3 * M, j = 0; a < hl - 0.3 * M; a += 0.5 * M, j++) ropes[j % 2].push(...at(a, b + wide / 2), ...at(Math.min(a + 0.5 * M, hl - 0.3 * M), b + wide / 2));
+    const half = Math.min(0.5 * M, wide / 4);
+    const loop = [...at(-hl + 1 * M, b - half), ...at(hl - 1 * M, b - half), ...at(hl - 1 * M, b + half), ...at(-hl + 1 * M, b + half)].map(r1);
+    const n = 1 + Math.floor(rand() * 3);
+    for (let i = 0; i < n; i++) out.spots.push({ x: r1(at(0, b)[0]), y: r1(at(0, b)[1]), angle: 0, weight: 3, group: false, drill: 'swim', loop });
+  }
+  out.areas.push({
+    kind: 'pool',
+    rings: [ring],
+    markings: [
+      { colour: LANE_LINE, width: 0.3 * M, segs: lines.map(r1) },
+      { colour: ROPE[0], width: 0.15 * M, segs: ropes[0].map(r1) },
+      { colour: ROPE[1], width: 0.15 * M, segs: ropes[1].map(r1) },
+    ],
+    bare: true,
+  });
+  // Round it, on the poolside: lying out on their towels, along it.
+  const angle = Math.atan2(uy, ux);
+  for (const side of [-1, 1]) {
+    for (let a = -hl + 2 * M; a < hl - 2 * M; a += 3 * M) {
+      if (rand() < 0.45) continue;
+      const [x, y] = at(a, side * (hw + (2.2 + rand() * 2) * M));
+      if (dry(x, y)) bather(x, y, angle + (rand() < 0.5 ? 0 : Math.PI));
+    }
+  }
+}
+
+/** The middle of a ring (its points', on average). */
+function centreOf(ring: Pts): [number, number] {
+  let [sx, sy] = [0, 0];
+  for (let k = 0; k + 1 < ring.length; k += 2) [sx, sy] = [sx + ring[k], sy + ring[k + 1]];
+  return [(sx * 2) / ring.length, (sy * 2) / ring.length];
 }
 
 /** How far a point is from a ring's edge, px. */

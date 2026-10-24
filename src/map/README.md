@@ -327,8 +327,9 @@ the left side's traffic goes the way's way, the right side's against it).
 - **Cycle boxes** (`cycleway=asl`): terracotta red (as Bristol's are), 4.5 m deep,
   behind a line across the lanes coming in, a big white bike filling them (side on, as the driver sees it: wheels across the lane).
 - **Bus stops** (`public_transport=stop_position`, or `disused:public_transport=stop_position`
-  with a stop's sign or platform within 30 m that still counts: see Bus shelters; not on a way only buses may use,
-  as in a bus station's yard: see Bus stations): a rectangular bay 3 m deep along
+  with a stop's sign or platform within 30 m that still counts: see Bus shelters; not a bus
+  station's bay, the dead end of a way only buses may use: see Bus stations. Along a way
+  only buses use, as Bristol Parkway's bus loop, a bay as on any road): a rectangular bay 3 m deep along
   the kerb, on the side of the stop's sign or platform within 30 m (or the left,
   one-way), surfaced red with a dashed yellow edge, BUS STOP in big yellow letters.
   Only where the road allows: 22 m long, or 18, 15 or 12, whichever's the longest
@@ -872,8 +873,12 @@ the nearest within 25 m. (Bristol's: 19 bays.)
 
 **Taxi ranks** (`amenity=taxi`): as the emergency services' posts (below), with up to 4
 taxis (saloons, Bristol blue, the lit TAXI sign on the roof) waiting along the kerb (not along a road a bus route runs along, where the buses would have to squeeze past them);
-now and then one leaves with a fare, and another comes back to wait (no sirens). And
-a few taxis about in the traffic.
+now and then one leaves with a fare, and another comes back to wait (no sirens). An
+off-street rank (a station's forecourt, a car park: mapped as an area over 15 m², with no
+street within 20 m for the traffic's taxis to wait along) has its own cabs instead,
+parked nose to tail down its middle (where it's 1.5 m wide or more, following its bends;
+a metre between them, up to six, most places taken: any yours to take); its queue by
+its service road. (Bristol Parkway's three.) And a few taxis about in the traffic.
 
 **The emergency services** (police stations, `amenity=police`; fire stations,
 `amenity=fire_station`; hospitals, `amenity=hospital` or a `building=hospital` named
@@ -1236,6 +1241,24 @@ but the water and the buildings.
     to 16: any of them yours to take), ammunition boxes and jerrycans by some; sandbags
     about it; soldiers in camouflage and berets going about it (in twos and threes, or
     on their own, kept to the base). Less: its flag and sentry, three soldiers.
+  - Somewhere to swim outdoors (place `swim`): a pool (`leisure=swimming_pool`) that's
+    named or `sport=swimming`, or a `swimming_area` or `bathing_place`, and isn't
+    `location=indoor`/`roof`, `covered=yes`, `indoor=yes`, `swimming_pool=indoor` or
+    itself a building (a garden pool is none of these). Its water is the pool itself;
+    or, for one mapped as a point (Henleaze Swimming Club), the water or pool nearest
+    it within 80 m. Nothing if the water's middle is inside a building's outline (not
+    in a courtyard). A lake (that nearest water, over 2,000 m²): six to ten swimmers
+    (breaststroke) about it within 45 m of where they get in (the water nearest the
+    club, at least 8 m out from the bank), stopping to tread water now and then; up to
+    six people on towels on the bank within 36 m of the club. A paddling pool (named
+    so, or too small for lengths: under 14 m long): children paddling about it (one per
+    20 m², three to ten), up to four parents standing round it. A pool for lengths:
+    lanes of about 2.5 m (one to eight) across its rectangle, each with a line along
+    its floor (a T at each end), red and white rope floats between them, and one to
+    three swimmers doing front crawl up one side of the lane and back down the other
+    (1 to 1.7 m/s); on the poolside, along its long sides, people on their towels.
+    (Alcove Road "Lido" in Fishponds is mapped as a fishing pond, `natural=water`,
+    `water=pond`, so it's not one.)
   - The prison: a 5.5 m stone wall round it (all but unbreakable, but for the biggest
     hit: a bus, a lorry, a fire engine at speed). Its yard (its grounds, but for its
     buildings and roads) full of prisoners in orange jumpsuits, one for every 90 m² of
@@ -1271,7 +1294,7 @@ but the water and the buildings.
   - A garage (`shop=car_repair`, `tyres`): a car or two out front waiting, old tyres
     stacked, a tool chest, an oil drum; a mechanic in hi-vis.
   - A taxi rank (`amenity=taxi`): up to 3 waiting in a line along the kerb by it (its
-    taxis: see The emergency services).
+    taxis: see The emergency services; off the street, its own, in it: see Taxi ranks).
   - An electricity substation (`power=substation`, not indoors or underground, nor in a
     building): a 2.4 m mesh fence round its compound (12 m² or more), a transformer for
     every 45 m² of it (1 to 4), loose, heavy, sparks when it's smashed.

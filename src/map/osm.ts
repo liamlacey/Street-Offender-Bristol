@@ -793,7 +793,9 @@ export type PlaceKind =
   // brewery; a battery storage plant; a pumping station or water works; a car hire's lot; a bunker silo (aggregate, in bays).
   | 'trade' | 'scrapyard' | 'brewery' | 'battery' | 'pumping' | 'carhire' | 'bunker'
   // The army's (or the cadets', the reserves'): a barracks, a training area, a base.
-  | 'military';
+  | 'military'
+  // Somewhere to swim outdoors: a lido's pool, a paddling pool, a club's lake (a point by the water: see `swim` in places.ts).
+  | 'swim';
 
 /** The trade counters and builders' merchants (`shop=*`), and the trades with a yard (`craft=*`): see Place's 'trade'. */
 export const TRADE_SHOPS = new Set(['trade', 'doityourself', 'tool_hire', 'building_materials', 'plumbing', 'timber']);
@@ -845,6 +847,7 @@ export function placeKind(t: Tags): PlaceKind | null {
       return 'carhire';
   }
   if (t.leisure === 'outdoor_seating') return 'seating';
+  if (isSwim(t)) return 'swim';
   if (t.landuse === 'military' || t.military === 'barracks' || t.military === 'training_area' || t.military === 'base') return 'military';
   if (t.industrial === 'scrap_yard' || (t.landuse === 'industrial' && /scrap|salvage|breakers/i.test(t.name ?? ''))) return 'scrapyard';
   if (t.craft === 'brewery' || t.industrial === 'brewery') return 'brewery';
@@ -863,6 +866,16 @@ export function placeKind(t: Tags): PlaceKind | null {
   if (t.leisure === 'stadium') return 'stadium';
   if (t.leisure === 'sports_centre') return 'sports';
   return null;
+}
+
+/**
+ * Somewhere people swim outdoors: a pool (not indoors, not under a roof, not a building's) that's named, or for swimming (a
+ * garden's pool is neither), or a swimming area, a bathing place.
+ */
+function isSwim(t: Tags): boolean {
+  if (t.location === 'indoor' || t.location === 'roof' || t.covered === 'yes' || t.indoor === 'yes' || t.swimming_pool === 'indoor' || t.building) return false;
+  if (t.leisure === 'swimming_area' || t.leisure === 'bathing_place') return true;
+  return t.leisure === 'swimming_pool' && (!!t.name || t.sport === 'swimming');
 }
 
 /** What emergency service a place is, if any (see Service). */
@@ -2560,7 +2573,9 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     if (t.highway === 'mini_roundabout') paint.push({ kind: 'mini', x: round(x), y: round(y), angle: 0, width: 4 * PX_PER_METRE });
     // (A disused stop's too, where its shelter's still there: see `isBusStop`.)
     const stopPosition = t.public_transport === 'stop_position' || (t['disused:public_transport'] === 'stop_position' && stopSigns.some(([sx, sy]) => Math.hypot(sx - x, sy - y) < 30 * PX_PER_METRE));
-    if (stopPosition && (t.bus === 'yes' || !t.tram) && !waysOfNode.get(node.id)?.some((w) => busOnly(w.way.tags))) {
+    // (Not a bus station's bay: the dead end of a way only buses use. Along one, a bus loop's, a bay as on any road.)
+    const bay = waysOfNode.get(node.id)?.some((w) => busOnly(w.way.tags) && (w.index === 0 || w.index === w.way.nodes.length - 1) && (waysOfNode.get(node.id)?.length ?? 0) === 1);
+    if (stopPosition && (t.bus === 'yes' || !t.tram) && !bay) {
       const box = busStopBox(node.id, x, y);
       if (box) paint.push({ kind: 'busstop', ...box });
     }

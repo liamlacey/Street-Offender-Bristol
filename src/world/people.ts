@@ -103,7 +103,7 @@ const R = 0.3 * M;
 const SHOPPERS = 16;
 const HOLD = 0.85 * M;
 
-export type Mode = 'walk' | 'stand' | 'wander' | 'kerb' | 'cross' | 'queue' | 'board' | 'flee' | 'dive' | 'down' | 'sit' | 'shop' | 'perform' | 'vend' | 'join' | 'game' | 'fight' | 'exercise' | 'escape' | 'march' | 'skate';
+export type Mode = 'walk' | 'stand' | 'wander' | 'kerb' | 'cross' | 'queue' | 'board' | 'flee' | 'dive' | 'down' | 'sit' | 'shop' | 'perform' | 'vend' | 'join' | 'game' | 'fight' | 'exercise' | 'escape' | 'march' | 'skate' | 'swim' | 'bathe';
 
 /** A bench or picnic table (as the world has it: it can be knocked about, or smashed). */
 export interface Seat {
@@ -339,6 +339,27 @@ export interface Person {
   slot?: [number, number];
   /** A skater, riding round a skate park (see `Ride`). */
   ride?: Ride;
+  /** A swimmer (see `Swim`); someone sunbathing, their towel (where it's laid, which way). */
+  swim?: Swim;
+  towel?: { x: number; y: number; angle: number };
+}
+
+/**
+ * A swimmer: their stroke (front crawl, doing lengths; breaststroke, about a lake; a child paddling); doing lengths, round their
+ * lane's loop (and how far round); or swimming about in some water (its ring), within `reach` of where they got in. (`src`: the
+ * spot's loop, to count them.)
+ */
+export interface Swim {
+  src: number[];
+  stroke: 'crawl' | 'breast' | 'paddle';
+  loop: number[] | null;
+  length: number;
+  s: number;
+  ring: number[];
+  cx: number;
+  cy: number;
+  reach: number;
+  speed: number;
 }
 
 /** A skater's ride round a skate park: its way round (and the spot's, to count them), how far round, which way, how fast; a trick. */
@@ -353,6 +374,9 @@ export interface Ride {
   air: number;
   next: number;
 }
+
+/** What those at somewhere to swim are at (see places.ts's Bathing). */
+const BATHING = new Set<Drill>(['swim', 'dip', 'paddle', 'bathe']);
 
 /** A skater's trick: how long they're in the air, s. */
 export const AIR = 0.7;
@@ -438,6 +462,7 @@ interface Spot {
   drill?: Drill;
   soldier?: boolean;
   loop?: number[];
+  reach?: number;
 }
 
 /** Where a crossing's kerbs are (either side of the road, on the pavement), and how it works. */
@@ -1116,10 +1141,11 @@ export class People {
     // The skate parks near the view: their skaters; the bases': their squads, their PT classes, their sentries (however quiet it
     // is round them), coming along out of sight.
     for (const s of this.spots) {
-      const drill = s.drill === 'skate' || (s.soldier && s.drill);
+      const drill = s.drill === 'skate' || (s.soldier && s.drill) || (s.drill && BATHING.has(s.drill));
       if (!drill || s.x < x0 || s.x > x1 || s.y < y0 || s.y > y1 || (!all && (seen(s.x, s.y) || this.rand() > 0.02))) continue;
       if (s.drill === 'skate') this.skaterAt(s);
-      else this.soldierAt(s);
+      else if (s.soldier) this.soldierAt(s);
+      else this.bather(s);
     }
     // Waiting at the bus stops near the view.
     for (const [i, [sx, sy]] of this.stops.entries()) {
@@ -1244,6 +1270,7 @@ export class People {
   /** Someone (or a group) at a spot, standing about; in a park or square, some wander off about it. */
   private atSpot(s: Spot): void {
     if (s.drill === 'skate' && s.loop) return this.skaterAt(s);
+    if (s.drill && BATHING.has(s.drill)) return this.bather(s);
     if (s.inmate) return this.inmateAt(s);
     if (s.soldier) return this.soldierAt(s);
     // On the grass in a park: a picnic, now and then: a blanket, and two to five sitting round it.
@@ -1497,7 +1524,7 @@ export class People {
       const pspeed = Math.hypot(m.vx, m.vy);
       const plevel = m.level ?? 0;
       for (const p of this.people) {
-        if (p.mode === 'down' || p.mode === 'board' || p.level !== plevel) continue;
+        if (p.mode === 'down' || p.mode === 'board' || p.mode === 'swim' || p.level !== plevel) continue;
         // (Within a second of it, at most: as far as it's seen coming.)
         const reach = Math.max(6 * M, pspeed) + 2 * M;
         if (Math.abs(p.x - m.x) > reach || Math.abs(p.y - m.y) > reach) continue;
@@ -1589,6 +1616,12 @@ export class People {
           break;
         case 'skate':
           this.skating(p, dt);
+          break;
+        case 'swim':
+          this.swimming(p, dt);
+          break;
+        case 'bathe':
+          this.sunbathing(p, dt);
           break;
       }
       if (p.speed > 0 && p.mode !== 'down') p.step = (p.step + (dt * p.speed) / (0.75 * M)) % 1;
@@ -1823,9 +1856,13 @@ export class People {
       Object.assign(p, { mode: 'escape', tx: out.x, ty: out.y, timer: 0, away: out.away, foe: null });
       return;
     }
-    // A skater: back on their board.
+    // A skater: back on their board; a swimmer, swimming; someone sunbathing, back to their towel.
     if (p.ride) {
       p.mode = 'skate';
+      return;
+    }
+    if (p.swim || p.towel) {
+      p.mode = p.swim ? 'swim' : 'bathe';
       return;
     }
     if ((p.inmate && !p.free) || p.soldier) {
@@ -2014,7 +2051,7 @@ export class People {
 
   /** Scared by danger at (x, y): running from it, unless they're down (or getting on a bus). */
   scare(p: Person, x: number, y: number): void {
-    if (p.mode === 'down' || p.mode === 'board' || p.mode === 'dive') return;
+    if (p.mode === 'down' || p.mode === 'board' || p.mode === 'dive' || p.mode === 'swim') return;
     this.letGo(p);
     this.leaveGather(p);
     if (p.mode !== 'flee') p.was = p.mode;
@@ -3219,6 +3256,89 @@ export class People {
     }
     r.next -= dt;
     if (r.next <= 0) [r.air, r.next] = [AIR, 2.5 + this.rand() * 5];
+  }
+
+  /**
+   * Someone at somewhere to swim (as many as its spots, at most): a swimmer doing lengths, somewhere along their lane; one swimming
+   * about the lake, near where they got in; a child paddling; someone lying out on their towel (one to each).
+   */
+  private bather(s: Spot): void {
+    if (s.drill === 'bathe') {
+      if (this.people.some((q) => q.towel === s)) return;
+      const p = this.make(s.x, s.y, 'bathe');
+      Object.assign(p, { towel: s, angle: s.angle, timer: 20 + this.rand() * 60 });
+      return;
+    }
+    const src = s.loop!;
+    const most = this.spots.filter((t) => t.loop === src).length;
+    if (this.people.filter((q) => q.swim?.src === src).length >= most) return;
+    const stroke = s.drill === 'swim' ? 'crawl' : s.drill === 'paddle' ? 'paddle' : 'breast';
+    const lengths = s.drill === 'swim';
+    const loop = lengths ? [...src, src[0], src[1]] : null;
+    const length = loop ? lineLength(loop) : 0;
+    const speed = (stroke === 'crawl' ? 1 + this.rand() * 0.7 : stroke === 'breast' ? 0.6 + this.rand() * 0.3 : 0.5 + this.rand() * 0.4) * M;
+    const swim: Swim = { src, stroke, loop, length, s: this.rand() * length, ring: src, cx: s.x, cy: s.y, reach: s.reach ?? Infinity, speed };
+    const [x, y] = loop ? pointAlong(loop, swim.s) : this.inWater(swim) ?? [s.x, s.y];
+    const p = this.make(x, y, 'swim');
+    Object.assign(p, { swim, child: s.child, tx: x, ty: y, timer: 0 });
+  }
+
+  /** Somewhere in a swimmer's water to swim to: within their reach, clear of its edges, in a straight line through it. */
+  private inWater(w: Swim, from?: [number, number]): [number, number] | null {
+    const r = Math.min(w.reach, 200 * M);
+    for (let tries = 0; tries < 12; tries++) {
+      const a = this.rand() * Math.PI * 2;
+      const d = Math.sqrt(this.rand()) * r;
+      const [x, y] = [w.cx + Math.cos(a) * d, w.cy + Math.sin(a) * d];
+      const m = 0.8 * M;
+      if (![[0, 0], [m, 0], [-m, 0], [0, m], [0, -m]].every(([dx, dy]) => pointInRing(x + dx, y + dy, w.ring))) continue;
+      if (from && !pointInRing((x + from[0]) / 2, (y + from[1]) / 2, w.ring)) continue;
+      return [x, y];
+    }
+    return null;
+  }
+
+  /** Lengths: up their lane and back down it; or about the water, a rest now and then (treading water, stood in the shallows). */
+  private swimming(p: Person, dt: number): void {
+    const w = p.swim!;
+    if (w.loop) {
+      w.s = (w.s + w.speed * dt) % w.length;
+      const [x, y, ux, uy] = pointAlong(w.loop, w.s);
+      [p.x, p.y] = [x, y];
+      // Turning at the end (not at once).
+      let turn = Math.atan2(uy, ux) - p.angle;
+      turn -= Math.round(turn / (Math.PI * 2)) * Math.PI * 2;
+      p.angle += turn * Math.min(1, dt * 6);
+      p.speed = w.speed;
+      return;
+    }
+    if (p.timer > 0) {
+      p.timer -= dt;
+      p.speed = 0;
+      return;
+    }
+    if (this.goTo(p, p.tx, p.ty, w.speed, dt, 0.5 * M)) {
+      const next = this.inWater(w, [p.x, p.y]);
+      if (next) [p.tx, p.ty] = next;
+      if (this.rand() < 0.3) p.timer = 2 + this.rand() * 5;
+    }
+  }
+
+  /** Lying out on their towel (back to it, if they've been off: scared); sitting up a while, now and then. */
+  private sunbathing(p: Person, dt: number): void {
+    const t = p.towel!;
+    if (Math.hypot(p.x - t.x, p.y - t.y) > 0.3 * M) {
+      this.goTo(p, t.x, t.y, p.pace, dt, 0.2 * M);
+      return;
+    }
+    p.speed = 0;
+    p.angle = t.angle;
+    p.timer -= dt;
+    if (p.timer < 0) {
+      // (Their `step`: lying down, or sat up.)
+      p.step = p.step ? 0 : 1;
+      p.timer = p.step ? 8 + this.rand() * 15 : 30 + this.rand() * 60;
+    }
   }
 
   /** Whether there's nothing in the way (a wall, a building's) on the straight between two points. */

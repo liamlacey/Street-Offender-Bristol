@@ -25,7 +25,10 @@ export function clothes(look: number): { top: string; bottom: string; hair: stri
 function person(ctx: Ctx, look: number, pose: Pose, uniform?: Uniform): void {
   const own = clothes(look);
   // (A prisoner: their orange jumpsuit, top and bottom; a soldier: camouflage, and a beret for their hair.)
-  const [top, bottom] = uniform === 'inmate' ? [JUMPSUIT, shadeOf(JUMPSUIT)] : uniform === 'soldier' ? [CAMO, shadeOf(CAMO)] : [own.top, own.bottom];
+  // (In their swimming things: bare shoulders, or a swimsuit; and trunks, or the swimsuit's bottom.)
+  const suit = SWIMWEAR[look % SWIMWEAR.length];
+  const [top, bottom] =
+    uniform === 'inmate' ? [JUMPSUIT, shadeOf(JUMPSUIT)] : uniform === 'soldier' ? [CAMO, shadeOf(CAMO)] : uniform === 'swimwear' ? [look % 2 ? suit : own.skin, suit] : [own.top, own.bottom];
   const hair = uniform === 'soldier' ? BERET[look % BERET.length] : own.hair;
   const { skin } = own;
   const ellipse = (x: number, y: number, rx: number, ry: number, fill: string) => {
@@ -79,8 +82,11 @@ function person(ctx: Ctx, look: number, pose: Pose, uniform?: Uniform): void {
   }
 }
 
-/** What someone's in, if it's not their own clothes: a prisoner's jumpsuit, a soldier's camouflage. */
-export type Uniform = 'inmate' | 'soldier';
+/** What someone's in, if it's not their own clothes: a prisoner's jumpsuit, a soldier's camouflage; their swimming things. */
+export type Uniform = 'inmate' | 'soldier' | 'swimwear';
+/** Swimsuits' and trunks' colours; swimming caps'. */
+const SWIMWEAR = ['#1d3f8a', '#c8282e', '#1b1b1f', '#e0457b', '#127a6a', '#f0a020', '#5a2d82'];
+const CAPS = ['#f4f4f0', '#e8c020', '#e0457b', '#2a62c8', '#f06a1a', '#20a060'];
 /** A soldier's camouflage (its main colour), and their berets (the regiments'). */
 const CAMO = '#5b6340';
 const BERET = ['#3f2a3d', '#2c4a2a', '#2d3a5c', '#7a2230'];
@@ -359,6 +365,91 @@ export function personTexture(scene: Phaser.Scene, look: number, pose: Pose, hiv
   return key;
 }
 
+/**
+ * A swimmer, from above (swimming right), low in the water: their body a shadow under it, their head (in a cap, or not), arms
+ * (two frames, in turn): front crawl, one arm reaching on ahead, the other back by their side, white water off the hand going in
+ * and their kicking feet; breaststroke, arms swept out wide, then drawn in together ahead of them, a ripple round their shoulders.
+ */
+export function swimmerTexture(scene: Phaser.Scene, look: number, stroke: 'crawl' | 'breast', frame: number): string {
+  const key = `swimmer-${stroke}-${look % LOOKS}-${frame}`;
+  canvasTexture(scene, key, 14, 10, (ctx) => {
+    const { skin, hair } = clothes(look);
+    const suit = SWIMWEAR[look % SWIMWEAR.length];
+    const head = look % 3 ? CAPS[look % CAPS.length] : hair;
+    const ellipse = (x: number, y: number, rx: number, ry: number, fill: string, alpha = 1) => {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    };
+    const [cx, cy] = [7, 5];
+    // Under the water: legs, body, a glimpse of their swimsuit.
+    ellipse(cx - 3.6, cy - 0.7, 2, 0.6, skin, 0.35);
+    ellipse(cx - 3.6, cy + 0.7, 2, 0.6, skin, 0.35);
+    ellipse(cx - 1.2, cy, 1.3, 1.4, suit, 0.45);
+    ellipse(cx + 0.8, cy, 1.9, 1.6, skin, 0.45);
+    if (stroke === 'crawl') {
+      // Kicking: white water off their feet.
+      ellipse(cx - 5.6, cy + (frame ? 0.5 : -0.5), 1, 0.8, '#ffffff', 0.55);
+      const side = frame ? 1 : -1;
+      // One arm on ahead (wet, catching the light), into the water with a splash; the other back along their side.
+      ellipse(cx + 3.6, cy + 1.2 * side, 1.9, 0.5, skin);
+      ellipse(cx + 5.8, cy + 1.2 * side, 0.9, 0.8, '#ffffff', 0.7);
+      ellipse(cx - 1.4, cy - 1.6 * side, 1.6, 0.45, skin, 0.7);
+      // Their head turned to breathe, to the side of the arm back.
+      ellipse(cx + 2.2, cy - 0.3 * side, 1.15, 1.05, head);
+    } else {
+      // A ripple round their shoulders; arms out wide, then in together ahead.
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 0.4;
+      ctx.beginPath();
+      ctx.ellipse(cx + 1.6, cy, 2.6, 2.4, 0, -Math.PI / 2, Math.PI / 2);
+      ctx.stroke();
+      if (frame) {
+        ellipse(cx + 2.4, cy - 2.4, 1.5, 0.45, skin, 0.8);
+        ellipse(cx + 2.4, cy + 2.4, 1.5, 0.45, skin, 0.8);
+      } else {
+        ellipse(cx + 4.2, cy - 0.5, 1.6, 0.4, skin, 0.8);
+        ellipse(cx + 4.2, cy + 0.5, 1.6, 0.4, skin, 0.8);
+      }
+      // Head up, out of the water.
+      ellipse(cx + 2, cy, 1.2, 1.1, head);
+      ellipse(cx + 3, cy, 0.4, 0.6, skin);
+    }
+  });
+  return key;
+}
+
+/**
+ * Someone out in the sun, from above (head to the right): their towel (striped) on the ground, them on it, in their swimming
+ * things: lying flat, or sat up on it.
+ */
+export function batherTexture(scene: Phaser.Scene, look: number, sat: boolean): string {
+  const key = `bather-${look % LOOKS}-${sat ? 1 : 0}`;
+  canvasTexture(scene, key, 16, 10, (ctx) => {
+    const towel = TOWELS[look % TOWELS.length];
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(1.6, 1.6, 14, 7.6);
+    ctx.fillStyle = towel[0];
+    ctx.fillRect(1, 1, 14, 7.6);
+    ctx.fillStyle = towel[1];
+    for (let x = 2; x < 15; x += 3) ctx.fillRect(x, 1, 1.4, 7.6);
+    if (sat) {
+      ctx.translate(5, 0);
+      person(ctx, look, 'sit', 'swimwear');
+    } else {
+      ctx.translate(0, 1);
+      person(ctx, look, 'down', 'swimwear');
+    }
+  });
+  return key;
+}
+
+/** Beach towels' stripes. */
+const TOWELS: [string, string][] = [['#f2d34a', '#f4f4f0'], ['#3a8ad0', '#f4f4f0'], ['#e0457b', '#f6c0d0'], ['#2fa37a', '#f2d34a'], ['#e8682a', '#2a3a6a']];
+
 /** A prisoner's jumpsuit. */
 const JUMPSUIT = '#f2711c';
 const SUIT = JUMPSUIT;
@@ -565,10 +656,19 @@ export class PeopleLayer {
       const act = p.mode === 'perform' && p.act && p.act !== 'vendor' ? p.act : null;
       // (A prisoner at it: fighting, at the weights, the pull-up bar, press-ups.)
       // (A soldier at PT.)
-      const uniform = p.inmate ? 'inmate' : p.soldier ? 'soldier' : undefined;
+      // (At somewhere to swim: in their swimming things.)
+      const uniform = p.inmate ? 'inmate' : p.soldier ? 'soldier' : p.swim || p.towel ? 'swimwear' : undefined;
       const drill = p.mode === 'fight' ? 'fight' : p.mode === 'exercise' ? p.drill : undefined;
       const skating = p.mode === 'skate' && !!p.ride;
-      const key = act
+      // (A swimmer, in the water; a child paddling, stood in it; someone sunbathing, on their towel.)
+      const swimming = p.mode === 'swim' && p.swim && p.swim.stroke !== 'paddle' ? p.swim.stroke : null;
+      const paddling = p.mode === 'swim' && p.swim?.stroke === 'paddle';
+      const sunning = p.mode === 'bathe' && p.speed === 0;
+      const key = swimming
+        ? swimmerTexture(this.scene, p.look, swimming, p.speed ? Math.floor(p.step * 2) % 2 : 0)
+        : sunning
+          ? batherTexture(this.scene, p.look, p.step === 1)
+          : act
         ? performerTexture(this.scene, p.look, act, Math.floor(p.step * ACT_FRAMES[act]) % ACT_FRAMES[act])
         : skating
           ? skaterTexture(this.scene, p.look)
@@ -585,7 +685,8 @@ export class PeopleLayer {
       // (A skater doing a trick: up in the air, spinning round once.)
       const air = skating && p.ride!.air > 0 ? 1 - p.ride!.air / AIR : 0;
       const hop = air ? Math.sin(air * Math.PI) * 1.4 : 0;
-      const lift = perspective.lift(this.base(p.x, p.y, p.level) + ((p.mode === 'down' ? 0.2 : p.mode === 'sit' ? 0.8 : 1.2) + hop) * 8);
+      const high = swimming ? 0.05 : sunning ? 0.15 : paddling ? 0.6 : p.mode === 'down' ? 0.2 : p.mode === 'sit' ? 0.8 : 1.2;
+      const lift = perspective.lift(this.base(p.x, p.y, p.level) + (high + hop) * 8);
       if (skating) s.setScale((SIZE * (1 + hop * 0.15)) / ART_SCALE);
       s.setPosition(perspective.x(p.x, lift), perspective.y(p.y, lift))
         .setRotation(p.angle + air * Math.PI * 2)
