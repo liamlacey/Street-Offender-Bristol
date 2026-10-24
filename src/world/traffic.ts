@@ -604,10 +604,12 @@ export function* lanesWork(map: GameMap, paths = false, joins: Join[] = []): Wor
       const resRight = r.oneway ? Math.min(reserved(-1), Math.max(0, left - right - resLeft - count * 2.6 * M)) : 0;
       const each = Math.min(LANE * 1.4, (left - right - resLeft - resRight) / count);
       for (let index = 0; index < count; index++) {
-        // On a narrow two-way street, over to the kerb, room to pass (no nearer it than a car's half width and a little).
-        // (Over to the parked cars, if there are any, no nearer them than a van's or an ambulance's half width.)
-        const kerb = parked(r, dir) ? 1.25 * M : 1.1 * M;
-        const offset = Math.max(left - resLeft - (index + 0.5) * each, r.oneway || count > 1 ? -Infinity : Math.min(left - resLeft - kerb, left * 0.6));
+        // On a narrow two-way street, over to the kerb, room to pass (no nearer it than a car's half width and a little); but with
+        // cars parked along its side, no nearer them than a van's or an ambulance's half width and a little (on the narrowest
+        // streets, out to the middle of the road, as drivers keep there).
+        const middleOf = left - resLeft - (index + 0.5) * each;
+        const single = !r.oneway && count === 1;
+        const offset = single && parked(r, dir) ? Math.min(middleOf, left - resLeft - 1.5 * M) : Math.max(middleOf, single ? Math.min(left - resLeft - 1.1 * M, left * 0.6) : -Infinity);
         const pts = dir === 1 ? offsetLine(middle, offset) : reversed(offsetLine(middle, -offset));
         const path = makePath(unfold(pts.map(round1)), r.bridge ? 1 : 0);
         path.bends = bendsOf(path, 8 * M);
@@ -879,6 +881,9 @@ function onFrom(a: Lane, lanes: Lane[]): Lane {
 }
 
 /** The turn from the end of one lane to the start of the next: a smooth curve, and where it's sharpest. */
+/** Lanes' ends this near: the turn's straight across, px. */
+const TOUCHING = 3 * M;
+
 export function turnBetween(a: Lane, b: Lane): Path {
   // Which way each's going at its end: over the last (and first) couple of metres, not just the last piece of its line.
   const way = (l: Lane, s: number, t: number): [number, number, number, number] => {
@@ -891,7 +896,9 @@ export function turnBetween(a: Lane, b: Lane): Path {
   const [bx, by, bux, buy] = way(b, 0, Math.min(b.length, 2 * M));
   const gap = Math.hypot(bx - ax, by - ay);
   // (Turning round, back the way it came: room to. Not a way that comes round to where it began, onto itself.)
-  const handle = Math.max(gap * 0.45, b.edge === a.edge && b.dir !== a.dir ? 2.5 * M : 0);
+  const round = b.edge === a.edge && b.dir !== a.dir;
+  // (Lanes' ends all but touching, where OSM's junction's awkward: straight across, not curling round to come at it.)
+  const handle = !round && gap < TOUCHING ? 0 : Math.max(gap * 0.45, round ? 2.5 * M : 0);
   const [c1x, c1y, c2x, c2y] = [ax + aux * handle, ay + auy * handle, bx - bux * handle, by - buy * handle];
   const steps = Math.max(2, Math.ceil((gap + handle) / 6));
   const pts: Pts = [];
@@ -1879,7 +1886,9 @@ export class Traffic {
       v.x += Math.sin(v.angle) * v.side;
       v.y -= Math.cos(v.angle) * v.side;
     }
-    if (v.sideRate) v.angle -= Math.max(-0.35, Math.min(0.35, Math.atan2(v.sideRate, Math.max(v.speed, 2 * M))));
+    // (Pulling in to park, all but stopped: only a little, its back not swung out over the lane beside.)
+    const most = v.parking ? 0.15 : 0.35;
+    if (v.sideRate) v.angle -= Math.max(-most, Math.min(most, Math.atan2(v.sideRate, Math.max(v.speed, 2 * M))));
     v.vx = Math.cos(v.angle) * v.speed;
     v.vy = Math.sin(v.angle) * v.speed;
     v.spin = 0;
@@ -2691,6 +2700,10 @@ export class Traffic {
     const b = blocker !== undefined && blocker >= 0 ? this.vehicleById(blocker) : undefined;
     if (!b || gap > WEAVE_AT || lead > SIREN_TOP * 0.7) return;
     const need = Math.max(gap, 0) + b.length + v.length + 8 * M;
+    // (Not round traffic it can't get past before its lane ends: it'd be out on the wrong side still, turning, across it as it
+    // moves off. Something that's not going anywhere, it goes round all the same.)
+    const lane = v.route[0].lane;
+    if (lane && lane.length - v.s < need && !this.obstructs(b)) return;
     // Out to the right first (the other side of the road), else left (the pavement); a little, then further.
     // (Not up the inside of something moving over to the kerb: pulling over for it, or in to park.)
     const kerbward = b.parking || b.sideRate > 0.2 * M || (!b.siren && this.yieldingTo(b));

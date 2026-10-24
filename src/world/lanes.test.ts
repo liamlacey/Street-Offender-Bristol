@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { GameMap } from '../map/osm';
+import { type GameMap, Projection } from '../map/osm';
 import { TILE, assemble, splitMap, tilesFor } from '../map/regions';
 import bristol from '../test/bristol';
 import { buildLanes, turnBetween } from './traffic';
@@ -17,11 +17,12 @@ function doublings(pts: number[], most = 2.5): { at: [number, number]; len: numb
 }
 
 describe('the lanes', () => {
-  // The region round the M32's junction at Newfoundland Way (where a lane began with a step backwards, and the turn into it
-  // looped round to come at it that way: the traffic spun round there).
+  // The region round the M32's junction at Eastville (where a lane began with a step backwards, and the turn into it looped
+  // round to come at it that way: the traffic spun round there): found by where it is on the ground, as the map grows.
   const map = bristol as unknown as GameMap;
   const { index, tiles } = splitMap(map);
-  const [cx, cy] = [Math.round(57072 / TILE) * TILE, Math.round(20495 / TILE) * TILE];
+  const proj = new Projection(map.origin.lat, map.origin.lon, map.pxPerMetre);
+  const [cx, cy] = [Math.round(proj.x(-2.560768) / TILE) * TILE, Math.round(proj.y(51.475474) / TILE) * TILE];
   const b = { x0: cx - 2 * TILE, y0: cy - 2 * TILE, x1: cx + 2 * TILE, y1: cy + 2 * TILE };
   const region = assemble(index, tilesFor(index, b.x0, b.y0, b.x1, b.y1).map((k) => tiles.get(k)!), b);
   const { lanes } = buildLanes(region);

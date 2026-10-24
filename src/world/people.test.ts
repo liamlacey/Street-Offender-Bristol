@@ -37,10 +37,13 @@ describe('people', () => {
     const view = viewAt(x, y);
     people.populate(view, true);
     let crossed = 0;
-    const t0 = performance.now();
+    // (Timing the people's update only: not this test's own checks of each of them, every frame.)
+    let spent = 0;
     let frames = 0;
     for (let t = 0; t < 90; t += 1 / 30, frames++) {
+      const t0 = performance.now();
       people.update(1 / 30, view, still(-1e6, -1e6), [], () => 'red', () => true);
+      spent += performance.now() - t0;
       for (const p of people.people) {
         if (p.mode === 'cross') crossed++;
         if (p.mode === 'walk' || p.mode === 'stand' || p.mode === 'queue') expect(people.inRoad(p.x, p.y, -1.2 * 8, p.level)).toBe(false);
@@ -48,7 +51,7 @@ describe('people', () => {
     }
     expect(crossed).toBeGreaterThan(0);
     // Cheap: well under a millisecond a frame, most of the time.
-    expect((performance.now() - t0) / frames).toBeLessThan(2);
+    expect(spent / frames).toBeLessThan(2);
   });
 
   it('walk round a vehicle parked up on the pavement (never through it), and on past it', () => {

@@ -32,11 +32,16 @@ downloaded again unless asked for (`npm run map -- --refresh <area>`).
 
 Each area's LIDAR alignment (`lidarShift`, metres east and south) is worked out
 the first time it's built (see "Lining up" below) and then kept in `areas.json`.
-The areas make a grid 9 wide and 10 deep, each about 970 m by 945 m (about 8.7 km by
-9.5 km in all; rows counted from the north, columns from the west): `cathedral` and
-the first 3 by 3 round it, then a ring of 16 round those, then a ring of 24 round
-those (the "second ring"), then a third ring of 41: a row and a column more to the
-west, east and south, and two rows more to the north. Their shifts (east, south):
+The areas make a grid 11 wide and 12 deep, each about 970 m by 945 m (about 10.7 km by
+11.3 km in all; rows counted from the north, columns from the west, from the first
+nine columns and ten rows: the two rows added to the north are rows 0 and −1, the two
+columns added to the west columns 0 and −1): `cathedral` and the first 3 by 3 round
+it, then a ring of 16 round those, then a ring of 24 round those (the "second ring"),
+then a third ring of 41: a row and a column more to the west, east and south, and two
+rows more to the north; then a fourth of 42: two rows more to the north (all eleven
+columns: Avonmouth's edge, Lawrence Weston, Henbury, Southmead, Filton, UWE) and two
+columns more to the west (Shirehampton and Pill, down past Abbots Leigh and Failand
+to Long Ashton). Their shifts (east, south):
 
 | Area | Where | Row, column | Shift |
 | --- | --- | --- | --- |
@@ -130,6 +135,48 @@ west, east and south, and two rows more to the north. Their shifts (east, south)
 | `filtonavenue` | third ring, north | 1, 7 | 0.5 m, 0.5 m |
 | `lockleaze` | third ring, north | 1, 8 | 0 m, 0.5 m |
 | `stokepark` | third ring, north-east corner | 1, 9 | −0.5 m, 0.5 m |
+| `avonbridge` | fourth ring, north-west corner | 0, −1 | 0 m, 0 m |
+| `centurypark` | fourth ring, north-west corner | 0, 0 | −0.5 m, 0 m |
+| `lawrenceweston` | fourth ring, north | 0, 1 | 0 m, −0.5 m |
+| `blaisecastle` | fourth ring, north | 0, 2 | 0 m, 0 m |
+| `henbury` | fourth ring, north | 0, 3 | 0.5 m, 0 m |
+| `westburyfields` | fourth ring, north | 0, 4 | 0.5 m, 1 m |
+| `badockswood` | fourth ring, north | 0, 5 | 0 m, 0.5 m |
+| `monkspark` | fourth ring, north | 0, 6 | 0 m, 0 m |
+| `northville` | fourth ring, north | 0, 7 | 0.5 m, 0 m |
+| `splatts` | fourth ring, north | 0, 8 | 0 m, 0 m |
+| `frenchay` | fourth ring, north | 0, 9 | 0 m, 0.5 m |
+| `merebank` | fourth ring, north-west corner | −1, −1 | −3.5 m, −1 m |
+| `cabotpark` | fourth ring, north-west corner | −1, 0 | 1 m, 0.5 m |
+| `westonmoor` | fourth ring, north | −1, 1 | 0.5 m, 0.5 m |
+| `hallen` | fourth ring, north | −1, 2 | 0 m, 0 m |
+| `thelawns` | fourth ring, north | −1, 3 | 0.5 m, 0.5 m |
+| `reptongrange` | fourth ring, north | −1, 4 | 0.5 m, 0 m |
+| `brentry` | fourth ring, north | −1, 5 | 0 m, 0 m |
+| `filtongolf` | fourth ring, north | −1, 6 | 0.5 m, 0.5 m |
+| `filton` | fourth ring, north | −1, 7 | 1 m, 0 m |
+| `abbeywood` | fourth ring, north | −1, 8 | −0.5 m, −0.5 m |
+| `harrystoke` | fourth ring, north | −1, 9 | 0.5 m, 0.5 m |
+| `penpole` | fourth ring, west | 1, 0 | −1 m, 0 m |
+| `avongorgeestate` | fourth ring, west | 1, −1 | 1 m, 0.5 m |
+| `tynings` | fourth ring, west | 2, 0 | 0 m, 1 m |
+| `lamplighters` | fourth ring, west | 2, −1 | 0.5 m, 1 m |
+| `hamgreen` | fourth ring, west | 3, 0 | 0 m, 0 m |
+| `pill` | fourth ring, west | 3, −1 | 0 m, 0 m |
+| `oldparkwood` | fourth ring, west | 4, 0 | 0 m, 0 m |
+| `markham` | fourth ring, west | 4, −1 | 0 m, 0 m |
+| `abbotspond` | fourth ring, west | 5, 0 | 0 m, −0.5 m |
+| `tanpit` | fourth ring, west | 5, −1 | 0 m, 0.5 m |
+| `roundhill` | fourth ring, west | 6, 0 | −0.5 m, 1.5 m |
+| `durbansbatch` | fourth ring, west | 6, −1 | 1 m, 1 m |
+| `longwood` | fourth ring, west | 7, 0 | −1.5 m, 0 m |
+| `wraxallpiece` | fourth ring, west | 7, −1 | −0.5 m, 1 m |
+| `thebrake` | fourth ring, west | 8, 0 | −0.5 m, 0.5 m |
+| `failand` | fourth ring, west | 8, −1 | 0 m, 0.5 m |
+| `birdwell` | fourth ring, west | 9, 0 | −0.5 m, 0 m |
+| `ashtonhill` | fourth ring, west | 9, −1 | 1 m, 1.5 m |
+| `barrowwood` | fourth ring, west | 10, 0 | 1 m, 0.5 m |
+| `crossgrove` | fourth ring, west | 10, −1 | 1.5 m, 1.5 m |
 
 ## Growing the map
 
@@ -721,7 +768,8 @@ stop beyond that too (half their widths together ÷ the tangent of the angle, at
   to 1.4 s over 30 s), and traffic crawling under 2 m/s lets it out.
 - Oncoming, two squeeze past each other (needing only 80% of their widths between
   them); on a narrow two-way street they keep over to the kerb (no nearer it than
-  1.1 m). Nose to nose in a knot, the one with less right of way backs off (1.2 m/s
+  1.1 m), but with cars parked along their side, no nearer those than 1.5 m (on the
+  narrowest, out to the middle of the road, as drivers keep there). Nose to nose in a knot, the one with less right of way backs off (1.2 m/s
   for 3 s, if there's room behind it; if not, after 10 s it edges past). Oncoming
   along another road (two one-way roads drawn close where they join) isn't in the way.
 - Lane changes, where a road has two or more lanes each way: into the lane for the
@@ -838,7 +886,7 @@ front and back) or fire engines (red, a ladder on top).
 - They park along the kerb of the streets beside it (not cycle paths, service roads or
   bus-only ways): on the kerb lane's left, and on a one-way street its right too, where
   the kerb's within 25 m of the building on that side (or, if there's nowhere that
-  near, 45 m); 3 m from the lanes' ends and 9 m from crossings, bus stops and the lights;
+  near, 45 m); 10 m from the lanes' ends (so one coming round the corner is through its turn before it reaches them) and 9 m from crossings, bus stops and the lights;
   clear of the parking bays and each other; where the lane runs straight past (on a
   bend its ends would stick out). Up on the pavement, 0.7 m of it in the road, but
   always leaving 1.15 m clear of the lane's middle (a car gets by; a bus or a lorry
@@ -856,7 +904,9 @@ front and back) or fire engines (red, a ladder on top).
   clear all the way past (it, and anything coming, where it'll be by then): out on
   the wrong side of the road first, else up on the pavement (to the road's edge and
   2 m beyond), a little way over, then further; not up the inside of something moving
-  over to the kerb; back in once past and there's room. Traffic ahead with one coming
+  over to the kerb; not round traffic it can't get past before its lane ends (it'd be
+  out on the wrong side still, turning, across it: it waits), though round something
+  that's not going anywhere all the same; back in once past and there's room. Traffic ahead with one coming
   up behind it (within 45 m) pulls over to the kerb and slows right down; people get
   out of its way as from you.
 - Its siren's heard up to 260 m away (the nearest one): a police car's wail, an

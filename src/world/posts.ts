@@ -49,7 +49,7 @@ export const ROOM = 1.15 * M;
  */
 const NEAR = 25 * M;
 const FARTHER = 45 * M;
-const ENDS = 3 * M;
+const ENDS = 10 * M;
 const CLEAR = 9 * M;
 
 /**

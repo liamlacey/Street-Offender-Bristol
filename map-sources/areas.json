@@ -1445,6 +1445,678 @@
         -0.5,
         0.5
       ]
+    },
+    {
+      "name": "avonbridge",
+      "about": "About 970 m by 945 m in the fourth ring's first row to the north: Avonbridge Trading Estate, the Avonmouth Old Boys rugby ground and TeamSport karting, by the M5.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.6915,
+        "maxlat": 51.507,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-24T06:57:26Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "centurypark",
+      "about": "About 970 m by 945 m in the fourth ring's first row to the north: Century Park, Lawrence Weston Community Farm and the travellers' site.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.6775,
+        "maxlat": 51.507,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T21:36:06Z",
+      "lidarShift": [
+        -0.5,
+        0
+      ]
+    },
+    {
+      "name": "lawrenceweston",
+      "about": "About 970 m by 945 m in the fourth ring's first row to the north: Lawrence Weston: its shops and community centre, its estates.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.6635,
+        "maxlat": 51.507,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-24T06:57:21Z",
+      "lidarShift": [
+        0,
+        -0.5
+      ]
+    },
+    {
+      "name": "blaisecastle",
+      "about": "About 970 m by 945 m in the fourth ring's first row to the north: the Blaise Castle Estate and its woods (Kings Weston Hill, Beechy Woods), Henbury Cemetery.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.6495,
+        "maxlat": 51.507,
+        "maxlon": -2.6355
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-22T21:54:01Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "henbury",
+      "about": "About 970 m by 945 m in the fourth ring's first row to the north: Henbury: its village hall, St Mary the Virgin and Blaise Primary, Sheep Wood.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.6355,
+        "maxlat": 51.507,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T14:36:20Z",
+      "lidarShift": [
+        0.5,
+        0
+      ]
+    },
+    {
+      "name": "westburyfields",
+      "about": "About 970 m by 945 m in the fourth ring's first row to the north: Westbury Fields, Badocks Wood, Doncaster Road Park and the Greenway Centre.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.6215,
+        "maxlat": 51.507,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T14:36:20Z",
+      "lidarShift": [
+        0.5,
+        1
+      ]
+    },
+    {
+      "name": "badockswood",
+      "about": "About 970 m by 945 m in the fourth ring's first row to the north: Southmead Hospital, the Trym valley, Doncaster Road and Badocks Wood.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.6075,
+        "maxlat": 51.507,
+        "maxlon": -2.5935
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-24T06:57:15Z",
+      "lidarShift": [
+        0,
+        0.5
+      ]
+    },
+    {
+      "name": "monkspark",
+      "about": "About 970 m by 945 m in the fourth ring's first row to the north: Monks Park, Fonthill, the Science Quarter and BAWA.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.5935,
+        "maxlat": 51.507,
+        "maxlon": -2.5795
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-24T06:57:15Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "northville",
+      "about": "About 970 m by 945 m in the fourth ring's first row to the north: Northville and the south of Filton: Poets Park, Elm Park, Shield Road.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.5795,
+        "maxlat": 51.507,
+        "maxlon": -2.5655
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-24T06:57:21Z",
+      "lidarShift": [
+        0.5,
+        0
+      ]
+    },
+    {
+      "name": "splatts",
+      "about": "About 970 m by 945 m in the fourth ring's first row to the north: Splatts Abbey Wood and the west of UWE's Frenchay campus.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.5655,
+        "maxlat": 51.507,
+        "maxlon": -2.5515
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-24T06:57:21Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "frenchay",
+      "about": "About 970 m by 945 m in the fourth ring's first row to the north: UWE's Frenchay campus: its car parks, the Exhibition and Conference Centre, the Centre for Sport.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.5515,
+        "maxlat": 51.507,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-24T06:57:21Z",
+      "lidarShift": [
+        0,
+        0.5
+      ]
+    },
+    {
+      "name": "merebank",
+      "about": "About 970 m by 945 m in the fourth ring's second row to the north: Avonmouth's eastern edge: the Mere Bank, the Bristol Bioresources & Renewable Energy Park.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.6915,
+        "maxlat": 51.5155,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-09-29T20:40:47Z",
+      "lidarShift": [
+        -3.5,
+        -1
+      ]
+    },
+    {
+      "name": "cabotpark",
+      "about": "About 970 m by 945 m in the fourth ring's second row to the north: Cabot Business Park and the Avonmouth recycling centre and transfer station.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.6775,
+        "maxlat": 51.5155,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T17:12:10Z",
+      "lidarShift": [
+        1,
+        0.5
+      ]
+    },
+    {
+      "name": "westonmoor",
+      "about": "About 970 m by 945 m in the fourth ring's second row to the north: Lawrence Weston Moor, St Bede's Catholic College, Oasis Academy Bank Leaze.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.6635,
+        "maxlat": 51.5155,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T17:12:10Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "hallen",
+      "about": "About 970 m by 945 m in the fourth ring's second row to the north: Hallen: the petroleum depot, Blaise High School, Moorgrove Wood, Blaise Hamlet.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.6495,
+        "maxlat": 51.5155,
+        "maxlon": -2.6355
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-22T23:01:16Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "thelawns",
+      "about": "About 970 m by 945 m in the fourth ring's second row to the north: The Lawns, Barnard Park and Henbury Leisure Centre.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.6355,
+        "maxlat": 51.5155,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T14:36:20Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "reptongrange",
+      "about": "About 970 m by 945 m in the fourth ring's second row to the north: Repton Grange and the north of Henbury: Henbury Library, Monsdale Drive.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.6215,
+        "maxlat": 51.5155,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-24T06:57:21Z",
+      "lidarShift": [
+        0.5,
+        0
+      ]
+    },
+    {
+      "name": "brentry",
+      "about": "About 970 m by 945 m in the fourth ring's second row to the north: Brentry, Charlton Common and Fonthill Park.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.6075,
+        "maxlat": 51.5155,
+        "maxlon": -2.5935
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-20T12:21:30Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "filtongolf",
+      "about": "About 970 m by 945 m in the fourth ring's second row to the north: Filton Golf Course, Airbus and the Brabazon Office Park, the old airfield's edge.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.5935,
+        "maxlat": 51.5155,
+        "maxlon": -2.5795
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-22T12:41:15Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "filton",
+      "about": "About 970 m by 945 m in the fourth ring's second row to the north: Filton: the Shield Retail Centre, St Peter's Church, Filton Library, the Air Balloon.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.5795,
+        "maxlat": 51.5155,
+        "maxlon": -2.5655
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-24T06:57:15Z",
+      "lidarShift": [
+        1,
+        0
+      ]
+    },
+    {
+      "name": "abbeywood",
+      "about": "About 970 m by 945 m in the fourth ring's second row to the north: Abbey Wood: its business and shopping parks, Bristol Parkway's line, Stoke Gifford Stadium.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.5655,
+        "maxlat": 51.5155,
+        "maxlon": -2.5515
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-24T06:57:26Z",
+      "lidarShift": [
+        -0.5,
+        -0.5
+      ]
+    },
+    {
+      "name": "harrystoke",
+      "about": "About 970 m by 945 m in the fourth ring's second row to the north: Harry Stoke and Stoke Gifford: St Michael's Church, Abbeywood Community School, the rail depot.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.5515,
+        "maxlat": 51.5155,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-24T06:57:21Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "penpole",
+      "about": "About 970 m by 945 m in the fourth ring's first column to the west: Penpole Lane, the Tump, Shirehampton Park Golf Club and Oasis Academy Brightstowe.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.6775,
+        "maxlat": 51.4985,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T21:36:06Z",
+      "lidarShift": [
+        -1,
+        0
+      ]
+    },
+    {
+      "name": "avongorgeestate",
+      "about": "About 970 m by 945 m in the fourth ring's second column to the west: the Avon Gorge Industrial Estate, Portway Park & Ride and the edge of Avonmouth.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.6915,
+        "maxlat": 51.4985,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T23:18:31Z",
+      "lidarShift": [
+        1,
+        0.5
+      ]
+    },
+    {
+      "name": "tynings",
+      "about": "About 970 m by 945 m in the fourth ring's first column to the west: Shirehampton: Tynings Field, the Cotswold Estate and the river down to Chapel Pill.",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.6775,
+        "maxlat": 51.49,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-24T06:57:15Z",
+      "lidarShift": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "lamplighters",
+      "about": "About 970 m by 945 m in the fourth ring's second column to the west: the Lamplighters, Shirehampton Cemetery and the river's north bank by Pill.",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.6915,
+        "maxlat": 51.49,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T23:18:31Z",
+      "lidarShift": [
+        0.5,
+        1
+      ]
+    },
+    {
+      "name": "hamgreen",
+      "about": "About 970 m by 945 m in the fourth ring's first column to the west: Ham Green: its lake, Penny Brohn Cancer Care and the river.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.6775,
+        "maxlat": 51.4815,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-21T16:04:33Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "pill",
+      "about": "About 970 m by 945 m in the fourth ring's second column to the west: Pill: its marina, the village, Markham Brook and the river.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.6915,
+        "maxlat": 51.4815,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-24T06:57:11Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "oldparkwood",
+      "about": "About 970 m by 945 m in the fourth ring's first column to the west: Old Park Wood, St Katherine's School and Haberfield Bridge.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.6775,
+        "maxlat": 51.473,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T12:54:31Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "markham",
+      "about": "About 970 m by 945 m in the fourth ring's second column to the west: Markham Brook and Markham Farm, fields and woods.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.6915,
+        "maxlat": 51.473,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T12:54:31Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "abbotspond",
+      "about": "About 970 m by 945 m in the fourth ring's first column to the west: Abbots Pond, Abbots Leigh's manor, Snake's Well Wood, Fish Pond Wood.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.6775,
+        "maxlat": 51.4645,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T12:54:31Z",
+      "lidarShift": [
+        0,
+        -0.5
+      ]
+    },
+    {
+      "name": "tanpit",
+      "about": "About 970 m by 945 m in the fourth ring's second column to the west: West Tanpit Wood, Three Cornered Wood, the Markham Brook solar farm.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.6915,
+        "maxlat": 51.4645,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-03T07:29:55Z",
+      "lidarShift": [
+        0,
+        0.5
+      ]
+    },
+    {
+      "name": "roundhill",
+      "about": "About 970 m by 945 m in the fourth ring's first column to the west: Fifty Acre Wood's west, Round Hill Clump and the golf club.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.6775,
+        "maxlat": 51.456,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-14T00:40:22Z",
+      "lidarShift": [
+        -0.5,
+        1.5
+      ]
+    },
+    {
+      "name": "durbansbatch",
+      "about": "About 970 m by 945 m in the fourth ring's second column to the west: Durbans Batch, Leigh Wood's west and the Bristol & Clifton Golf Club.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.6915,
+        "maxlat": 51.456,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-03T07:29:55Z",
+      "lidarShift": [
+        1,
+        1
+      ]
+    },
+    {
+      "name": "longwood",
+      "about": "About 970 m by 945 m in the fourth ring's first column to the west: Long Wood, Durnford Quarry and the west of the Ashton Court estate.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.6775,
+        "maxlat": 51.4475,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-14T00:40:22Z",
+      "lidarShift": [
+        -1.5,
+        0
+      ]
+    },
+    {
+      "name": "wraxallpiece",
+      "about": "About 970 m by 945 m in the fourth ring's second column to the west: Wraxall Piece, Long Wood and the school sports grounds, Bristol City's training ground.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.6915,
+        "maxlat": 51.4475,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-22T23:01:16Z",
+      "lidarShift": [
+        -0.5,
+        1
+      ]
+    },
+    {
+      "name": "thebrake",
+      "about": "About 970 m by 945 m in the fourth ring's first column to the west: The Brake, Durnford Quarry and the Miners Rest.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.6775,
+        "maxlat": 51.439,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-22T23:01:16Z",
+      "lidarShift": [
+        -0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "failand",
+      "about": "About 970 m by 945 m in the fourth ring's second column to the west: Failand: Fenn's Wood, Ashton Hill Plantation, the school sports grounds.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.6915,
+        "maxlat": 51.439,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-22T23:01:16Z",
+      "lidarShift": [
+        0,
+        0.5
+      ]
+    },
+    {
+      "name": "birdwell",
+      "about": "About 970 m by 945 m in the fourth ring's first column to the west: Long Ashton village: Birdwell, the post office, the community centre, the Bird in Hand.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.6775,
+        "maxlat": 51.4305,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T13:28:13Z",
+      "lidarShift": [
+        -0.5,
+        0
+      ]
+    },
+    {
+      "name": "ashtonhill",
+      "about": "About 970 m by 945 m in the fourth ring's second column to the west: Ashton Hill Plantation, Cook's Wood, the Land Yeo and the shooting range.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.6915,
+        "maxlat": 51.4305,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T13:28:13Z",
+      "lidarShift": [
+        1,
+        1.5
+      ]
+    },
+    {
+      "name": "barrowwood",
+      "about": "About 970 m by 945 m in the fourth ring's first column to the west: Oatley Park, Barrow Wood, Charcoal Wood and Whistlewind Farm.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.6775,
+        "maxlat": 51.422,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T00:19:03Z",
+      "lidarShift": [
+        1,
+        0.5
+      ]
+    },
+    {
+      "name": "crossgrove",
+      "about": "About 970 m by 945 m in the fourth ring's second column to the west: Crossgrove Wood, Redwood Farm and the Land Yeo.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.6915,
+        "maxlat": 51.422,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-10-24",
+      "osmNewestEdit": "2026-10-23T13:28:13Z",
+      "lidarShift": [
+        1.5,
+        1.5
+      ]
     }
   ]
 }
