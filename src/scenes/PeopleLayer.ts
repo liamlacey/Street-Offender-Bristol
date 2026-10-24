@@ -1,5 +1,6 @@
 import type * as Phaser from 'phaser';
 import { type Bird, type Dog, type Gather, type Kickabout, LOOKS, type People, type Person, type Picnic } from '../world/people';
+import type { Drill } from '../world/places';
 import type { Act } from '../world/streetLife';
 import type { Perspective } from '../world/perspective';
 import { ART_SCALE, canvasTexture } from './art';
@@ -21,8 +22,11 @@ export function clothes(look: number): { top: string; bottom: string; hair: stri
 }
 
 /** A person from above, facing right: `pose` is standing, a step (one foot forward, then the other), or lying down. */
-function person(ctx: Ctx, look: number, pose: Pose): void {
-  const { top, bottom, hair, skin } = clothes(look);
+function person(ctx: Ctx, look: number, pose: Pose, inmate = false): void {
+  const own = clothes(look);
+  // (A prisoner: their orange jumpsuit, top and bottom.)
+  const [top, bottom] = inmate ? [JUMPSUIT, shadeOf(JUMPSUIT)] : [own.top, own.bottom];
+  const { hair, skin } = own;
   const ellipse = (x: number, y: number, rx: number, ry: number, fill: string) => {
     ctx.fillStyle = fill;
     ctx.beginPath();
@@ -331,15 +335,101 @@ function ballTexture(scene: Phaser.Scene, kind: Kickabout['kind']): string {
   return key;
 }
 
-export function personTexture(scene: Phaser.Scene, look: number, pose: Pose, hivis = false, lollipop = false): string {
-  const key = `person-${look % LOOKS}-${pose}${hivis ? '-hivis' : ''}${lollipop ? '-lollipop' : ''}`;
+export function personTexture(scene: Phaser.Scene, look: number, pose: Pose, hivis = false, lollipop = false, inmate = false): string {
+  const key = `person-${look % LOOKS}-${pose}${hivis ? '-hivis' : ''}${lollipop ? '-lollipop' : ''}${inmate ? '-inmate' : ''}`;
   const draw = (ctx: Ctx) => {
-    person(ctx, look, pose);
+    person(ctx, look, pose, inmate);
     if (hivis) hiVis(ctx, pose);
     if (lollipop) lollipopLady(ctx, pose);
   };
   if (pose === 'down') canvasTexture(scene, key, 16, 8, draw);
   else canvasTexture(scene, key, 10, 10, draw);
+  return key;
+}
+
+/** A prisoner's jumpsuit. */
+const JUMPSUIT = '#f2711c';
+
+/**
+ * A prisoner at it, in the yard, from above (facing right; two frames, in turn): fighting (a punch thrown, one fist then the
+ * other, the other up guarding), on the weight bench (lying on it, the bar down to the chest, then pressed up: arms bent out, then
+ * straight), on the pull-up bar (hanging, then pulled up: nearer, so bigger, their shadow further off), press-ups (down, then up).
+ */
+export function drillTexture(scene: Phaser.Scene, look: number, drill: Drill, frame: number): string {
+  const key = `drill-${drill}-${look % LOOKS}-${frame}`;
+  canvasTexture(scene, key, 16, 12, (ctx) => {
+    const { hair, skin } = clothes(look);
+    const ellipse = (x: number, y: number, rx: number, ry: number, fill: string) => {
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    const [cx, cy] = [8, 6];
+    const suit = shadeOf(JUMPSUIT);
+    if (drill === 'fight') {
+      ellipse(cx + 0.7, cy + 1, 2.2, 3.1, 'rgba(0,0,0,0.25)');
+      // Feet planted apart, one forward.
+      ellipse(cx + 1.2, cy - 1.2, 1.1, 0.7, suit);
+      ellipse(cx - 1.4, cy + 1.2, 1.1, 0.7, suit);
+      // The punching arm straight out, its fist; the other bent up, guarding the face.
+      const side = frame ? 1 : -1;
+      ellipse(cx + 2.4, cy + 1.6 * side, 1.9, 0.6, JUMPSUIT);
+      ellipse(cx + 4.3, cy + 1.6 * side, 0.6, 0.6, skin);
+      ellipse(cx + 1.5, cy - 1.5 * side, 0.9, 0.6, JUMPSUIT);
+      ellipse(cx + 2.4, cy - 1.1 * side, 0.55, 0.55, skin);
+      ellipse(cx, cy, 1.5, 2.8, JUMPSUIT);
+      ellipse(cx - 0.2, cy, 1.15, 2.2, suit);
+      ellipse(cx + 0.4, cy, 1.2, 1.15, hair);
+      ellipse(cx + 1.35, cy, 0.4, 0.75, skin);
+      return;
+    }
+    if (drill === 'pullup') {
+      // Up: bigger (nearer), and their shadow further off.
+      const up = frame ? 1.12 : 1;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(up, up);
+      ellipse(1.2 * up, 1.6 * up, 2.2, 3.1, 'rgba(0,0,0,0.22)');
+      // Arms up to the bar in front of them, hands on it.
+      ellipse(1.6, -1.6, 1.6, 0.55, JUMPSUIT);
+      ellipse(1.6, 1.6, 1.6, 0.55, JUMPSUIT);
+      ellipse(3.1, -1.7, 0.5, 0.5, skin);
+      ellipse(3.1, 1.7, 0.5, 0.5, skin);
+      ellipse(0, 0, 1.5, 2.8, JUMPSUIT);
+      ellipse(-0.2, 0, 1.15, 2.2, suit);
+      ellipse(0.2, 0, 1.2, 1.15, hair);
+      ctx.restore();
+      return;
+    }
+    // Lying along it: on their back on the bench (head to the rack); face down for press-ups.
+    const lift = drill === 'lift';
+    const up = !lift && frame ? 0.7 : 0;
+    ellipse(cx + 0.6 + up, cy + 0.8 + up, 6.6, 2.4, 'rgba(0,0,0,0.25)');
+    ellipse(cx - 3.8, cy - 0.9, 2.6, 0.85, suit);
+    ellipse(cx - 3.6, cy + 0.9, 2.6, 0.85, suit);
+    ellipse(cx + 0.8, cy, 2.5, 2, JUMPSUIT);
+    if (lift) {
+      // Arms bent out to the bar at the chest, then straight up (shorter, from above).
+      const out = frame ? 1.4 : 2.6;
+      ellipse(cx + 1.6, cy - out / 2 - 0.9, 0.6, out / 2 + 0.3, JUMPSUIT);
+      ellipse(cx + 1.6, cy + out / 2 + 0.9, 0.6, out / 2 + 0.3, JUMPSUIT);
+      // The bar across, its plates.
+      ctx.fillStyle = '#b9bdc2';
+      ctx.fillRect(cx + 1.4, cy - 5.6, 0.5, 11.2);
+      ctx.fillStyle = '#1d1d20';
+      ctx.fillRect(cx + 0.9, cy - 5.8, 1.5, 1.2);
+      ctx.fillRect(cx + 0.9, cy + 4.6, 1.5, 1.2);
+    } else {
+      // Hands flat by the shoulders.
+      ellipse(cx + 1.6, cy - 2.6, 0.9, 0.55, JUMPSUIT);
+      ellipse(cx + 1.6, cy + 2.6, 0.9, 0.55, JUMPSUIT);
+      ellipse(cx + 2.4, cy - 2.7, 0.45, 0.45, skin);
+      ellipse(cx + 2.4, cy + 2.7, 0.45, 0.45, skin);
+    }
+    ellipse(cx + 4.4, cy, 1.25, 1.2, hair);
+    if (lift) ellipse(cx + 4.9, cy, 0.55, 0.8, skin);
+  });
   return key;
 }
 
@@ -422,7 +512,13 @@ export class PeopleLayer {
       seen.add(p);
       const pose: Pose = p.mode === 'down' ? 'down' : p.mode === 'sit' ? 'sit' : p.speed < 2 ? 'stand' : p.step < 0.5 ? 'step0' : 'step1';
       const act = p.mode === 'perform' && p.act && p.act !== 'vendor' ? p.act : null;
-      const key = act ? performerTexture(this.scene, p.look, act, Math.floor(p.step * ACT_FRAMES[act]) % ACT_FRAMES[act]) : personTexture(this.scene, p.look, pose, p.hivis, p.lollipop);
+      // (A prisoner at it: fighting, at the weights, the pull-up bar, press-ups.)
+      const drill = p.inmate && p.mode === 'fight' ? 'fight' : p.inmate && p.mode === 'exercise' ? p.drill : undefined;
+      const key = act
+        ? performerTexture(this.scene, p.look, act, Math.floor(p.step * ACT_FRAMES[act]) % ACT_FRAMES[act])
+        : drill
+          ? drillTexture(this.scene, p.look, drill, Math.floor(p.step * 2) % 2)
+          : personTexture(this.scene, p.look, pose, p.hivis, p.lollipop, p.inmate);
       let s = this.sprites.get(p);
       if (!s) {
         // (A child, smaller.)

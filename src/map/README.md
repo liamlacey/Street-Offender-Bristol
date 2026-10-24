@@ -1218,7 +1218,20 @@ but the water and the buildings.
     each building's door (more at a university, a hospital's smokers to one side),
     bikes (not a hospital), a bench. A stadium: a crowd all round it (a match on),
     stewards in hi-vis, burger vans.
-  - The prison: a 5.5 m stone wall round it (all but unbreakable).
+  - The prison: a 5.5 m stone wall round it (all but unbreakable, but for the biggest
+    hit: a bus, a lorry, a fire engine at speed). Its yard (its grounds, but for its
+    buildings and roads) full of prisoners in orange jumpsuits, one for every 90 m² of
+    open ground (at most 70): wandering about it (never through a wall or a building,
+    and kept inside its wall), standing about in groups, doing press-ups; three fights
+    (two at it, lunging and throwing punches, three or four round them watching; now and
+    then one knocked down, up again in a few seconds), and more flaring up (about once a
+    minute and a half, a prisoner squares up to another within 6 m, those within 12 m
+    coming round to watch); a gym or two (weight benches and pull-up bars in a row, 2.6 m
+    apart, someone on most of them, pressing the bar, pulling up). Its wall broken: every
+    prisoner in it makes a run for the gap (each within a couple of seconds of seeing
+    it; those knocked down, once they're up), out through it, and off running away from
+    the prison, scattered; free after (walking the streets in orange); and no more come
+    out into its yard.
   - A café or restaurant (`amenity=cafe/restaurant/ice_cream`): 1 to 3 tables out on the
     pavement in front (2 to 4 at a restaurant), 2.4 m apart along its front, 1.6 m out,
     clear of the road; a café's table and two chairs, white, black, timber or green; a

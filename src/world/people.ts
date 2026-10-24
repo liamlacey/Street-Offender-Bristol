@@ -20,7 +20,7 @@ import { PLAY_KINDS, PLAY_SCALE, type PlayKind } from './playgrounds';
 import { type Game, parkLifeWork } from './parkLife';
 import { siteLifeWork } from './sites';
 import type { SportGame } from './sports';
-import { placesWork } from './places';
+import { type Drill, placesWork } from './places';
 import { type Act, pedestrianBusy, streetLifeWork } from './streetLife';
 import type { Light } from './lights';
 import { offsetLine } from './world';
@@ -103,7 +103,7 @@ const R = 0.3 * M;
 const SHOPPERS = 16;
 const HOLD = 0.85 * M;
 
-export type Mode = 'walk' | 'stand' | 'wander' | 'kerb' | 'cross' | 'queue' | 'board' | 'flee' | 'dive' | 'down' | 'sit' | 'shop' | 'perform' | 'vend' | 'join' | 'game';
+export type Mode = 'walk' | 'stand' | 'wander' | 'kerb' | 'cross' | 'queue' | 'board' | 'flee' | 'dive' | 'down' | 'sit' | 'shop' | 'perform' | 'vend' | 'join' | 'game' | 'fight' | 'exercise' | 'escape';
 
 /** A bench or picnic table (as the world has it: it can be knocked about, or smashed). */
 export interface Seat {
@@ -325,6 +325,14 @@ export interface Person {
   child?: number;
   /** A lollipop lady (at a school, by the road): her white coat and her sign. */
   lollipop?: boolean;
+  /** A prisoner (in an orange jumpsuit), kept inside the prison's wall till it's broken (then out, and away: `free`); what they're at
+   * (fighting `foe`, at the weights, the pull-up bar, press-ups). */
+  inmate?: boolean;
+  free?: boolean;
+  drill?: Drill;
+  foe?: Person | null;
+  /** Breaking out: the way out through the gap, radians. */
+  away?: number;
 }
 
 /** A vehicle as the people see it: where, which way, how big, how fast; a bus's stop. */
@@ -390,9 +398,11 @@ interface Spot {
   hivis?: boolean;
   /** On the brownfield: cutting across it, a dog with some. */
   waste?: boolean;
-  /** Children (how big); a lollipop lady (see places.ts). */
+  /** Children (how big); a lollipop lady; prisoners, and what they're at (see places.ts). */
   child?: number;
   lollipop?: boolean;
+  inmate?: boolean;
+  drill?: Drill;
 }
 
 /** Where a crossing's kerbs are (either side of the road, on the pavement), and how it works. */
@@ -440,6 +450,19 @@ const NEAR_CELL = 4 * M;
 const key = (x: number, y: number) => `${Math.floor(x / GRID)},${Math.floor(y / GRID)}`;
 
 /** A line's name, by where it is (the same walk or ring, made again, has the same one). */
+/** How far a point is from a ring's edge, px. */
+function distToRingEdge(ring: Pts, x: number, y: number): number {
+  let best = Infinity;
+  for (let i = 0; i + 1 < ring.length; i += 2) {
+    const j = (i + 2) % ring.length;
+    const [ax, ay, bx, by] = [ring[i], ring[i + 1], ring[j], ring[j + 1]];
+    const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+    const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2));
+    best = Math.min(best, Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y));
+  }
+  return best;
+}
+
 function ptsKey(pts: Pts): string {
   return `${pts[0]},${pts[1]},${pts[pts.length - 2]},${pts[pts.length - 1]},${pts.length}`;
 }
@@ -463,6 +486,8 @@ export class People {
   private readonly danger: Mover[] = [];
   /** Where people can be (see `update`), as it was last given. */
   private walkable: (x: number, y: number, level: number) => boolean = () => true;
+  /** The prisons broken out of (their yards' outlines, by ptsKey): emptied, and no more prisoners come out into them. */
+  private readonly brokenOut = new Map<string, { x: number; y: number; away: number }>();
   /** The bus stops: where people wait (on the pavement by the stop), x, y. */
   readonly stops: [number, number][] = [];
   /** The parks and squares people wander about. */
@@ -1173,6 +1198,7 @@ export class People {
 
   /** Someone (or a group) at a spot, standing about; in a park or square, some wander off about it. */
   private atSpot(s: Spot): void {
+    if (s.inmate) return this.inmateAt(s);
     // On the grass in a park: a picnic, now and then: a blanket, and two to five sitting round it.
     if (s.grass && this.rand() < 0.35 && !this.underTree(s.x, s.y)) {
       const picnic: Picnic = { x: s.x, y: s.y, angle: this.rand() * Math.PI, pattern: Math.floor(this.rand() * 4), gone: false };
@@ -1497,6 +1523,19 @@ export class People {
         case 'down':
           this.thrown(p, dt, walkable);
           break;
+        case 'fight':
+          this.fight(p, dt);
+          break;
+        case 'exercise':
+          p.timer -= dt;
+          p.speed = 0;
+          // (Each at their own speed: a press-up, a pull-up, the bar up and down, about every second and a half.)
+          p.step = (p.step + dt * (0.55 + (p.id % 5) * 0.06)) % 1;
+          if (p.timer < 0) this.rejoin(p);
+          break;
+        case 'escape':
+          this.escape(p, dt);
+          break;
       }
       if (p.speed > 0 && p.mode !== 'down') p.step = (p.step + (dt * p.speed) / (0.75 * M)) % 1;
       p.level = levelAt(p.level, p.x, p.y);
@@ -1691,6 +1730,8 @@ export class People {
 
   /** Wandering about a park or square: to somewhere in it, a while there, then somewhere else. */
   private wander(p: Person, dt: number): void {
+    // A prisoner about the yard, now and then, squares up to another near them (about once a minute and a half each).
+    if (p.inmate && !p.free && this.rand() < dt / 90) this.pickFight(p);
     if (p.timer > 0) {
       p.timer -= dt;
       p.speed = 0;
@@ -1704,7 +1745,7 @@ export class People {
         const a = this.rand() * Math.PI * 2;
         const d = (5 + this.rand() * 25) * M;
         const [x, y] = [p.x + Math.cos(a) * d, p.y + Math.sin(a) * d];
-        if (pointInRing(x, y, ring)) {
+        if (pointInRing(x, y, ring) && (!p.inmate || this.clearTo(p.x, p.y, x, y))) {
           [p.tx, p.ty] = [x, y];
           return;
         }
@@ -1722,6 +1763,19 @@ export class People {
   /** Back to walking: onto the nearest walk within 15 m (or wandering about the park they're in; or standing a while longer). */
   private rejoin(p: Person): void {
     this.leaveGather(p);
+    // A prisoner stays in the yard (till they're out); if it's been broken out of (they were down), off out after the rest.
+    const out = p.inmate && !p.free && p.area >= 0 ? this.brokenOut.get(ptsKey(this.areas[p.area])) : undefined;
+    if (out) {
+      Object.assign(p, { mode: 'escape', tx: out.x, ty: out.y, timer: 0, away: out.away, foe: null });
+      return;
+    }
+    if (p.inmate && !p.free) {
+      p.mode = 'wander';
+      p.foe = null;
+      if (p.area < 0) p.area = this.areas.findIndex((ring) => pointInRing(p.x, p.y, ring));
+      [p.tx, p.ty] = [p.x, p.y];
+      return;
+    }
     // A child stays in the playground; the lollipop lady at her post.
     if (p.child || p.lollipop) {
       const area = p.child ? this.areas.findIndex((ring) => pointInRing(p.x, p.y, ring)) : -1;
@@ -2847,6 +2901,147 @@ export class People {
   }
 
   /** Walks towards (x, y) at `speed`; whether they're there (within `near` px). */
+  /**
+   * Prisoners, at a spot in a prison's yard (see places.ts): two fighting (a ring of three or four round them, watching); one at
+   * the weights, the pull-up bar or doing press-ups; a group stood about; one wandering about the yard. None once it's broken out.
+   */
+  private inmateAt(s: Spot): void {
+    const area = this.areas.findIndex((ring) => pointInRing(s.x, s.y, ring));
+    if (area >= 0 && this.brokenOut.has(ptsKey(this.areas[area]))) return;
+    const inmate = (x: number, y: number, mode: Mode): Person => {
+      const p = this.make(x, y, mode);
+      Object.assign(p, { inmate: true, area, timer: 30 + this.rand() * 90 });
+      return p;
+    };
+    if (s.drill === 'fight') {
+      // (One there already: they're watching it.)
+      if (this.people.some((q) => q.mode === 'fight' && Math.abs(q.x - s.x) < 5 * M && Math.abs(q.y - s.y) < 5 * M)) return;
+      const a = this.rand() * Math.PI * 2;
+      const [ux, uy] = [Math.cos(a), Math.sin(a)];
+      const [p, q] = [inmate(s.x - ux * 0.55 * M, s.y - uy * 0.55 * M, 'fight'), inmate(s.x + ux * 0.55 * M, s.y + uy * 0.55 * M, 'fight')];
+      [p.foe, q.foe, p.angle, q.angle] = [q, p, a, a + Math.PI];
+      for (const f of [p, q]) [f.tx, f.ty, f.timer] = [f.x, f.y, 20 + this.rand() * 40];
+      const n = 3 + Math.floor(this.rand() * 2);
+      for (let k = 0; k < n; k++) {
+        const b = a + Math.PI / 2 + (k / n) * Math.PI * 2 + this.rand() * 0.3;
+        const w = inmate(s.x + Math.cos(b) * 2.2 * M, s.y + Math.sin(b) * 2.2 * M, 'stand');
+        w.angle = b + Math.PI;
+      }
+      return;
+    }
+    if (s.drill) {
+      if (this.people.some((q) => q.mode === 'exercise' && Math.abs(q.x - s.x) < 1 * M && Math.abs(q.y - s.y) < 1 * M)) return;
+      // (At the pull-up bar: just back from it, facing it, hands on it.)
+      const back = s.drill === 'pullup' ? 0.4 * M : 0;
+      const p = inmate(s.x - Math.cos(s.angle) * back, s.y - Math.sin(s.angle) * back, 'exercise');
+      Object.assign(p, { drill: s.drill, angle: s.angle + (s.drill === 'lift' ? Math.PI / 2 : 0), timer: 40 + this.rand() * 120 });
+      return;
+    }
+    if (s.group) {
+      const n = 2 + Math.floor(this.rand() * 3);
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2 + this.rand() * 0.4;
+        const p = inmate(s.x + Math.cos(a) * (0.55 + n * 0.1) * M, s.y + Math.sin(a) * (0.55 + n * 0.1) * M, 'stand');
+        p.angle = a + Math.PI;
+      }
+      return;
+    }
+    const p = inmate(s.x, s.y, 'wander');
+    [p.tx, p.ty, p.timer] = [s.x, s.y, 0];
+  }
+
+  /**
+   * Fighting: facing up to them, lunging in and back, throwing punches; now and then one of them's knocked down (up again in a few
+   * seconds, and off: the other stands over them a while). Till one's had enough.
+   */
+  private fight(p: Person, dt: number): void {
+    const f = p.foe;
+    p.timer -= dt;
+    if (!f || f.mode !== 'fight' || f.foe !== p || p.timer < 0) {
+      if (f && f.foe === p) f.foe = null;
+      return this.rejoin(p);
+    }
+    // Up to them first (squaring up), then at it.
+    if (Math.hypot(f.x - p.x, f.y - p.y) > 1.4 * M) {
+      this.goTo(p, f.x, f.y, p.pace * 1.4, dt, 1.1 * M);
+      [p.tx, p.ty] = [p.x, p.y];
+      return;
+    }
+    p.speed = 0;
+    p.angle = Math.atan2(f.y - p.y, f.x - p.x);
+    p.step = (p.step + dt * 2.2) % 1;
+    const lunge = Math.sin((p.step + (p.id % 2) * 0.5) * Math.PI * 2) * 0.25 * M;
+    [p.x, p.y] = [p.tx + Math.cos(p.angle) * lunge, p.ty + Math.sin(p.angle) * lunge];
+    // A knockout, about once every half a minute between them.
+    if (this.rand() < dt / 60) {
+      Object.assign(f, { mode: 'down', timer: 3 + this.rand() * 4, vx: Math.cos(p.angle) * 2.5 * M, vy: Math.sin(p.angle) * 2.5 * M, foe: null });
+      Object.assign(p, { mode: 'stand', timer: 4 + this.rand() * 4, foe: null, speed: 0 });
+    }
+  }
+
+  /** Squaring up to another prisoner wandering near (within 6 m): a fight; those about (within 12 m) come round to watch. */
+  private pickFight(p: Person): void {
+    const near = this.people.filter((q) => q !== p && q.inmate && !q.free && q.mode === 'wander' && q.area === p.area && Math.hypot(q.x - p.x, q.y - p.y) < 12 * M);
+    const q = near.find((o) => Math.hypot(o.x - p.x, o.y - p.y) < 6 * M);
+    if (!q) return;
+    const [mx, my] = [(p.x + q.x) / 2, (p.y + q.y) / 2];
+    for (const f of [p, q]) Object.assign(f, { mode: 'fight', foe: f === p ? q : p, timer: 15 + this.rand() * 30, speed: 0, tx: f.x, ty: f.y });
+    for (const w of near) {
+      if (w === q) continue;
+      const b = Math.atan2(w.y - my, w.x - mx);
+      Object.assign(w, { mode: 'join', tx: mx + Math.cos(b) * 2.2 * M, ty: my + Math.sin(b) * 2.2 * M, timer: 20 + this.rand() * 20 });
+    }
+  }
+
+  /**
+   * A prison wall broken (from (x0, y0) to (x1, y1)): every prisoner in that prison makes a run for the gap (each a moment after
+   * the last, some quicker to see it), through it, and away; no more come out into its yard.
+   */
+  breakout(x0: number, y0: number, x1: number, y1: number): void {
+    const [mx, my] = [(x0 + x1) / 2, (y0 + y1) / 2];
+    // The prison it's the wall of: the yard it goes round.
+    let [area, best] = [-1, 6 * M];
+    for (const [k, ring] of this.areas.entries()) {
+      const d = distToRingEdge(ring, mx, my);
+      if (d < best) [area, best] = [k, d];
+    }
+    if (area < 0) return;
+    const ring = this.areas[area];
+    let [cx, cy] = [0, 0];
+    for (let i = 0; i < ring.length; i += 2) [cx, cy] = [cx + ring[i], cy + ring[i + 1]];
+    [cx, cy] = [(cx * 2) / ring.length, (cy * 2) / ring.length];
+    // Out through it: the way from the prison's middle to the gap.
+    const away = Math.atan2(my - cy, mx - cx);
+    this.brokenOut.set(ptsKey(ring), { x: mx, y: my, away });
+    for (const p of this.people) {
+      if (!p.inmate || p.free || p.area !== area || p.hurt) continue;
+      if (p.foe) p.foe = null;
+      // (Those knocked down: up, and off, when they can.)
+      if (p.mode === 'down') continue;
+      Object.assign(p, { mode: 'escape', tx: mx, ty: my, timer: this.rand() * 2.5, was: 'wander', away });
+    }
+  }
+
+  /** Making a run for it: a moment to see it, to the gap, through it, and off running (free: walking the streets after, in orange still). */
+  private escape(p: Person, dt: number): void {
+    if (p.timer > 0) {
+      p.timer -= dt;
+      p.speed = 0;
+      p.angle = Math.atan2(p.ty - p.y, p.tx - p.x);
+      return;
+    }
+    if (!this.goTo(p, p.tx, p.ty, RUN * 1.1, dt, 1.2 * M)) return;
+    // Through: away from the prison, scattering, running a while.
+    Object.assign(p, { mode: 'flee', free: true, area: -1, angle: (p.away ?? 0) + (this.rand() - 0.5) * 1.6, timer: 8 + this.rand() * 10 });
+  }
+
+  /** Whether there's nothing in the way (a wall, a building's) on the straight between two points. */
+  private clearTo(x0: number, y0: number, x1: number, y1: number): boolean {
+    const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / M);
+    for (let k = 1; k <= n; k++) if (!this.walkable(x0 + ((x1 - x0) * k) / n, y0 + ((y1 - y0) * k) / n, 0)) return false;
+    return true;
+  }
+
   private goTo(p: Person, x: number, y: number, speed: number, dt: number, near = 0.3 * M): boolean {
     const [dx, dy] = [x - p.x, y - p.y];
     const d = Math.hypot(dx, dy);
@@ -2865,7 +3060,7 @@ export class People {
   /** Those out in the road (crossing, or running), or walking along a cycle path: for the traffic (and the bikes) to stop for. */
   inTheRoad(): Person[] {
     return this.people.filter(
-      (p) => p.mode === 'cross' || p.mode === 'flee' || p.mode === 'dive' || (p.mode === 'down' && this.inRoad(p.x, p.y, undefined, p.level)) || (p.mode === 'walk' && !!this.walks[p.line]?.cycle),
+      (p) => p.mode === 'cross' || p.mode === 'flee' || p.mode === 'escape' || p.mode === 'dive' || (p.mode === 'down' && this.inRoad(p.x, p.y, undefined, p.level)) || (p.mode === 'walk' && !!this.walks[p.line]?.cycle),
     );
   }
 }

@@ -611,7 +611,10 @@ export type PropKind =
   | 'crushed'
   | 'battery'
   | 'valve'
-  | 'heap';
+  | 'heap'
+  // A prison yard's gym: a weight bench (its barbell on its rack), a pull-up bar (see src/world/places.ts).
+  | 'weights'
+  | 'pullup';
 
 export interface Prop {
   kind: PropKind;

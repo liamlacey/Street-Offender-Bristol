@@ -65,7 +65,14 @@ export interface PlaceSpot {
   /** In hi-vis: a lollipop lady, with her sign; a worker. */
   lollipop?: boolean;
   hivis?: boolean;
+  /** A prisoner, in an orange jumpsuit, kept inside the prison's wall (till it's broken); and what they're at: a fight, the
+   * weights, the pull-up bar, press-ups (or, none, wandering about the yard, or standing about in a group). */
+  inmate?: boolean;
+  drill?: Drill;
 }
+
+/** What a prisoner's at, in the yard (see places.ts's prison, and people.ts). */
+export type Drill = 'fight' | 'lift' | 'pullup' | 'pushup';
 
 export interface PlaceLife {
   things: PlaceThing[];
@@ -1418,6 +1425,57 @@ function prison(place: Place, ground: Ground, out: PlaceLife): void {
     }
   }
   flush();
+  yard(place, ring, ground, out);
+}
+
+/** How many prisoners are out in the yard: one for every this much of its open ground, at most this many. */
+const PER_INMATE = 90 * M * M;
+const INMATES = 70;
+
+/**
+ * A prison's yard (its grounds, but for its buildings and roads), full of prisoners in orange: wandering about it, standing about
+ * in groups, fights (two at it, a ring watching), press-ups; and a gym or two out in it (weight benches, pull-up bars), in use.
+ */
+function yard(place: Place, ring: Pts, ground: Ground, out: PlaceLife): void {
+  const rand = seeded(hash(place.x, place.y));
+  out.rings.push(ring);
+  const box = bounds(ring);
+  const open = (x: number, y: number, room = 1.5 * M) => pointInRing(x, y, ring) && !ground.inBuilding(x, y) && !ground.onRoad(x, y, 0) && distToRing(ring, x, y) > room;
+  const free: [number, number][] = [];
+  for (let x = box[0] + 3 * M; x < box[2]; x += 6 * M) for (let y = box[1] + 3 * M; y < box[3]; y += 6 * M) if (open(x, y, 3 * M)) free.push([x, y]);
+  if (!free.length) return;
+  const pick = () => free.splice(Math.floor(rand() * free.length), 1)[0];
+  const count = Math.min(INMATES, Math.round((free.length * 36 * M * M) / PER_INMATE));
+  // A gym or two: weight benches and pull-up bars in a row, someone at most of them.
+  for (let g = 0; g < 2 && free.length; g++) {
+    const [gx, gy] = pick();
+    const turn = rand() * Math.PI;
+    const [ux, uy] = [Math.cos(turn), Math.sin(turn)];
+    for (let k = -2; k <= 2; k++) {
+      const [x, y] = [gx + ux * k * 2.6 * M, gy + uy * k * 2.6 * M];
+      if (!open(x, y)) continue;
+      const kind = k % 2 ? 'pullup' : 'weights';
+      thing(out, kind, x, y, turn + Math.PI / 2);
+      if (rand() < 0.85) out.spots.push({ x: r1(x), y: r1(y), angle: turn, weight: 2, group: false, inmate: true, drill: kind === 'weights' ? 'lift' : 'pullup' });
+    }
+  }
+  // Fights, a few; the rest about the yard: on their own, in groups, doing press-ups.
+  for (let k = 0; k < count && free.length; k++) {
+    const [x, y] = pick();
+    const r = rand();
+    const drill: Drill | undefined = k < 3 ? 'fight' : r < 0.08 ? 'pushup' : undefined;
+    out.spots.push({ x: r1(x), y: r1(y), angle: rand() * Math.PI * 2, weight: drill === 'fight' ? 8 : 3, group: !drill && r < 0.35, inmate: true, ...(drill ? { drill } : {}) });
+  }
+}
+
+/** How far a point is from a ring's edge, px. */
+function distToRing(ring: Pts, x: number, y: number): number {
+  let best = Infinity;
+  for (let i = 0; i < ring.length; i += 2) {
+    const j = (i + 2) % ring.length;
+    best = Math.min(best, distToSeg(x, y, ring[i], ring[i + 1], ring[j], ring[j + 1]));
+  }
+  return best;
 }
 
 /** A court on the playground: its surface, and its lines. */

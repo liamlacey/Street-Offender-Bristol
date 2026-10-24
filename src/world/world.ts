@@ -85,6 +85,9 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
   battery: { r: 9.5, length: 48, invMass: 0.05 },
   valve: { r: 4, length: 18, invMass: 0.15 },
   heap: { r: 22, invMass: 0.02 },
+  // A prison yard's gym: a weight bench with its barbell (heavy); a pull-up bar (steel, set in the ground: hardly moved).
+  weights: { r: 3.5, length: 14, invMass: 0.8 },
+  pullup: { r: 1.5, length: 16, invMass: 0.15 },
   block: { r: 5, invMass: 0.4 },
   // A shopping trolley: on wheels, it rolls a long way.
   trolley: { r: 2.5, length: 8, invMass: 9 },

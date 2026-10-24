@@ -316,7 +316,7 @@ export function fallen(kind: Exclude<ThingKind, Structure>, x: number, y: number
  * ground) and smaller, the smaller the easier, down to bits too small to break.
  * What each piece is, how strong (as `Toughness`), and what it breaks into.
  */
-export const BREAKUP: Partial<Record<DebrisKind | 'bin' | 'cafetable' | 'moped' | 'flowers' | 'crates' | 'newsstand' | 'boards' | 'transformer' | 'butt' | 'compost' | 'toolchest' | 'cabinet' | 'bags' | 'crushed' | 'battery' | 'valve' | 'heap' | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block' | 'trolley' | 'foodcart' | 'stall' | 'aboard' | 'swings' | 'slide' | 'roundabout' | 'climbframe' | 'sandpit' | 'seesaw' | 'springy' | 'cabin' | 'portaloo' | 'skip' | 'pallet' | 'pipes' | 'digger' | 'dumper' | 'mattress' | 'sofa' | 'tyres' | 'binbags' | 'fridge' | 'drum' | 'cone' | 'woodpallet' | 'washer' | 'carpet' | 'burntcar' | 'tent' | 'campfire' | HomeKind | 'parasol' | 'keg' | 'headstone' | 'tomb' | 'bigbin' | 'forklift' | 'container' | 'goal' | 'goalsmall' | 'hockeygoal' | 'rugbypost' | 'hoop' | 'netpost' | 'stumps' | 'wicket' | 'peg' | 'pingpong', Toughness & { into: [DebrisKind, number][] }>> = {
+export const BREAKUP: Partial<Record<DebrisKind | 'bin' | 'cafetable' | 'moped' | 'flowers' | 'crates' | 'newsstand' | 'boards' | 'transformer' | 'butt' | 'compost' | 'toolchest' | 'cabinet' | 'bags' | 'crushed' | 'battery' | 'valve' | 'heap' | 'weights' | 'pullup' | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block' | 'trolley' | 'foodcart' | 'stall' | 'aboard' | 'swings' | 'slide' | 'roundabout' | 'climbframe' | 'sandpit' | 'seesaw' | 'springy' | 'cabin' | 'portaloo' | 'skip' | 'pallet' | 'pipes' | 'digger' | 'dumper' | 'mattress' | 'sofa' | 'tyres' | 'binbags' | 'fridge' | 'drum' | 'cone' | 'woodpallet' | 'washer' | 'carpet' | 'burntcar' | 'tent' | 'campfire' | HomeKind | 'parasol' | 'keg' | 'headstone' | 'tomb' | 'bigbin' | 'forklift' | 'container' | 'goal' | 'goalsmall' | 'hockeygoal' | 'rugbypost' | 'hoop' | 'netpost' | 'stumps' | 'wicket' | 'peg' | 'pingpong', Toughness & { into: [DebrisKind, number][] }>> = {
   // A shopping trolley, hit hard: mangled, its basket's wires and its handle in bits.
   trolley: { material: 'metal', strength: 170, absorb: 0.06, into: [['rail', 3], ['plastic', 2]] },
   // A food cart: its panels and its parasol in bits.
@@ -429,6 +429,9 @@ export const BREAKUP: Partial<Record<DebrisKind | 'bin' | 'cafetable' | 'moped' 
   battery: { material: 'electric', strength: 400, absorb: 0.7, into: [['rail', 4], ['plastic', 3]] },
   valve: { material: 'metal', strength: 220, absorb: 0.4, into: [['rail', 3], ['shortpole', 1]] },
   heap: { material: 'stone', strength: 300, absorb: 0.6, into: [['rubble', 4]] },
+  // A prison gym's weight bench, its barbell and plates off; a pull-up bar bent over.
+  weights: { material: 'metal', strength: 150, absorb: 0.2, into: [['rail', 2], ['plastic', 1]] },
+  pullup: { material: 'metal', strength: 170, absorb: 0.25, into: [['rail', 2], ['shortpole', 1]] },
   // A bench and a picnic table, standing loose: smashed to planks.
   bench: { material: 'timber', strength: BENCH_SMASH, absorb: 0.12, into: [['plank', 5]] },
   picnic: { material: 'timber', strength: BENCH_SMASH, absorb: 0.15, into: [['plank', 7]] },

@@ -403,6 +403,8 @@ export class GameScene extends Phaser.Scene {
       weight: () => VEHICLES[this.ride.kind].mass,
       wallBroken: (kind, from, to) => {
         if (kind === 'parapet') this.deckLayer.breakParapet(from, to);
+        // Through the prison's wall: the prisoners make a run for it.
+        if (kind === 'prison') this.people.breakout(from[0], from[1], to[0], to[1]);
       },
       hutGone: (id, x, y, reach) => {
         this.changes.hutGone(id, x, y, reach);

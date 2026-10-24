@@ -1308,6 +1308,26 @@ export function createArt(scene: Phaser.Scene): void {
       }
     });
   });
+  // A prison yard's gym. A weight bench: its padded bench along it, the rack at its head, the barbell across it, a plate each end.
+  canvasTexture(scene, TEX.prop('weights'), 15, 9, (ctx) => {
+    shade(ctx, 14, 8);
+    roundRect(ctx, 1, 2.8, 10, 2.4, 0.8, '#2a2a2e');
+    ctx.fillStyle = '#6b6f74';
+    ctx.fillRect(10.5, 1, 0.8, 6);
+    ctx.fillStyle = '#b9bdc2';
+    ctx.fillRect(10.2, 0.2, 0.5, 7.6);
+    roundRect(ctx, 9.6, 0, 1.6, 1.4, 0.3, '#1d1d20');
+    roundRect(ctx, 9.6, 6.6, 1.6, 1.4, 0.3, '#1d1d20');
+  });
+  // A pull-up bar: two steel posts and the bar between them (from above: the bar, its posts' feet).
+  canvasTexture(scene, TEX.prop('pullup'), 17, 4, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(1.5, 2.2, 15, 1.2);
+    ctx.fillStyle = '#7d8287';
+    ctx.fillRect(0.5, 1.4, 15, 0.8);
+    circle(ctx, 1, 1.8, 1, '#4a4e52');
+    circle(ctx, 15, 1.8, 1, '#4a4e52');
+  });
   // An electricity pylon's foot: its four legs on their concrete pads, the bracing between them (the rest of it's drawn rising: see
   // Workings.ts).
   canvasTexture(scene, TEX.prop('pylon'), 54, 54, (ctx) => {
