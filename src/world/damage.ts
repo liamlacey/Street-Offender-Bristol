@@ -16,7 +16,7 @@ import type { HomeKind } from './homes';
 export type Material = 'wood' | 'electric' | 'metal' | 'iron' | 'glass' | 'stone' | 'plant' | 'timber' | 'plastic';
 
 /** Things that stand in one place until they're knocked down. */
-export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'mooring' | 'postbox' | 'phone' | 'meter' | 'pump' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'crane' | 'stump' | 'cctv' | 'charger' | 'railsignal' | 'pylon';
+export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'mooring' | 'postbox' | 'phone' | 'meter' | 'pump' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'crane' | 'stump' | 'cctv' | 'charger' | 'railsignal' | 'pylon' | 'flagpole';
 /** What doesn't topple like the street furniture: a tree (it splits and falls its own way), and what's left of one (low enough to drive over). */
 export type Structure = 'tree' | 'stump' | 'pylon';
 /**
@@ -71,6 +71,8 @@ export const THINGS: Record<Exclude<ThingKind, 'tree'>, Toughness> = {
   cctv: { material: 'electric', strength: 130, absorb: 0.2 },
   charger: { material: 'electric', strength: 150, absorb: 0.25 },
   railsignal: { material: 'electric', strength: 170, absorb: 0.3 },
+  // A base's flagpole: a tall steel pole, bent over.
+  flagpole: { material: 'metal', strength: 160, absorb: 0.25 },
 };
 
 export const WALLS: Record<WallKind, Toughness & { /** How much of it a hit at its strength brings down, px. */ gap: number }> = {
@@ -301,6 +303,8 @@ export function fallen(kind: Exclude<ThingKind, Structure>, x: number, y: number
       return [lying('figure', 16, 0.15), lying('rubble', 6, 0.2), lying('brick', 22, 0.25), lying('rubble', 26, 0.3)];
     case 'cctv':
       return [lying('shortpole', 14, 0.2), lying('meter', 36, 0.3)];
+    case 'flagpole':
+      return [lying('pole', 24, 0.15), lying('shortpole', 54, 0.2)];
     case 'charger':
       return [lying('pump', 6, 0.25), lying('rail', 10, 0.3)];
     case 'railsignal':
@@ -316,7 +320,7 @@ export function fallen(kind: Exclude<ThingKind, Structure>, x: number, y: number
  * ground) and smaller, the smaller the easier, down to bits too small to break.
  * What each piece is, how strong (as `Toughness`), and what it breaks into.
  */
-export const BREAKUP: Partial<Record<DebrisKind | 'bin' | 'cafetable' | 'moped' | 'flowers' | 'crates' | 'newsstand' | 'boards' | 'transformer' | 'butt' | 'compost' | 'toolchest' | 'cabinet' | 'bags' | 'crushed' | 'battery' | 'valve' | 'heap' | 'weights' | 'pullup' | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block' | 'trolley' | 'foodcart' | 'stall' | 'aboard' | 'swings' | 'slide' | 'roundabout' | 'climbframe' | 'sandpit' | 'seesaw' | 'springy' | 'cabin' | 'portaloo' | 'skip' | 'pallet' | 'pipes' | 'digger' | 'dumper' | 'mattress' | 'sofa' | 'tyres' | 'binbags' | 'fridge' | 'drum' | 'cone' | 'woodpallet' | 'washer' | 'carpet' | 'burntcar' | 'tent' | 'campfire' | HomeKind | 'parasol' | 'keg' | 'headstone' | 'tomb' | 'bigbin' | 'forklift' | 'container' | 'goal' | 'goalsmall' | 'hockeygoal' | 'rugbypost' | 'hoop' | 'netpost' | 'stumps' | 'wicket' | 'peg' | 'pingpong', Toughness & { into: [DebrisKind, number][] }>> = {
+export const BREAKUP: Partial<Record<DebrisKind | 'bin' | 'cafetable' | 'moped' | 'flowers' | 'crates' | 'newsstand' | 'boards' | 'transformer' | 'butt' | 'compost' | 'toolchest' | 'cabinet' | 'bags' | 'crushed' | 'battery' | 'valve' | 'heap' | 'weights' | 'pullup' | 'sandbags' | 'ammo' | 'jerrycan' | 'sentrybox' | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block' | 'trolley' | 'foodcart' | 'stall' | 'aboard' | 'swings' | 'slide' | 'roundabout' | 'climbframe' | 'sandpit' | 'seesaw' | 'springy' | 'cabin' | 'portaloo' | 'skip' | 'pallet' | 'pipes' | 'digger' | 'dumper' | 'mattress' | 'sofa' | 'tyres' | 'binbags' | 'fridge' | 'drum' | 'cone' | 'woodpallet' | 'washer' | 'carpet' | 'burntcar' | 'tent' | 'campfire' | HomeKind | 'parasol' | 'keg' | 'headstone' | 'tomb' | 'bigbin' | 'forklift' | 'container' | 'goal' | 'goalsmall' | 'hockeygoal' | 'rugbypost' | 'hoop' | 'netpost' | 'stumps' | 'wicket' | 'peg' | 'pingpong', Toughness & { into: [DebrisKind, number][] }>> = {
   // A shopping trolley, hit hard: mangled, its basket's wires and its handle in bits.
   trolley: { material: 'metal', strength: 170, absorb: 0.06, into: [['rail', 3], ['plastic', 2]] },
   // A food cart: its panels and its parasol in bits.
@@ -432,6 +436,11 @@ export const BREAKUP: Partial<Record<DebrisKind | 'bin' | 'cafetable' | 'moped' 
   // A prison gym's weight bench, its barbell and plates off; a pull-up bar bent over.
   weights: { material: 'metal', strength: 150, absorb: 0.2, into: [['rail', 2], ['plastic', 1]] },
   pullup: { material: 'metal', strength: 170, absorb: 0.25, into: [['rail', 2], ['shortpole', 1]] },
+  // A base's: a wall of sandbags, burst; an ammunition box, its lid off; a jerrycan, split; a sentry box, smashed in.
+  sandbags: { material: 'plastic', strength: 260, absorb: 0.55, into: [['rubble', 4], ['plastic', 2]] },
+  ammo: { material: 'metal', strength: 90, absorb: 0.08, into: [['rail', 1], ['plastic', 1]] },
+  jerrycan: { material: 'metal', strength: 60, absorb: 0.05, into: [['plastic', 1]] },
+  sentrybox: { material: 'timber', strength: 150, absorb: 0.3, into: [['splinter', 4], ['glass', 2]] },
   // A bench and a picnic table, standing loose: smashed to planks.
   bench: { material: 'timber', strength: BENCH_SMASH, absorb: 0.12, into: [['plank', 5]] },
   picnic: { material: 'timber', strength: BENCH_SMASH, absorb: 0.15, into: [['plank', 7]] },
@@ -518,6 +527,7 @@ export const TOPPLE: Record<Exclude<ThingKind, Structure>, { height: number; rea
   statue: { height: 3 * 8, reach: 16, pole: false },
   crane: { height: 9 * 8, reach: 40, pole: true },
   cctv: { height: 5 * 8, reach: 38, pole: true },
+  flagpole: { height: 8 * 8, reach: 60, pole: true },
   charger: { height: 1.6 * 8, reach: 8, pole: false },
   railsignal: { height: 4 * 8, reach: 30, pole: true },
 };

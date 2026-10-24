@@ -69,10 +69,17 @@ export interface PlaceSpot {
    * weights, the pull-up bar, press-ups (or, none, wandering about the yard, or standing about in a group). */
   inmate?: boolean;
   drill?: Drill;
+  /** A soldier, in camouflage (see military); and the way round that a squad marches or runs, or a skater rides (x, y, ...). */
+  soldier?: boolean;
+  loop?: number[];
 }
 
-/** What a prisoner's at, in the yard (see places.ts's prison, and people.ts). */
-export type Drill = 'fight' | 'lift' | 'pullup' | 'pushup';
+/**
+ * What someone's at (see people.ts): a prisoner in the yard (see prison), fighting, at the weights, the pull-up bar, press-ups; a
+ * soldier (see military), marching in a squad, running in one, PT (press-ups in rows), on guard at the gate; a skater, riding
+ * round a skate park (see skating).
+ */
+export type Drill = 'fight' | 'lift' | 'pullup' | 'pushup' | 'march' | 'run' | 'pt' | 'sentry' | 'skate';
 
 export interface PlaceLife {
   things: PlaceThing[];
@@ -219,6 +226,9 @@ export function* placesWork(map: GameMap): Work<PlaceLife> {
       case 'bunker':
         bunker(place, ground, out);
         break;
+      case 'military':
+        military(place, ground, out);
+        break;
     }
   }
   // The blocks of flats, and the lock-up garages.
@@ -236,6 +246,18 @@ export function* placesWork(map: GameMap): Work<PlaceLife> {
   out.things.push(...sports.things);
   out.lines.push(...sports.lines);
   out.areas.push(...sports.areas);
+  // The skate parks: skaters riding round them (one for every 50 m², two to eight), and a few watching from beside them.
+  for (const park of sports.parks) {
+    const rand = seeded(hash(park.x, park.y));
+    const n = Math.max(2, Math.min(8, Math.round((park.hl * park.hw * 4) / (50 * M * M))));
+    for (let k = 0; k < n; k++) out.spots.push({ x: park.x, y: park.y, angle: park.angle, weight: 3, group: false, drill: 'skate', loop: park.loop });
+    const [ux, uy] = [Math.cos(park.angle), Math.sin(park.angle)];
+    for (const side of [1, -1]) {
+      const along = (rand() - 0.5) * park.hl;
+      const [x, y] = [park.x + ux * along - uy * side * (park.hw + 1.6 * M), park.y + uy * along + ux * side * (park.hw + 1.6 * M)];
+      if (!ground.inBuilding(x, y) && !ground.onCarriageway(x, y, M)) out.spots.push({ x: r1(x), y: r1(y), angle: Math.atan2(-ux * side, uy * side), weight: 1.5, group: true });
+    }
+  }
   out.games.push(...sports.games);
   cache.set(map, out);
   return out;
@@ -1012,6 +1034,125 @@ function bunker(place: Place, ground: Ground, out: PlaceLife): void {
   }
   const [lx, ly] = [cx + ux * (a1 + 6 * M), cy + uy * (a1 + 6 * M)];
   if (rand() < 0.5 && !ground.inBuilding(lx, ly) && !ground.onRoad(lx, ly, 2 * M)) thing(out, 'digger', lx, ly, Math.atan2(-uy, -ux));
+}
+
+/** The least of a base that's laid out as one (its parade square, its vehicles), px²: less, an office (its flag, a sentry). */
+const BASE_LEAST = 1500 * M * M;
+/** A parade square, along the base and across it, px. */
+const PARADE: [number, number] = [26 * M, 16 * M];
+/** The vehicles parked at a base, in rows: tanks, armoured personnel carriers, Land Rovers (in that order, as many as fit). */
+const ARMOUR: string[] = ['tank', 'tank', 'tank', 'tank', 'apc', 'apc', 'apc', 'apc', 'landrover', 'landrover', 'landrover', 'tank', 'apc', 'landrover', 'tank', 'apc'];
+
+/**
+ * An army base (or the reserves', the cadets'): its flagpole and a sentry box by its gate (the side nearest the road), a soldier on
+ * guard; on a base of any size, a parade square (a squad marching round it, another running round further out, a PT class doing
+ * press-ups in rows, their instructor), its vehicles parked in rows (tanks, armoured personnel carriers, Land Rovers: any of them
+ * yours to take), sandbags, ammunition boxes and jerrycans; and soldiers going about it.
+ */
+function military(place: Place, ground: Ground, out: PlaceLife): void {
+  const ring = place.rings[0];
+  if (!ring) return;
+  const rand = seeded(hash(place.x, place.y));
+  const area = Math.abs(ringArea(ring));
+  const open = (x: number, y: number, room = 1.5 * M) => pointInRing(x, y, ring) && !ground.inBuilding(x, y) && !ground.onRoad(x, y, 0) && distToRing(ring, x, y) > room;
+  out.rings.push(ring);
+  const soldier = (x: number, y: number, extra: Partial<PlaceSpot> = {}) => out.spots.push({ x: r1(x), y: r1(y), angle: rand() * Math.PI * 2, weight: 3, group: false, soldier: true, ...extra });
+  // The gate: where its edge comes nearest a road; the flag, the sentry box and its sentry just inside.
+  let gate: { x: number; y: number; ox: number; oy: number; d: number } | null = null;
+  for (let i = 0; i < ring.length; i += 2) {
+    const j = (i + 2) % ring.length;
+    const [x, y] = [(ring[i] + ring[j]) / 2, (ring[i + 1] + ring[j + 1]) / 2];
+    const road = ground.nearestRoad(x, y, 30 * M);
+    if (!road) continue;
+    const d = Math.hypot(road[0] - x, road[1] - y);
+    if (!gate || d < gate.d) gate = { x, y, ox: (road[0] - x) / (d || 1), oy: (road[1] - y) / (d || 1), d };
+  }
+  if (gate) {
+    const inside = (k: number, side: number): [number, number] => [gate!.x - gate!.ox * k * M - gate!.oy * side * M, gate!.y - gate!.oy * k * M + gate!.ox * side * M];
+    const facing = Math.atan2(gate.oy, gate.ox);
+    const box = inside(3, 4);
+    if (open(...box, 0)) thing(out, 'sentrybox', box[0], box[1], facing);
+    const guard = inside(2.5, 6.5);
+    if (open(...guard, 0)) soldier(guard[0], guard[1], { drill: 'sentry', angle: facing, weight: 4 });
+    const pole = inside(5, -5);
+    if (open(...pole, 0.5 * M)) thing(out, 'flagpole', pole[0], pole[1], rand() * Math.PI * 2);
+    for (const side of [-3, 3]) {
+      const bags = inside(4, side * 3);
+      if (open(...bags, 0)) thing(out, 'sandbags', bags[0], bags[1], facing + Math.PI / 2);
+    }
+  }
+  const box = bounds(ring);
+  if (area < BASE_LEAST) {
+    for (let k = 0; k < 3; k++) {
+      const [x, y] = [box[0] + rand() * (box[2] - box[0]), box[1] + rand() * (box[3] - box[1])];
+      if (open(x, y)) soldier(x, y);
+    }
+    return;
+  }
+  const { ux, uy } = ridgeAxis(ring);
+  const [nx, ny] = [-uy, ux];
+  const free: [number, number][] = [];
+  for (let x = box[0] + 2 * M; x < box[2]; x += 4 * M) for (let y = box[1] + 2 * M; y < box[3]; y += 4 * M) if (open(x, y, 2 * M)) free.push([x, y]);
+  if (!free.length) return;
+  // A rectangle (along the base) all open ground: its middle, half its length and width.
+  const clear = (cx: number, cy: number, hl: number, hw: number) => {
+    for (let a = -hl; a <= hl + 0.1; a += Math.max(M, hl / 4)) for (let b = -hw; b <= hw + 0.1; b += Math.max(M, hw / 3)) if (!open(cx + ux * a + nx * b, cy + uy * a + ny * b, 0.5 * M)) return false;
+    return true;
+  };
+  const taken: [number, number, number, number][] = [];
+  const clash = (cx: number, cy: number, hl: number, hw: number) => taken.some(([x, y, l, w]) => Math.abs((cx - x) * ux + (cy - y) * uy) < hl + l && Math.abs((cx - x) * nx + (cy - y) * ny) < hw + w);
+  // The parade square: tarmac, a white line round it; a squad marching round it, another running round it further out.
+  const [pl, pw] = [PARADE[0] / 2, PARADE[1] / 2];
+  const parade = free.slice().sort(() => rand() - 0.5).find(([x, y]) => clear(x, y, pl, pw));
+  if (parade) {
+    const [px, py] = parade;
+    const corner = (a: number, b: number) => [r1(px + ux * a + nx * b), r1(py + uy * a + ny * b)];
+    const rect = [...corner(-pl, -pw), ...corner(pl, -pw), ...corner(pl, pw), ...corner(-pl, pw)];
+    const edge = [...corner(-pl + M, -pw + M), ...corner(pl - M, -pw + M), ...corner(pl - M, -pw + M), ...corner(pl - M, pw - M), ...corner(pl - M, pw - M), ...corner(-pl + M, pw - M), ...corner(-pl + M, pw - M), ...corner(-pl + M, -pw + M)];
+    out.areas.push({ kind: 'court', rings: [rect], tint: 'rgba(58,60,62,0.92)', markings: [{ colour: 'rgba(240,240,232,0.85)', width: 0.25 * M, segs: edge }] });
+    taken.push([px, py, pl, pw]);
+    soldier(px, py, { drill: 'march', loop: [...corner(-pl + 3 * M, -pw + 3 * M), ...corner(pl - 3 * M, -pw + 3 * M), ...corner(pl - 3 * M, pw - 3 * M), ...corner(-pl + 3 * M, pw - 3 * M)], weight: 6 });
+    const out6 = clear(px, py, pl + 5 * M, pw + 5 * M);
+    const r = out6 ? 3 * M : -1.5 * M;
+    soldier(px, py, { drill: 'run', loop: [...corner(-pl - r, -pw - r), ...corner(pl + r, -pw - r), ...corner(pl + r, pw + r), ...corner(-pl - r, pw + r)], weight: 6 });
+  }
+  // A PT class: two rows doing press-ups, their instructor out in front.
+  const pt = free.slice().sort(() => rand() - 0.5).find(([x, y]) => clear(x, y, 7 * M, 4 * M) && !clash(x, y, 7 * M, 4 * M));
+  if (pt) {
+    const [x, y] = pt;
+    taken.push([x, y, 7 * M, 4 * M]);
+    soldier(x, y, { drill: 'pt', angle: Math.atan2(ny, nx), weight: 6 });
+  }
+  // The vehicles, in rows along the base: each its length apart along a row, side by side across it.
+  let k = 0;
+  const most = Math.min(ARMOUR.length, Math.round(area / (900 * M * M)));
+  for (const [x0, y0] of free.slice().sort(([ax, ay], [bx, by]) => ax * ux + ay * uy - (bx * ux + by * uy))) {
+    if (k >= most) break;
+    const kind = ARMOUR[k];
+    const [len, wide] = kind === 'tank' ? [10.6 * M, 4 * M] : kind === 'apc' ? [7.6 * M, 3 * M] : [5.2 * M, 2.3 * M];
+    // A row: as many of this kind side by side as fit.
+    for (let side = 0; side < 4 && k < most && ARMOUR[k] === kind; side++) {
+      const [cx, cy] = [x0 + nx * side * (wide + 1.4 * M), y0 + ny * side * (wide + 1.4 * M)];
+      if (!clear(cx, cy, len / 2, wide / 2) || clash(cx, cy, len / 2, wide / 2)) break;
+      taken.push([cx, cy, len / 2 + 0.5 * M, wide / 2 + 0.5 * M]);
+      out.spaces.push({ x: r1(cx), y: r1(cy), angle: +Math.atan2(uy, ux).toFixed(3), length: len, taken: 1, endOn: false, kind });
+      // Stores by the vehicles, now and then: ammunition boxes, a jerrycan or two.
+      if (rand() < 0.4) {
+        const [sx, sy] = [cx - ux * (len / 2 + 1.5 * M), cy - uy * (len / 2 + 1.5 * M)];
+        if (open(sx, sy, 0) && !clash(sx, sy, M, M)) thing(out, rand() < 0.6 ? 'ammo' : 'jerrycan', sx, sy, Math.atan2(ny, nx) + (rand() - 0.5) * 0.4);
+      }
+      k++;
+    }
+  }
+  // Sandbags about it; soldiers going about it, on their own and in twos and threes.
+  for (let n = 0; n < Math.min(8, Math.round(area / (2000 * M * M))) && free.length; n++) {
+    const [x, y] = free[Math.floor(rand() * free.length)];
+    if (!clash(x, y, 3 * M, M)) thing(out, 'sandbags', x, y, Math.atan2(uy, ux) + Math.round(rand()) * (Math.PI / 2));
+  }
+  for (let n = 0; n < Math.min(30, Math.round(area / (400 * M * M))) && free.length; n++) {
+    const [x, y] = free[Math.floor(rand() * free.length)];
+    if (!clash(x, y, M, M)) soldier(x, y, { group: rand() < 0.3 });
+  }
 }
 
 /** A university, a hospital, a library, a sports centre, a stadium: people about its doors, bikes, benches; a crowd at a stadium. */

@@ -24,7 +24,7 @@ const M = 8;
 
 // --- The vehicles ---
 
-export type VehicleKind = 'small' | 'hatch' | 'saloon' | 'estate' | 'suv' | 'van' | 'lorry' | 'bus' | 'double' | 'bike' | 'own' | 'police' | 'ambulance' | 'fire' | 'taxi';
+export type VehicleKind = 'small' | 'hatch' | 'saloon' | 'estate' | 'suv' | 'van' | 'lorry' | 'bus' | 'double' | 'bike' | 'own' | 'police' | 'ambulance' | 'fire' | 'taxi' | 'tank' | 'apc' | 'landrover';
 
 /**
  * Each kind: how long and wide (px; real sizes, a tenth up, to match your car),
@@ -52,6 +52,11 @@ export const VEHICLES: Record<VehicleKind, { length: number; width: number; mass
   fire: { length: 8.4 * 1.1 * M, width: 2.5 * 1.1 * M, mass: 7, traffic: 0, parked: 0, paint: 'lorry' },
   // A taxi (a saloon in its livery, its sign on the roof): from the taxi ranks (see Post), and about in the traffic.
   taxi: { length: 4.8 * 1.1 * M, width: 1.84 * 1.1 * M, mass: 1.05, traffic: 0.03, parked: 0, paint: 'car' },
+  // The army's, parked in rows at its bases (see places.ts's military): a battle tank (its gun along it, over its front; 60
+  // tonnes and more: it goes through anything), an armoured personnel carrier (wheeled, armour plate), a Land Rover.
+  tank: { length: 9.4 * 1.1 * M, width: 3.5 * 1.1 * M, mass: 20, traffic: 0, parked: 0, paint: 'lorry' },
+  apc: { length: 6.8 * 1.1 * M, width: 2.6 * 1.1 * M, mass: 5, traffic: 0, parked: 0, paint: 'lorry' },
+  landrover: { length: 4.6 * 1.1 * M, width: 1.95 * 1.1 * M, mass: 1.4, traffic: 0, parked: 0, paint: 'car' },
 };
 
 /** The colours, about as common as on Britain's roads (grey, black and white the most); vans mostly white; lorries' cabs. */
@@ -327,7 +332,7 @@ const OBSTACLE_CELL = 24 * M;
 /** How many bikes ride along a cycle path each way, per 100 m. */
 const PATH_BIKES = 0.9;
 /** How fast each kind's driven, against the road's usual speed (before the driver's own pace). */
-const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85, bus: 0.85, double: 0.82, bike: 1, own: 1, police: 1.05, ambulance: 1, fire: 0.9, taxi: 1.02 };
+const KIND_PACE: Record<VehicleKind, number> = { small: 1, hatch: 1, saloon: 1.02, estate: 0.99, suv: 0.98, van: 0.93, lorry: 0.85, bus: 0.85, double: 0.82, bike: 1, own: 1, police: 1.05, ambulance: 1, fire: 0.9, taxi: 1.02, tank: 0.6, apc: 0.85, landrover: 0.95 };
 /** How fast a cyclist rides on the flat, px/s (each faster or slower: see pace); how much less briskly they pull away than a car. */
 const BIKE_SPEED = 5.3 * M;
 const BIKE_ACCEL = 0.4;
@@ -337,7 +342,7 @@ const BIKE_ROOM = 1.5 * M;
 /** A cyclist hit harder than this (an impulse, your car's mass × px/s) comes off. */
 const UNSEAT = 1;
 /** Up a hill, how much each kind slows for each 1 in 1 of it (a lorry labours; a car barely notices); and how strongly gravity holds it back pulling away. */
-const CLIMB: Record<VehicleKind, number> = { small: 0.8, hatch: 0.6, saloon: 0.5, estate: 0.5, suv: 0.5, van: 1.3, lorry: 3, bus: 2.2, double: 2.4, bike: 7, own: 0.5, police: 0.4, ambulance: 1, fire: 2, taxi: 0.5 };
+const CLIMB: Record<VehicleKind, number> = { small: 0.8, hatch: 0.6, saloon: 0.5, estate: 0.5, suv: 0.5, van: 1.3, lorry: 3, bus: 2.2, double: 2.4, bike: 7, own: 0.5, police: 0.4, ambulance: 1, fire: 2, taxi: 0.5, tank: 1, apc: 1, landrover: 0.4 };
 const GRAVITY = 9.81 * M;
 /** Dawdling: how often a driver slows a moment, a second (more often the busier the street), and for how long. */
 const DAWDLE = 0.003;

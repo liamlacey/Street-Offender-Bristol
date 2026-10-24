@@ -101,7 +101,7 @@ export class TrafficLayer {
         const big = v.kind === 'bike' ? BIKE_SIZE : 1;
         s.body.setPosition(x, y).setRotation(v.angle).setDepth(d).setScale(big / ART_SCALE);
         // Taller, the further its shadow falls.
-        const fall = v.kind === 'lorry' || v.kind === 'fire' ? 1.8 : v.kind === 'van' || v.kind === 'suv' || v.kind === 'ambulance' ? 1.3 : v.kind === 'bike' ? 0.7 : 1;
+        const fall = v.kind === 'lorry' || v.kind === 'fire' ? 1.8 : v.kind === 'tank' || v.kind === 'apc' ? 1.5 : v.kind === 'van' || v.kind === 'suv' || v.kind === 'ambulance' ? 1.3 : v.kind === 'bike' ? 0.7 : 1;
         s.shadow.setPosition(x + 2.5 * fall, y + 3.5 * fall).setRotation(v.angle).setDepth(d - 0.02).setScale(big / ART_SCALE);
         if (v.kind !== 'bike') this.drawLamps(this.lamps[onDeck ? 1 : 0], v, x, y, time);
       }

@@ -614,7 +614,17 @@ export type PropKind =
   | 'heap'
   // A prison yard's gym: a weight bench (its barbell on its rack), a pull-up bar (see src/world/places.ts).
   | 'weights'
-  | 'pullup';
+  | 'pullup'
+  // At the army's bases (see src/world/places.ts): sandbags, an ammunition box, a jerrycan, a sentry box, the flagpole (the Union
+  // flag flying); and a skate park's ramps and rails (see src/world/sports.ts): a quarter pipe, a funbox, a grind rail.
+  | 'sandbags'
+  | 'ammo'
+  | 'jerrycan'
+  | 'sentrybox'
+  | 'flagpole'
+  | 'quarterpipe'
+  | 'funbox'
+  | 'grindrail';
 
 export interface Prop {
   kind: PropKind;
@@ -781,7 +791,9 @@ export type PlaceKind =
   | 'food' | 'takeaway' | 'seating' | 'cardealer' | 'carrepair' | 'taxi' | 'substation' | 'allotments' | 'shop' | 'atm' | 'charger'
   // A builders' merchant or trade counter, or a builder's (or roofer's, stonemason's...) yard (its kind in `sub`); a scrap yard; a
   // brewery; a battery storage plant; a pumping station or water works; a car hire's lot; a bunker silo (aggregate, in bays).
-  | 'trade' | 'scrapyard' | 'brewery' | 'battery' | 'pumping' | 'carhire' | 'bunker';
+  | 'trade' | 'scrapyard' | 'brewery' | 'battery' | 'pumping' | 'carhire' | 'bunker'
+  // The army's (or the cadets', the reserves'): a barracks, a training area, a base.
+  | 'military';
 
 /** The trade counters and builders' merchants (`shop=*`), and the trades with a yard (`craft=*`): see Place's 'trade'. */
 export const TRADE_SHOPS = new Set(['trade', 'doityourself', 'tool_hire', 'building_materials', 'plumbing', 'timber']);
@@ -833,6 +845,7 @@ export function placeKind(t: Tags): PlaceKind | null {
       return 'carhire';
   }
   if (t.leisure === 'outdoor_seating') return 'seating';
+  if (t.landuse === 'military' || t.military === 'barracks' || t.military === 'training_area' || t.military === 'base') return 'military';
   if (t.industrial === 'scrap_yard' || (t.landuse === 'industrial' && /scrap|salvage|breakers/i.test(t.name ?? ''))) return 'scrapyard';
   if (t.craft === 'brewery' || t.industrial === 'brewery') return 'brewery';
   if ((t.power === 'plant' && t['plant:source'] === 'battery') || (t.power === 'generator' && t['generator:source'] === 'battery')) return 'battery';

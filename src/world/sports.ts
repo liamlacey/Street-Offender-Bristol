@@ -18,7 +18,8 @@
  * - Bowls and croquet: the green (or lawn), mown in stripes, the bowling
  *   green's ditch; bowls rolled up a rink to the jack, croquet balls through
  *   the hoops.
- * - A skate park: its concrete. A table-tennis table (a prop): two playing.
+ * - A skate park: its concrete; its quarter pipes (one at each end, where it's long enough), a funbox in the middle, grind rails;
+ *   the way round it the skaters ride (see people.ts). A table-tennis table (a prop): two playing.
  *
  * Pure (from the map alone), so it's tested; places.ts puts it in with what's
  * round the places, and people.ts plays the games.
@@ -46,6 +47,8 @@ export interface SportsLife {
   lines: { kind: 'mesh' | 'net'; pts: Pts; height: number }[];
   areas: Area[];
   games: SportsGame[];
+  /** The skate parks: their middles, and the way round each the skaters ride (x, y, ...), through its ramps. */
+  parks: { x: number; y: number; hl: number; hw: number; angle: number; loop: number[] }[];
 }
 
 /** Courts' paint (hard ones): what's round the courts, and the courts themselves. */
@@ -79,7 +82,7 @@ const cache = new WeakMap<GameMap, SportsLife>();
 export function sportsOf(map: GameMap): SportsLife {
   const had = cache.get(map);
   if (had) return had;
-  const life: SportsLife = { things: [], lines: [], areas: [], games: [] };
+  const life: SportsLife = { things: [], lines: [], areas: [], games: [], parks: [] };
   const seen = new Set<string>();
   for (const a of map.areas ?? []) {
     if (!a.sport || (a.kind !== 'pitch' && a.kind !== 'court')) continue;
@@ -88,9 +91,12 @@ export function sportsOf(map: GameMap): SportsLife {
     const name = `${ring[0]},${ring[1]},${ring.length}`;
     if (seen.has(name)) continue;
     seen.add(name);
-    const f = frameOf(ring);
-    if (!f || f.hw < 2 * M) continue;
-    pitch(a.sport, a.pitch ?? 'grass', f, seeded(hash(f.cx, f.cy)), life);
+    // (A skate park's often an odd shape: whatever's the biggest of it that's square, its ramps in that.)
+    const skate = a.sport === 'skate';
+    const f = skate ? (frameOf(ring) ?? deepest(ring)) : frameOf(ring);
+    if (!f || f.hw < (skate ? 1.5 : 2) * M) continue;
+    if (skate) skatePark(f, ring, life);
+    else pitch(a.sport, a.pitch ?? 'grass', f, seeded(hash(f.cx, f.cy)), life);
   }
   // The table-tennis tables: two playing at some.
   for (const p of map.props ?? []) {
@@ -109,7 +115,40 @@ export function sportsOf(map: GameMap): SportsLife {
  * The rectangle that fits a pitch: lined up with the edge that gives the smallest one round it (a pitch is mapped as a
  * rectangle, near enough), then drawn in till its corners are in it (one that isn't quite).
  */
-export function frameOf(ring: Pts): Frame | null {
+/**
+ * An odd-shaped ground's biggest square: round the point furthest in from its edges (looked for every metre), along its longest
+ * side, as far out as it's that far in (a little less); or null.
+ */
+function deepest(ring: Pts): Frame | null {
+  let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (let k = 0; k + 1 < ring.length; k += 2) [x0, y0, x1, y1] = [Math.min(x0, ring[k]), Math.min(y0, ring[k + 1]), Math.max(x1, ring[k]), Math.max(y1, ring[k + 1])];
+  const edge = (x: number, y: number) => {
+    let best = Infinity;
+    for (let i = 0; i + 1 < ring.length; i += 2) {
+      const j = (i + 2) % ring.length;
+      const [ax, ay, bx, by] = [ring[i], ring[i + 1], ring[j], ring[j + 1]];
+      const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2));
+      best = Math.min(best, Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y));
+    }
+    return best;
+  };
+  let [bx, by, bd] = [0, 0, 0];
+  for (let x = x0; x <= x1; x += M) for (let y = y0; y <= y1; y += M) if (pointInRing(x, y, ring)) {
+    const d = edge(x, y);
+    if (d > bd) [bx, by, bd] = [x, y, d];
+  }
+  if (bd < 2 * M) return null;
+  let [ux, uy, longest] = [1, 0, 0];
+  for (let i = 0; i + 1 < ring.length; i += 2) {
+    const j = (i + 2) % ring.length;
+    const len = Math.hypot(ring[j] - ring[i], ring[j + 1] - ring[i + 1]);
+    if (len > longest) [ux, uy, longest] = [(ring[j] - ring[i]) / len, (ring[j + 1] - ring[i + 1]) / len, len];
+  }
+  return { cx: bx, cy: by, ux, uy, hl: bd * 0.68, hw: bd * 0.68 };
+}
+
+export function frameOf(ring: Pts, least = 0.5): Frame | null {
   if (ring.length < 6) return null;
   let best: Frame | null = null;
   let bestArea = Infinity;
@@ -146,8 +185,8 @@ export function frameOf(ring: Pts): Frame | null {
     return true;
   };
   let k = 1;
-  while (k > 0.5 && !inside(k)) k -= 0.05;
-  if (k <= 0.5) return null;
+  while (k > least && !inside(k)) k -= 0.05;
+  if (k <= least) return null;
   return { ...f, hl: f.hl * k, hw: f.hw * k };
 }
 
@@ -247,9 +286,51 @@ function pitch(sport: Sport, surface: PitchSurface, f: Frame, rand: () => number
     case 'croquet':
       return lawn(sport, f, rand, life);
     case 'skate':
-      life.areas.push({ kind: 'court', rings: [new Layout(f).ring(-f.hl, -f.hw, f.hl, f.hw)], tint: 'rgba(168,166,158,0.85)' });
       return;
   }
+}
+
+/** A skate park's quarter pipe (along, across), its funbox, its grind rail, px. */
+const QUARTER: [number, number] = [3 * M, 6 * M];
+const FUNBOX: [number, number] = [5 * M, 3 * M];
+const RAIL = 4 * M;
+
+/**
+ * A skate park: its concrete; a quarter pipe at each end (facing in, its coping at the back), if it's long and wide enough; a
+ * funbox in the middle; grind rails either side of it, where there's room; and the way round it the skaters ride: an oval,
+ * up each quarter pipe and over the funbox.
+ */
+function skatePark(f: Frame, ring: Pts, life: SportsLife): void {
+  const lay = new Layout(f);
+  life.areas.push({ kind: 'court', rings: [ring], tint: 'rgba(176,174,166,0.92)' });
+  const along = Math.atan2(f.uy, f.ux);
+  const quarters = f.hl >= QUARTER[0] * 2 + FUNBOX[0] && f.hw * 2 >= QUARTER[1] - 0.5 * M;
+  if (quarters) {
+    for (const end of [1, -1]) {
+      const [x, y] = lay.at(end * (f.hl - QUARTER[0] / 2), 0);
+      // (Its coping, at the back of the picture, out towards its end.)
+      life.things.push({ kind: 'quarterpipe', x, y, angle: +(along + (end > 0 ? Math.PI : 0)).toFixed(3) });
+    }
+  }
+  if (f.hl * 2 >= FUNBOX[0] + 2 * M && f.hw * 2 >= FUNBOX[1] + M) {
+    const [x, y] = lay.at(0, 0);
+    life.things.push({ kind: 'funbox', x, y, angle: +along.toFixed(3) });
+  }
+  if (f.hw >= FUNBOX[1] / 2 + 2.2 * M && f.hl * 2 >= RAIL + 2 * M) {
+    for (const side of [1, -1]) {
+      const [x, y] = lay.at(0, side * (FUNBOX[1] / 2 + 1.4 * M));
+      life.things.push({ kind: 'grindrail', x, y, angle: +along.toFixed(3) });
+    }
+  }
+  // The way round: an oval, nearly to its ends (up the quarter pipes), over the funbox each way.
+  const [a, b] = [Math.max(M, f.hl - (quarters ? 1.2 * M : 1.5 * M)), Math.max(0.8 * M, f.hw * 0.62)];
+  const loop: number[] = [];
+  for (let k = 0; k < 16; k++) {
+    const t = (k / 16) * Math.PI * 2;
+    loop.push(...lay.at(Math.cos(t) * a, Math.sin(t) * b));
+  }
+  const [cx, cy] = lay.at(0, 0);
+  life.parks.push({ x: cx, y: cy, hl: f.hl, hw: f.hw, angle: +along.toFixed(3), loop });
 }
 
 /** The whole of a pitch, painted (or the turf), under its lines. */

@@ -56,7 +56,11 @@ const POST_RADIUS: Partial<Record<PropKind, number>> = {
   railsignal: 2,
   // An electricity pylon's feet, square, 8 m or so across.
   pylon: 26,
+  flagpole: 1.6,
 };
+
+/** What's put round the places that stands there for good, not knocked about (see world's places' things). */
+const FIXED_THINGS: ReadonlySet<PropKind> = new Set(['flagpole', 'quarterpipe', 'funbox', 'grindrail']);
 
 /** Street furniture that can be knocked about: how big, and how heavy (1 / mass, the car's being 1). */
 const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: number }>> = {
@@ -88,6 +92,11 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
   // A prison yard's gym: a weight bench with its barbell (heavy); a pull-up bar (steel, set in the ground: hardly moved).
   weights: { r: 3.5, length: 14, invMass: 0.8 },
   pullup: { r: 1.5, length: 16, invMass: 0.15 },
+  // A base's (see places.ts): a short wall of sandbags (very heavy); an ammunition box; a jerrycan; a sentry box (heavy).
+  sandbags: { r: 4, length: 22, invMass: 0.1 },
+  ammo: { r: 2, length: 7, invMass: 3 },
+  jerrycan: { r: 1.6, length: 4, invMass: 6 },
+  sentrybox: { r: 6, invMass: 0.3 },
   block: { r: 5, invMass: 0.4 },
   // A shopping trolley: on wheels, it rolls a long way.
   trolley: { r: 2.5, length: 8, invMass: 9 },
@@ -819,6 +828,13 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   }
   // What's round the places (see places.ts).
   for (const t of places.things) {
+    // (What stands there for good: a skate park's ramps, drawn on the ground; a base's flagpole, a post.)
+    if (FIXED_THINGS.has(t.kind as PropKind)) {
+      const post = POST_RADIUS[t.kind as PropKind];
+      if (post !== undefined) posts[0].push({ x: t.x, y: t.y, r: post, thing: t.kind as ThingKind, index: fixed.length });
+      fixed.push({ kind: t.kind as PropKind, x: t.x, y: t.y, angle: t.angle, level: 0 });
+      continue;
+    }
     const l = LOOSE[t.kind as PropKind];
     if (!l) continue;
     const p = { kind: t.kind as PropKind, x: t.x, y: t.y };

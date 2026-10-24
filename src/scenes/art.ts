@@ -1328,6 +1328,126 @@ export function createArt(scene: Phaser.Scene): void {
     circle(ctx, 1, 1.8, 1, '#4a4e52');
     circle(ctx, 15, 1.8, 1, '#4a4e52');
   });
+  // At an army base. A short wall of sandbags: rows of hessian bags, staggered.
+  canvasTexture(scene, TEX.prop('sandbags'), 23, 9, (ctx) => {
+    shade(ctx, 22, 8);
+    for (let row = 0; row < 2; row++) {
+      for (let x = row ? -1.8 : 0; x < 22; x += 3.6) {
+        roundRect(ctx, Math.max(0, x) + 0.1, row * 4 + 0.2, Math.min(3.4, 22 - Math.max(0, x)), 3.6, 1.2, row ? '#a8946a' : '#b8a479');
+      }
+    }
+  });
+  // An ammunition box: olive green, its lid's handle, a yellow stencilled band.
+  canvasTexture(scene, TEX.prop('ammo'), 8, 5, (ctx) => {
+    shade(ctx, 7, 4);
+    roundRect(ctx, 0, 0, 7, 4, 0.4, '#4d5634');
+    ctx.fillStyle = '#d9c23a';
+    ctx.fillRect(1, 1.6, 5, 0.6);
+    ctx.fillStyle = '#2d321f';
+    ctx.fillRect(3, 0.4, 1, 0.7);
+  });
+  // A jerrycan: olive, its three handles across the top.
+  canvasTexture(scene, TEX.prop('jerrycan'), 5, 4, (ctx) => {
+    shade(ctx, 4, 3);
+    roundRect(ctx, 0, 0, 4, 3, 0.4, '#4f5a33');
+    ctx.fillStyle = '#323a20';
+    for (const x of [0.6, 1.7, 2.8]) ctx.fillRect(x, 0.4, 0.5, 2.2);
+  });
+  // A sentry box: its pitched roof, dark green, a white edge.
+  canvasTexture(scene, TEX.prop('sentrybox'), 13, 13, (ctx) => {
+    shade(ctx, 12, 12);
+    roundRect(ctx, 0, 0, 12, 12, 0.6, '#f0efe8');
+    ctx.fillStyle = '#2f3d27';
+    ctx.beginPath();
+    ctx.moveTo(1, 1);
+    ctx.lineTo(11, 1);
+    ctx.lineTo(6, 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#3a4a30';
+    ctx.beginPath();
+    ctx.moveTo(1, 11);
+    ctx.lineTo(11, 11);
+    ctx.lineTo(6, 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#26321f';
+    ctx.beginPath();
+    ctx.moveTo(1, 1);
+    ctx.lineTo(1, 11);
+    ctx.lineTo(6, 6);
+    ctx.closePath();
+    ctx.moveTo(11, 1);
+    ctx.lineTo(11, 11);
+    ctx.lineTo(6, 6);
+    ctx.closePath();
+    ctx.fill();
+  });
+  // A flagpole, from above: the pole, and the Union flag out from it, flying.
+  canvasTexture(scene, TEX.prop('flagpole'), 14, 8, (ctx) => {
+    const [x0, y0, w, h] = [2.5, 1, 10, 5.5];
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(x0 + 1, y0 + 1.2, w, h);
+    ctx.fillStyle = '#1f3f8f';
+    ctx.fillRect(x0, y0, w, h);
+    ctx.strokeStyle = '#f4f4f4';
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x0 + w, y0 + h);
+    ctx.moveTo(x0 + w, y0);
+    ctx.lineTo(x0, y0 + h);
+    ctx.stroke();
+    ctx.strokeStyle = '#c8202c';
+    ctx.lineWidth = 0.45;
+    ctx.stroke();
+    ctx.fillStyle = '#f4f4f4';
+    ctx.fillRect(x0 + w / 2 - 1, y0, 2, h);
+    ctx.fillRect(x0, y0 + h / 2 - 1, w, 2);
+    ctx.fillStyle = '#c8202c';
+    ctx.fillRect(x0 + w / 2 - 0.6, y0, 1.2, h);
+    ctx.fillRect(x0, y0 + h / 2 - 0.6, w, 1.2);
+    circle(ctx, 2, y0 + 0.4, 1.2, '#8d9196');
+  });
+  // A skate park's: a quarter pipe (its slope up to the coping at the back: darker low, lighter high), a funbox (a flat top
+  // between two slopes, its ledges), a grind rail on its legs.
+  canvasTexture(scene, TEX.prop('quarterpipe'), 25, 49, (ctx) => {
+    const g = ctx.createLinearGradient(24, 0, 0, 0);
+    g.addColorStop(0, '#9c9a93');
+    g.addColorStop(1, '#d5d2c8');
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(0, 1, 24, 48);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 24, 48);
+    ctx.fillStyle = '#8b9096';
+    ctx.fillRect(0, 0, 1.2, 48);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    for (let x = 4; x < 24; x += 5) ctx.fillRect(x, 0, 0.4, 48);
+  });
+  canvasTexture(scene, TEX.prop('funbox'), 41, 25, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(1, 1, 40, 24);
+    for (const [a, b] of [[0, 12], [40, 28]]) {
+      const g = ctx.createLinearGradient(a, 0, b, 0);
+      g.addColorStop(0, '#a19e96');
+      g.addColorStop(1, '#cfccc2');
+      ctx.fillStyle = g;
+      ctx.fillRect(Math.min(a, b), 0, 12, 24);
+    }
+    ctx.fillStyle = '#d8d5cb';
+    ctx.fillRect(12, 0, 16, 24);
+    ctx.fillStyle = '#8b9096';
+    ctx.fillRect(12, 0, 16, 1);
+    ctx.fillRect(12, 23, 16, 1);
+  });
+  canvasTexture(scene, TEX.prop('grindrail'), 33, 4, (ctx) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(1, 2, 32, 1.4);
+    ctx.fillStyle = '#b8bec4';
+    ctx.fillRect(0, 1, 32, 1.1);
+    ctx.fillStyle = '#5b6066';
+    for (const x of [2, 16, 30]) ctx.fillRect(x - 0.5, 0.6, 1, 2);
+  });
   // An electricity pylon's foot: its four legs on their concrete pads, the bracing between them (the rest of it's drawn rising: see
   // Workings.ts).
   canvasTexture(scene, TEX.prop('pylon'), 54, 54, (ctx) => {

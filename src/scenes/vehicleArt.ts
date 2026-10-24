@@ -16,7 +16,7 @@ export function vehicleTexture(scene: Phaser.Scene, kind: VehicleKind, colour: n
   // Your own car, left somewhere.
   if (kind === 'own') return TEX.car;
   // The emergency services' in their liveries (one each).
-  if (kind === 'police' || kind === 'ambulance' || kind === 'fire' || kind === 'taxi') colour = 0;
+  if (kind === 'police' || kind === 'ambulance' || kind === 'fire' || kind === 'taxi' || kind === 'tank' || kind === 'apc' || kind === 'landrover') colour = 0;
   const key = `vehicle-${kind}-${colour}${sale ? '-sale' : ''}`;
   const { length: L, width: W, paint } = VEHICLES[kind];
   const body = LIVERY[kind] ?? COLOURS[paint][colour][0];
@@ -45,7 +45,7 @@ export function vehicleShadow(scene: Phaser.Scene, kind: VehicleKind): string {
   if (kind === 'own') return TEX.carShadow;
   const key = `vehicle-shadow-${kind}`;
   const { length: L, width: W } = VEHICLES[kind];
-  canvasTexture(scene, key, L, W, (ctx) => (kind === 'bike' ? roundRect(ctx, 0, W * 0.25, L, W * 0.5, W * 0.25, '#000') : roundRect(ctx, 0, 0, L, W, kind === 'lorry' || kind === 'van' || kind === 'ambulance' || kind === 'fire' ? 2.5 : 5, '#000')));
+  canvasTexture(scene, key, L, W, (ctx) => (kind === 'bike' ? roundRect(ctx, 0, W * 0.25, L, W * 0.5, W * 0.25, '#000') : kind === 'tank' ? roundRect(ctx, 0, 0, L * 0.82, W, 2, '#000') : roundRect(ctx, 0, 0, L, W, kind === 'lorry' || kind === 'van' || kind === 'ambulance' || kind === 'fire' || kind === 'apc' ? 2.5 : 5, '#000')));
   return key;
 }
 
@@ -104,6 +104,9 @@ export function bodyLayout(kind: VehicleKind): { mirror: number; screen: number 
   if (kind === 'bus' || kind === 'double') return { mirror: L / 2 - 2, screen: L / 2 - 1.5 };
   if (kind === 'bike') return { mirror: 0, screen: 0 };
   if (kind === 'own') return { mirror: L / 2 - 9.5, screen: L / 2 - 7.5 };
+  // (A tank: no mirrors, no glass; an armoured personnel carrier's narrow windows at its front.)
+  if (kind === 'tank') return { mirror: 0, screen: 0 };
+  if (kind === 'apc') return { mirror: L * 0.27, screen: L * 0.26 };
   const [, , screen, bonnet] = LAYOUT[kind].map((f) => f * L);
   return { mirror: screen + 0.1 - L / 2, screen: (screen + bonnet) / 2 - L / 2 };
 }
@@ -119,6 +122,8 @@ const GLASS = '#1e2a36';
 const SHINE = 'rgba(160,210,240,0.45)';
 
 function draw(ctx: Ctx, kind: VehicleKind, L: number, W: number, colour: string): void {
+  if (kind === 'tank') return tank(ctx, L, W, colour);
+  if (kind === 'apc') return apc(ctx, L, W, colour);
   // Tyres peeking out.
   ctx.fillStyle = '#151515';
   const wheel = Math.min(8, L * 0.18);
@@ -180,6 +185,117 @@ function draw(ctx: Ctx, kind: VehicleKind, L: number, W: number, colour: string)
   if (kind === 'police') police(ctx, L, W, screen);
   if (kind === 'ambulance') ambulance(ctx, L, W, screen);
   if (kind === 'taxi') taxi(ctx, L, W);
+  if (kind === 'landrover') {
+    // Its spare wheel on the bonnet; camouflage blotches.
+    ctx.fillStyle = '#1b1b1b';
+    ctx.beginPath();
+    ctx.arc(L - 6.5, W / 2, 2.6, 0, Math.PI * 2);
+    ctx.fill();
+    camo(ctx, L, W, colour, 3);
+  }
+}
+
+/** Camouflage: darker and lighter blotches over a body, the same every time. */
+function camo(ctx: Ctx, L: number, W: number, colour: string, seed: number): void {
+  let r = seed;
+  const rand = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+  for (let k = 0; k < Math.round((L * W) / 60); k++) {
+    ctx.fillStyle = k % 3 === 0 ? 'rgba(40,36,22,0.45)' : k % 3 === 1 ? shade(colour, -0.25) : shade(colour, 0.18);
+    ctx.beginPath();
+    ctx.ellipse(2 + rand() * (L - 4), 2 + rand() * (W - 4), 1.5 + rand() * 3, 1 + rand() * 2, rand() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/**
+ * A battle tank from above, facing right: its tracks along both sides (their links), the hull between, its front plate sloping
+ * down; the turret on it (back of the middle), its hatches, and its long gun out over the front.
+ */
+function tank(ctx: Ctx, L: number, W: number, colour: string): void {
+  const hull = L * 0.82;
+  const track = W * 0.22;
+  for (const y of [0, W - track]) {
+    roundRect(ctx, 0.5, y, hull, track, 2, '#26261f');
+    ctx.fillStyle = '#3c3b31';
+    for (let x = 2; x < hull - 1; x += 2.2) ctx.fillRect(x, y + 0.6, 1, track - 1.2);
+  }
+  roundRect(ctx, 1.5, track - 1, hull - 2.5, W - 2 * track + 2, 2, shade(colour, -0.2));
+  roundRect(ctx, 2.5, track, hull - 4.5, W - 2 * track, 1.5, colour);
+  // The front plate, sloping.
+  ctx.fillStyle = shade(colour, 0.15);
+  ctx.fillRect(hull - 9, track, 6.5, W - 2 * track);
+  // Engine deck grilles, at the back.
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  for (let x = 4; x < hull * 0.28; x += 2.4) ctx.fillRect(x, track + 2, 1.1, W - 2 * track - 4);
+  camo(ctx, hull, W, colour, 7);
+  // The turret: wider at the back, its gun out over the front.
+  const [tx, tw] = [hull * 0.36, hull * 0.42];
+  ctx.fillStyle = shade(colour, -0.28);
+  ctx.beginPath();
+  ctx.moveTo(tx, W / 2 - W * 0.32);
+  ctx.lineTo(tx + tw * 0.75, W / 2 - W * 0.28);
+  ctx.lineTo(tx + tw, W / 2 - W * 0.12);
+  ctx.lineTo(tx + tw, W / 2 + W * 0.12);
+  ctx.lineTo(tx + tw * 0.75, W / 2 + W * 0.28);
+  ctx.lineTo(tx, W / 2 + W * 0.32);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = shade(colour, 0.05);
+  ctx.beginPath();
+  ctx.moveTo(tx + 1, W / 2 - W * 0.29);
+  ctx.lineTo(tx + tw * 0.73, W / 2 - W * 0.25);
+  ctx.lineTo(tx + tw - 1, W / 2 - W * 0.1);
+  ctx.lineTo(tx + tw - 1, W / 2 + W * 0.1);
+  ctx.lineTo(tx + tw * 0.73, W / 2 + W * 0.25);
+  ctx.lineTo(tx + 1, W / 2 + W * 0.29);
+  ctx.closePath();
+  ctx.fill();
+  // Its gun, and the sleeve where it meets the turret; the commander's and loader's hatches.
+  roundRect(ctx, tx + tw - 2, W / 2 - 1, L - (tx + tw - 2) - 0.3, 2, 0.8, shade(colour, -0.35));
+  roundRect(ctx, tx + tw - 3, W / 2 - 2, 5, 4, 1, shade(colour, -0.4));
+  roundRect(ctx, L - 3.5, W / 2 - 1.3, 3.2, 2.6, 0.8, '#1d1e18');
+  for (const y of [W / 2 - W * 0.15, W / 2 + W * 0.15]) {
+    ctx.fillStyle = '#1f2219';
+    ctx.beginPath();
+    ctx.arc(tx + tw * 0.35, y, 2.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = shade(colour, -0.1);
+    ctx.beginPath();
+    ctx.arc(tx + tw * 0.35, y, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** An armoured personnel carrier from above, facing right: its wheels, the armoured hull (its front sloping), hatches, a gun mount. */
+function apc(ctx: Ctx, L: number, W: number, colour: string): void {
+  ctx.fillStyle = '#141414';
+  for (const x of [L * 0.12, L * 0.38, L * 0.72]) {
+    ctx.fillRect(x, 0, 7, 2.4);
+    ctx.fillRect(x, W - 2.4, 7, 2.4);
+  }
+  roundRect(ctx, 0.5, 1.2, L - 1, W - 2.4, 2, shade(colour, -0.25));
+  roundRect(ctx, 1.3, 2, L - 4, W - 4, 1.5, colour);
+  // Its front, sloping down to the nose; the driver's windows.
+  ctx.fillStyle = shade(colour, 0.14);
+  ctx.beginPath();
+  ctx.moveTo(L * 0.78, 2);
+  ctx.lineTo(L - 1, 4.5);
+  ctx.lineTo(L - 1, W - 4.5);
+  ctx.lineTo(L * 0.78, W - 2);
+  ctx.closePath();
+  ctx.fill();
+  roundRect(ctx, L * 0.78 - 2.5, 4, 2, W - 8, 0.6, GLASS);
+  camo(ctx, L * 0.78, W, colour, 5);
+  // Roof hatches, and the gun mount on top.
+  for (const x of [L * 0.18, L * 0.34]) roundRect(ctx, x, W / 2 - 3.5, 5, 7, 0.8, shade(colour, -0.15));
+  ctx.fillStyle = '#25271f';
+  ctx.beginPath();
+  ctx.arc(L * 0.58, W / 2, 3.4, 0, Math.PI * 2);
+  ctx.fill();
+  roundRect(ctx, L * 0.58, W / 2 - 0.6, 9, 1.2, 0.5, '#1b1c17');
+  ctx.fillStyle = '#fff6c8';
+  ctx.fillRect(L - 1.6, 3, 1.2, 2.4);
+  ctx.fillRect(L - 1.6, W - 5.4, 1.2, 2.4);
 }
 
 /** A taxi's sign on its roof, lit yellow, across it in the middle. */
@@ -190,7 +306,7 @@ function taxi(ctx: Ctx, L: number, W: number): void {
 }
 
 /** The emergency services' bodies' colours: a police car's white, an ambulance's yellow. */
-const LIVERY: Partial<Record<VehicleKind, string>> = { police: '#f2f3f1', ambulance: '#f0e010', fire: '#c3161c', taxi: '#2d63a8' };
+const LIVERY: Partial<Record<VehicleKind, string>> = { police: '#f2f3f1', ambulance: '#f0e010', fire: '#c3161c', taxi: '#2d63a8', tank: '#55603e', apc: '#5b6342', landrover: '#4f5a3b' };
 
 /** A strip of chequers (Battenburg markings) along both its sides, from `x0` to `x1`, alternating two colours. */
 function chequers(ctx: Ctx, x0: number, x1: number, W: number, a: string, b: string, size: number, inset: number): void {
@@ -288,7 +404,8 @@ function fireEngine(ctx: Ctx, L: number, W: number): void {
 }
 
 /** Along each kind, from the back, as fractions of its length: where the rear window starts, the roof, the windscreen, and the bonnet. */
-const LAYOUT: Record<Exclude<VehicleKind, 'lorry' | 'bus' | 'double' | 'bike' | 'own' | 'fire'>, [number, number, number, number]> = {
+const LAYOUT: Record<Exclude<VehicleKind, 'lorry' | 'bus' | 'double' | 'bike' | 'own' | 'fire' | 'tank' | 'apc'>, [number, number, number, number]> = {
+  landrover: [0.04, 0.1, 0.6, 0.7],
   small: [0.1, 0.22, 0.58, 0.72],
   hatch: [0.09, 0.2, 0.56, 0.7],
   saloon: [0.2, 0.31, 0.58, 0.71],

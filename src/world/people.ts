@@ -23,7 +23,7 @@ import type { SportGame } from './sports';
 import { type Drill, placesWork } from './places';
 import { type Act, pedestrianBusy, streetLifeWork } from './streetLife';
 import type { Light } from './lights';
-import { offsetLine } from './world';
+import { lineLength, offsetLine, pointAlong } from './world';
 import { type Work, drain, every } from './work.ts';
 
 const M = 8;
@@ -103,7 +103,7 @@ const R = 0.3 * M;
 const SHOPPERS = 16;
 const HOLD = 0.85 * M;
 
-export type Mode = 'walk' | 'stand' | 'wander' | 'kerb' | 'cross' | 'queue' | 'board' | 'flee' | 'dive' | 'down' | 'sit' | 'shop' | 'perform' | 'vend' | 'join' | 'game' | 'fight' | 'exercise' | 'escape';
+export type Mode = 'walk' | 'stand' | 'wander' | 'kerb' | 'cross' | 'queue' | 'board' | 'flee' | 'dive' | 'down' | 'sit' | 'shop' | 'perform' | 'vend' | 'join' | 'game' | 'fight' | 'exercise' | 'escape' | 'march' | 'skate';
 
 /** A bench or picnic table (as the world has it: it can be knocked about, or smashed). */
 export interface Seat {
@@ -333,6 +333,39 @@ export interface Person {
   foe?: Person | null;
   /** Breaking out: the way out through the gap, radians. */
   away?: number;
+  /** A soldier (in camouflage), kept to their base; marching or running in a squad: which, and where in it (rank, file). */
+  soldier?: boolean;
+  squad?: Squad | null;
+  slot?: [number, number];
+  /** A skater, riding round a skate park (see `Ride`). */
+  ride?: Ride;
+}
+
+/** A skater's ride round a skate park: its way round (and the spot's, to count them), how far round, which way, how fast; a trick. */
+export interface Ride {
+  src: number[];
+  loop: number[];
+  length: number;
+  s: number;
+  dir: 1 | -1;
+  speed: number;
+  /** In the air (a trick, off a ramp): how long left of it, s; and how long till the next. */
+  air: number;
+  next: number;
+}
+
+/** A skater's trick: how long they're in the air, s. */
+export const AIR = 0.7;
+
+/** A squad of soldiers marching (or running) round a loop in step: how far round it its front rank is, how fast, its size. */
+export interface Squad {
+  loop: number[];
+  length: number;
+  s: number;
+  speed: number;
+  /** The spot it came from (only one squad from each at a time), and how many are still in it. */
+  from: string;
+  members: number;
 }
 
 /** A vehicle as the people see it: where, which way, how big, how fast; a bus's stop. */
@@ -403,6 +436,8 @@ interface Spot {
   lollipop?: boolean;
   inmate?: boolean;
   drill?: Drill;
+  soldier?: boolean;
+  loop?: number[];
 }
 
 /** Where a crossing's kerbs are (either side of the road, on the pavement), and how it works. */
@@ -486,6 +521,8 @@ export class People {
   private readonly danger: Mover[] = [];
   /** Where people can be (see `update`), as it was last given. */
   private walkable: (x: number, y: number, level: number) => boolean = () => true;
+  /** The squads marching and running about the bases. */
+  private readonly squads: Squad[] = [];
   /** The prisons broken out of (their yards' outlines, by ptsKey): emptied, and no more prisoners come out into them. */
   private readonly brokenOut = new Map<string, { x: number; y: number; away: number }>();
   /** The bus stops: where people wait (on the pavement by the stop), x, y. */
@@ -1076,6 +1113,14 @@ export class People {
     for (let k = burst ? 10 : 1; k > 0; k--) this.shoppers(x0, y0, x1, y1, burst ? () => false : seen, burst);
     this.streetLife(x0, y0, x1, y1, seen, all);
     this.parkGames(x0, y0, x1, y1, seen, all);
+    // The skate parks near the view: their skaters; the bases': their squads, their PT classes, their sentries (however quiet it
+    // is round them), coming along out of sight.
+    for (const s of this.spots) {
+      const drill = s.drill === 'skate' || (s.soldier && s.drill);
+      if (!drill || s.x < x0 || s.x > x1 || s.y < y0 || s.y > y1 || (!all && (seen(s.x, s.y) || this.rand() > 0.02))) continue;
+      if (s.drill === 'skate') this.skaterAt(s);
+      else this.soldierAt(s);
+    }
     // Waiting at the bus stops near the view.
     for (const [i, [sx, sy]] of this.stops.entries()) {
       if (sx < x0 || sx > x1 || sy < y0 || sy > y1 || seen(sx, sy)) continue;
@@ -1198,7 +1243,9 @@ export class People {
 
   /** Someone (or a group) at a spot, standing about; in a park or square, some wander off about it. */
   private atSpot(s: Spot): void {
+    if (s.drill === 'skate' && s.loop) return this.skaterAt(s);
     if (s.inmate) return this.inmateAt(s);
+    if (s.soldier) return this.soldierAt(s);
     // On the grass in a park: a picnic, now and then: a blanket, and two to five sitting round it.
     if (s.grass && this.rand() < 0.35 && !this.underTree(s.x, s.y)) {
       const picnic: Picnic = { x: s.x, y: s.y, angle: this.rand() * Math.PI, pattern: Math.floor(this.rand() * 4), gone: false };
@@ -1469,6 +1516,7 @@ export class People {
       if (list) list.push(p);
       else this.close.set(k, [p]);
     }
+    this.drillSquads(dt);
     for (const p of this.people) {
       switch (p.mode) {
         case 'walk':
@@ -1535,6 +1583,12 @@ export class People {
           break;
         case 'escape':
           this.escape(p, dt);
+          break;
+        case 'march':
+          this.marching(p);
+          break;
+        case 'skate':
+          this.skating(p, dt);
           break;
       }
       if (p.speed > 0 && p.mode !== 'down') p.step = (p.step + (dt * p.speed) / (0.75 * M)) % 1;
@@ -1745,7 +1799,7 @@ export class People {
         const a = this.rand() * Math.PI * 2;
         const d = (5 + this.rand() * 25) * M;
         const [x, y] = [p.x + Math.cos(a) * d, p.y + Math.sin(a) * d];
-        if (pointInRing(x, y, ring) && (!p.inmate || this.clearTo(p.x, p.y, x, y))) {
+        if (pointInRing(x, y, ring) && ((!p.inmate && !p.soldier) || this.clearTo(p.x, p.y, x, y))) {
           [p.tx, p.ty] = [x, y];
           return;
         }
@@ -1769,8 +1823,14 @@ export class People {
       Object.assign(p, { mode: 'escape', tx: out.x, ty: out.y, timer: 0, away: out.away, foe: null });
       return;
     }
-    if (p.inmate && !p.free) {
+    // A skater: back on their board.
+    if (p.ride) {
+      p.mode = 'skate';
+      return;
+    }
+    if ((p.inmate && !p.free) || p.soldier) {
       p.mode = 'wander';
+      p.squad = null;
       p.foe = null;
       if (p.area < 0) p.area = this.areas.findIndex((ring) => pointInRing(p.x, p.y, ring));
       [p.tx, p.ty] = [p.x, p.y];
@@ -3033,6 +3093,132 @@ export class People {
     if (!this.goTo(p, p.tx, p.ty, RUN * 1.1, dt, 1.2 * M)) return;
     // Through: away from the prison, scattering, running a while.
     Object.assign(p, { mode: 'flee', free: true, area: -1, angle: (p.away ?? 0) + (this.rand() - 0.5) * 1.6, timer: 8 + this.rand() * 10 });
+  }
+
+  /**
+   * Soldiers, at a spot on a base (see places.ts's military): a squad marching round the parade square (three abreast, a
+   * sergeant beside them), one running round it further out (two abreast); a PT class (two rows doing press-ups, their instructor
+   * facing them); a sentry on guard at the gate; soldiers going about the base.
+   */
+  private soldierAt(s: Spot): void {
+    const area = this.areas.findIndex((ring) => pointInRing(s.x, s.y, ring));
+    const soldier = (x: number, y: number, mode: Mode): Person => {
+      const p = this.make(x, y, mode);
+      Object.assign(p, { soldier: true, area, timer: 30 + this.rand() * 90 });
+      return p;
+    };
+    if ((s.drill === 'march' || s.drill === 'run') && s.loop) {
+      const from = `${s.x},${s.y},${s.drill}`;
+      if (this.squads.some((q) => q.from === from)) return;
+      const run = s.drill === 'run';
+      const loop = [...s.loop, s.loop[0], s.loop[1]];
+      const length = lineLength(loop);
+      const squad: Squad = { loop, length, s: this.rand() * length, speed: (run ? 2.8 : 1.5) * M, from, members: 0 };
+      this.squads.push(squad);
+      const [ranks, files] = run ? [4 + Math.floor(this.rand() * 3), 2] : [3 + Math.floor(this.rand() * 2), 3];
+      for (let r = 0; r < ranks; r++) {
+        for (let f = 0; f < files; f++) {
+          const p = soldier(s.x, s.y, 'march');
+          Object.assign(p, { squad, slot: [r, f - (files - 1) / 2] });
+          squad.members++;
+        }
+      }
+      // The sergeant, beside the front rank.
+      if (!run) {
+        const p = soldier(s.x, s.y, 'march');
+        Object.assign(p, { squad, slot: [-0.5, -2.4] });
+        squad.members++;
+      }
+      return;
+    }
+    if (s.drill === 'pt') {
+      if (this.people.some((q) => q.soldier && q.mode === 'exercise' && Math.abs(q.x - s.x) < 8 * M && Math.abs(q.y - s.y) < 8 * M)) return;
+      const [ux, uy] = [Math.cos(s.angle), Math.sin(s.angle)];
+      const [nx, ny] = [-uy, ux];
+      const time = 40 + this.rand() * 60;
+      for (let row = 0; row < 2; row++) {
+        for (let k = -2; k <= 2; k++) {
+          const p = soldier(s.x + nx * k * 2.2 * M - ux * row * 2.8 * M, s.y + ny * k * 2.2 * M - uy * row * 2.8 * M, 'exercise');
+          Object.assign(p, { drill: 'pushup', angle: s.angle, timer: time + this.rand() * 4 });
+        }
+      }
+      const boss = soldier(s.x + ux * 4.5 * M, s.y + uy * 4.5 * M, 'stand');
+      Object.assign(boss, { angle: s.angle + Math.PI, timer: time + 5 });
+      return;
+    }
+    if (s.drill === 'sentry') {
+      if (this.people.some((q) => q.soldier && q.mode === 'stand' && Math.abs(q.x - s.x) < 2 * M && Math.abs(q.y - s.y) < 2 * M)) return;
+      const p = soldier(s.x, s.y, 'stand');
+      Object.assign(p, { angle: s.angle, timer: 1e6 });
+      return;
+    }
+    if (s.group) {
+      const n = 2 + Math.floor(this.rand() * 2);
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2 + this.rand() * 0.4;
+        const p = soldier(s.x + Math.cos(a) * 0.8 * M, s.y + Math.sin(a) * 0.8 * M, 'stand');
+        p.angle = a + Math.PI;
+      }
+      return;
+    }
+    const p = soldier(s.x, s.y, 'wander');
+    [p.tx, p.ty, p.timer] = [s.x, s.y, 0];
+  }
+
+  /** The squads, on round their loops (and gone once none of them's left in them). */
+  private drillSquads(dt: number): void {
+    for (let i = this.squads.length - 1; i >= 0; i--) {
+      const q = this.squads[i];
+      q.members = 0;
+      for (const p of this.people) if (p.squad === q && p.mode === 'march') q.members++;
+      if (!q.members) this.squads.splice(i, 1);
+      else q.s = (q.s + q.speed * dt) % q.length;
+    }
+  }
+
+  /** In step in their squad: their place in it (so far behind the front rank, so far to the side), facing the way it's going. */
+  private marching(p: Person): void {
+    const q = p.squad;
+    if (!q || !p.slot) return this.rejoin(p);
+    const [rank, file] = p.slot;
+    const along = (((q.s - rank * (q.speed > 2 * M ? 1.4 : 1.2) * M) % q.length) + q.length) % q.length;
+    const [x, y, ux, uy] = pointAlong(q.loop, along);
+    const [nx, ny] = [-uy, ux];
+    [p.x, p.y] = [x + nx * file * 0.9 * M, y + ny * file * 0.9 * M];
+    p.angle = Math.atan2(uy, ux);
+    p.speed = q.speed;
+  }
+
+  /** A skater at a skate park (as many as its spots, at most): on their board, somewhere round it, one way or the other. */
+  private skaterAt(s: Spot): void {
+    const src = s.loop!;
+    const most = this.spots.filter((t) => t.loop === src).length;
+    if (this.people.filter((q) => q.ride?.src === src).length >= most) return;
+    const loop = [...src, src[0], src[1]];
+    const length = lineLength(loop);
+    const ride: Ride = { src, loop, length, s: this.rand() * length, dir: this.rand() < 0.5 ? 1 : -1, speed: (4 + this.rand() * 2) * M, air: 0, next: 1 + this.rand() * 5 };
+    const [x, y] = pointAlong(loop, ride.s);
+    const p = this.make(x, y, 'skate');
+    p.ride = ride;
+  }
+
+  /** Round the park on their board, weaving a little; up a ramp and into the air now and then (a trick); bailing, now and then. */
+  private skating(p: Person, dt: number): void {
+    const r = p.ride!;
+    r.s = (((r.s + r.dir * r.speed * dt) % r.length) + r.length) % r.length;
+    const [x, y, ux, uy] = pointAlong(r.loop, r.s);
+    const weave = Math.sin(this.clock * 1.3 + p.id) * 0.4 * M;
+    [p.x, p.y] = [x - uy * weave, y + ux * weave];
+    p.angle = Math.atan2(uy * r.dir, ux * r.dir);
+    p.speed = r.speed;
+    if (r.air > 0) {
+      r.air -= dt;
+      // Landed: or not (one in six), and down on the concrete a moment, their board rolling on.
+      if (r.air <= 0 && this.rand() < 0.16) Object.assign(p, { mode: 'down', timer: 1.5 + this.rand() * 2, vx: Math.cos(p.angle) * 2 * M, vy: Math.sin(p.angle) * 2 * M });
+      return;
+    }
+    r.next -= dt;
+    if (r.next <= 0) [r.air, r.next] = [AIR, 2.5 + this.rand() * 5];
   }
 
   /** Whether there's nothing in the way (a wall, a building's) on the straight between two points. */

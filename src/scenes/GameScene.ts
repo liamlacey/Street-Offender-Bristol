@@ -922,7 +922,7 @@ export class GameScene extends Phaser.Scene {
       slide: this.onFoot ? 0 : Math.max(Math.abs(lateralSpeed(this.car)), this.input_.handbrake ? speed * 0.6 : 0),
       surface: SURFACE_KIND[this.surface],
       // (No engine on foot or on a bike; a deeper one in your truck, a lorry or a bus.)
-      engine: this.onFoot || kind === 'bike' ? 0 : kind === 'lorry' || kind === 'bus' || kind === 'double' || kind === 'own' || kind === 'fire' ? 0.7 : kind === 'van' || kind === 'ambulance' ? 0.85 : 1,
+      engine: this.onFoot || kind === 'bike' ? 0 : kind === 'lorry' || kind === 'bus' || kind === 'double' || kind === 'own' || kind === 'fire' || kind === 'apc' ? 0.7 : kind === 'tank' ? 0.55 : kind === 'van' || kind === 'ambulance' ? 0.85 : 1,
     });
     // The nearest siren going, louder the nearer.
     let siren: Vehicle | undefined;

@@ -23,6 +23,11 @@ const TUNED: Record<VehicleKind, Partial<CarTuning>> = {
   fire: { engineAccel: 170, maxForwardSpeed: 240, maxTurnRate: 2, grip: 7, brakeDecel: 470, fullSteerSpeed: 140, climbSpeedLoss: 3.5 },
   hatch: { engineAccel: 330, maxForwardSpeed: 340 },
   taxi: { engineAccel: 330, maxForwardSpeed: 350, maxTurnRate: 3.2 },
+  // The army's: a tank, slow to get going but unstoppable, its tracks turning it as sharply slow as fast, gripping anything;
+  // an armoured personnel carrier, a heavy truck; a Land Rover, a sure-footed car.
+  tank: { engineAccel: 150, maxForwardSpeed: 210, brakeDecel: 700, maxTurnRate: 2.2, fullSteerSpeed: 20, grip: 14, handbrakeGrip: 8, climbSpeedLoss: 1 },
+  apc: { engineAccel: 230, maxForwardSpeed: 300, brakeDecel: 560, maxTurnRate: 2.5, fullSteerSpeed: 110, grip: 9, climbSpeedLoss: 2 },
+  landrover: { engineAccel: 300, maxForwardSpeed: 320, maxTurnRate: 3, grip: 9 },
   saloon: { engineAccel: 340, maxForwardSpeed: 360, maxTurnRate: 3.2 },
   estate: { engineAccel: 320, maxForwardSpeed: 350, maxTurnRate: 3.1 },
   suv: { engineAccel: 300, maxForwardSpeed: 330, maxTurnRate: 3, grip: 8 },
@@ -55,6 +60,9 @@ const TUNED: Record<VehicleKind, Partial<CarTuning>> = {
  */
 export const RUGGED: Partial<Record<VehicleKind, { terrain: number; people: number }>> = {
   own: { terrain: 0.9, people: 0.25 },
+  tank: { terrain: 1, people: 0.05 },
+  apc: { terrain: 0.9, people: 0.2 },
+  landrover: { terrain: 0.8, people: 0.7 },
 };
 
 /** The grip it gets on a surface, as rugged as it is (see RUGGED). */

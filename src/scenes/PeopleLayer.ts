@@ -1,5 +1,5 @@
 import type * as Phaser from 'phaser';
-import { type Bird, type Dog, type Gather, type Kickabout, LOOKS, type People, type Person, type Picnic } from '../world/people';
+import { AIR, type Bird, type Dog, type Gather, type Kickabout, LOOKS, type People, type Person, type Picnic } from '../world/people';
 import type { Drill } from '../world/places';
 import type { Act } from '../world/streetLife';
 import type { Perspective } from '../world/perspective';
@@ -22,11 +22,12 @@ export function clothes(look: number): { top: string; bottom: string; hair: stri
 }
 
 /** A person from above, facing right: `pose` is standing, a step (one foot forward, then the other), or lying down. */
-function person(ctx: Ctx, look: number, pose: Pose, inmate = false): void {
+function person(ctx: Ctx, look: number, pose: Pose, uniform?: Uniform): void {
   const own = clothes(look);
-  // (A prisoner: their orange jumpsuit, top and bottom.)
-  const [top, bottom] = inmate ? [JUMPSUIT, shadeOf(JUMPSUIT)] : [own.top, own.bottom];
-  const { hair, skin } = own;
+  // (A prisoner: their orange jumpsuit, top and bottom; a soldier: camouflage, and a beret for their hair.)
+  const [top, bottom] = uniform === 'inmate' ? [JUMPSUIT, shadeOf(JUMPSUIT)] : uniform === 'soldier' ? [CAMO, shadeOf(CAMO)] : [own.top, own.bottom];
+  const hair = uniform === 'soldier' ? BERET[look % BERET.length] : own.hair;
+  const { skin } = own;
   const ellipse = (x: number, y: number, rx: number, ry: number, fill: string) => {
     ctx.fillStyle = fill;
     ctx.beginPath();
@@ -71,7 +72,18 @@ function person(ctx: Ctx, look: number, pose: Pose, inmate = false): void {
   ellipse(cx - 0.2, cy, 1.15, 2.2, shadeOf(top));
   ellipse(cx + 0.2, cy, 1.2, 1.15, hair);
   ellipse(cx + 1.15, cy, 0.4, 0.75, skin);
+  if (uniform === 'soldier') {
+    // Camouflage blotches on their back.
+    ellipse(cx - 0.6, cy - 1.1, 0.55, 0.45, '#3d4529');
+    ellipse(cx + 0.1, cy + 1.4, 0.5, 0.4, '#6b6a45');
+  }
 }
+
+/** What someone's in, if it's not their own clothes: a prisoner's jumpsuit, a soldier's camouflage. */
+export type Uniform = 'inmate' | 'soldier';
+/** A soldier's camouflage (its main colour), and their berets (the regiments'). */
+const CAMO = '#5b6340';
+const BERET = ['#3f2a3d', '#2c4a2a', '#2d3a5c', '#7a2230'];
 
 function shadeOf(hex: string): string {
   const n = parseInt(hex.slice(1), 16);
@@ -335,10 +347,10 @@ function ballTexture(scene: Phaser.Scene, kind: Kickabout['kind']): string {
   return key;
 }
 
-export function personTexture(scene: Phaser.Scene, look: number, pose: Pose, hivis = false, lollipop = false, inmate = false): string {
-  const key = `person-${look % LOOKS}-${pose}${hivis ? '-hivis' : ''}${lollipop ? '-lollipop' : ''}${inmate ? '-inmate' : ''}`;
+export function personTexture(scene: Phaser.Scene, look: number, pose: Pose, hivis = false, lollipop = false, uniform?: Uniform): string {
+  const key = `person-${look % LOOKS}-${pose}${hivis ? '-hivis' : ''}${lollipop ? '-lollipop' : ''}${uniform ? `-${uniform}` : ''}`;
   const draw = (ctx: Ctx) => {
-    person(ctx, look, pose, inmate);
+    person(ctx, look, pose, uniform);
     if (hivis) hiVis(ctx, pose);
     if (lollipop) lollipopLady(ctx, pose);
   };
@@ -349,16 +361,55 @@ export function personTexture(scene: Phaser.Scene, look: number, pose: Pose, hiv
 
 /** A prisoner's jumpsuit. */
 const JUMPSUIT = '#f2711c';
+const SUIT = JUMPSUIT;
+
+/**
+ * A skater on their board, from above (riding right): the board under them (its deck, its wheels at the ends), them stood
+ * side on across it, feet at its ends, arms out for balance.
+ */
+export function skaterTexture(scene: Phaser.Scene, look: number): string {
+  const key = `skater-${look % LOOKS}`;
+  canvasTexture(scene, key, 12, 10, (ctx) => {
+    const { top, bottom, hair, skin } = clothes(look);
+    const ellipse = (x: number, y: number, rx: number, ry: number, fill: string) => {
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    const [cx, cy] = [6, 5];
+    ellipse(cx + 0.8, cy + 1, 4.2, 2.4, 'rgba(0,0,0,0.25)');
+    // The board: its deck, its wheels.
+    ctx.fillStyle = '#e9e6dc';
+    for (const x of [cx - 3.2, cx + 2.6]) {
+      ctx.fillRect(x, cy - 1.1, 0.6, 0.5);
+      ctx.fillRect(x, cy + 0.6, 0.6, 0.5);
+    }
+    ellipse(cx, cy, 4.1, 0.95, ['#2b2b2e', '#b4232a', '#2d5aa0', '#d0a020'][look % 4]);
+    // Side on: their feet at the board's ends, their shoulders along it, arms out; their head turned the way they're going.
+    ellipse(cx - 2.3, cy, 0.9, 0.6, bottom);
+    ellipse(cx + 2.3, cy, 0.9, 0.6, bottom);
+    ellipse(cx - 2.6, cy - 1.7, 0.9, 0.55, top);
+    ellipse(cx + 2.6, cy + 1.7, 0.9, 0.55, top);
+    ellipse(cx, cy, 2.6, 1.4, top);
+    ellipse(cx, cy - 0.2, 2.1, 1.05, shadeOf(top));
+    ellipse(cx, cy, 1.2, 1.15, hair);
+    ellipse(cx + 0.8, cy, 0.6, 0.45, skin);
+  });
+  return key;
+}
 
 /**
  * A prisoner at it, in the yard, from above (facing right; two frames, in turn): fighting (a punch thrown, one fist then the
  * other, the other up guarding), on the weight bench (lying on it, the bar down to the chest, then pressed up: arms bent out, then
  * straight), on the pull-up bar (hanging, then pulled up: nearer, so bigger, their shadow further off), press-ups (down, then up).
  */
-export function drillTexture(scene: Phaser.Scene, look: number, drill: Drill, frame: number): string {
-  const key = `drill-${drill}-${look % LOOKS}-${frame}`;
+export function drillTexture(scene: Phaser.Scene, look: number, drill: Drill, frame: number, uniform: Uniform = 'inmate'): string {
+  const key = `drill-${drill}-${look % LOOKS}-${frame}-${uniform}`;
   canvasTexture(scene, key, 16, 12, (ctx) => {
-    const { hair, skin } = clothes(look);
+    const { skin } = clothes(look);
+    const hair = uniform === 'soldier' ? BERET[look % BERET.length] : clothes(look).hair;
+    const JUMPSUIT = uniform === 'soldier' ? CAMO : SUIT;
     const ellipse = (x: number, y: number, rx: number, ry: number, fill: string) => {
       ctx.fillStyle = fill;
       ctx.beginPath();
@@ -513,12 +564,17 @@ export class PeopleLayer {
       const pose: Pose = p.mode === 'down' ? 'down' : p.mode === 'sit' ? 'sit' : p.speed < 2 ? 'stand' : p.step < 0.5 ? 'step0' : 'step1';
       const act = p.mode === 'perform' && p.act && p.act !== 'vendor' ? p.act : null;
       // (A prisoner at it: fighting, at the weights, the pull-up bar, press-ups.)
-      const drill = p.inmate && p.mode === 'fight' ? 'fight' : p.inmate && p.mode === 'exercise' ? p.drill : undefined;
+      // (A soldier at PT.)
+      const uniform = p.inmate ? 'inmate' : p.soldier ? 'soldier' : undefined;
+      const drill = p.mode === 'fight' ? 'fight' : p.mode === 'exercise' ? p.drill : undefined;
+      const skating = p.mode === 'skate' && !!p.ride;
       const key = act
         ? performerTexture(this.scene, p.look, act, Math.floor(p.step * ACT_FRAMES[act]) % ACT_FRAMES[act])
-        : drill
-          ? drillTexture(this.scene, p.look, drill, Math.floor(p.step * 2) % 2)
-          : personTexture(this.scene, p.look, pose, p.hivis, p.lollipop, p.inmate);
+        : skating
+          ? skaterTexture(this.scene, p.look)
+          : drill
+            ? drillTexture(this.scene, p.look, drill, Math.floor(p.step * 2) % 2, uniform)
+            : personTexture(this.scene, p.look, pose, p.hivis, p.lollipop, uniform);
       let s = this.sprites.get(p);
       if (!s) {
         // (A child, smaller.)
@@ -526,9 +582,13 @@ export class PeopleLayer {
         this.sprites.set(p, s);
       } else if (s.texture.key !== key) s.setTexture(key);
       // Head height (lying down, the ground), and how high they've been thrown: up over the car, and a little bigger.
-      const lift = perspective.lift(this.base(p.x, p.y, p.level) + (p.mode === 'down' ? 0.2 : p.mode === 'sit' ? 0.8 : 1.2) * 8);
+      // (A skater doing a trick: up in the air, spinning round once.)
+      const air = skating && p.ride!.air > 0 ? 1 - p.ride!.air / AIR : 0;
+      const hop = air ? Math.sin(air * Math.PI) * 1.4 : 0;
+      const lift = perspective.lift(this.base(p.x, p.y, p.level) + ((p.mode === 'down' ? 0.2 : p.mode === 'sit' ? 0.8 : 1.2) + hop) * 8);
+      if (skating) s.setScale((SIZE * (1 + hop * 0.15)) / ART_SCALE);
       s.setPosition(perspective.x(p.x, lift), perspective.y(p.y, lift))
-        .setRotation(p.angle)
+        .setRotation(p.angle + air * Math.PI * 2)
         .setDepth(p.level === 1 ? this.deckDepth(p.x, p.y) : this.depths.ground);
     }
     for (const [p, s] of this.sprites) {

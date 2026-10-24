@@ -911,6 +911,12 @@ front and back) or fire engines (red, a ladder on top).
   out of its way as from you.
 - Its siren's heard up to 260 m away (the nearest one): a police car's wail, an
   ambulance's or a fire engine's two tones. You can take any of them and drive it.
+- **The army's vehicles** (parked at its bases: see Places), any of them yours to take: a
+  battle tank (9.4 m with its gun out over its front, 3.5 m wide; 20 times a car's weight:
+  slow to get going, 26 m/s at most, turning as sharply slow as fast, gripping anything,
+  shrugging off rough ground and people, through walls a car would stop at), an armoured
+  personnel carrier (6.8 m, five times a car's weight, a heavy truck's handling), an
+  army Land Rover (sure-footed off the road); in olive camouflage.
 
 **Parked cars:** in the car parks' bays (65% of them taken; not the big shops' trolley shelters, nor under a market's stalls or the street life: see People) and in the parking lanes'
 bays (55%, plus 1.2% per point of the street's activity, at most 92%; loading bays
@@ -1218,6 +1224,18 @@ but the water and the buildings.
     each building's door (more at a university, a hospital's smokers to one side),
     bikes (not a hospital), a bench. A stadium: a crowd all round it (a match on),
     stewards in hi-vis, burger vans.
+  - An army base (`landuse=military`, `military=barracks`, `training_area`, `base`): by
+    its gate (the middle of the side of its edge nearest a road), a sentry box, a sentry
+    on guard (for good), the flagpole (the Union flag; it topples) and sandbags either
+    side. Of 1,500 m² or more: a parade square (26 m by 16 m, tarmac, a white line round
+    it) on open ground, a squad marching round it (three or four ranks of three, a
+    sergeant beside them, 1.5 m/s) and another running round it further out (two
+    abreast, four to six ranks, 2.8 m/s); a PT class (two rows of five doing press-ups,
+    their instructor facing them); its vehicles parked in rows along it, side by side
+    (tanks, then armoured personnel carriers, then Land Rovers, one for every 900 m², up
+    to 16: any of them yours to take), ammunition boxes and jerrycans by some; sandbags
+    about it; soldiers in camouflage and berets going about it (in twos and threes, or
+    on their own, kept to the base). Less: its flag and sentry, three soldiers.
   - The prison: a 5.5 m stone wall round it (all but unbreakable, but for the biggest
     hit: a bus, a lorry, a fire engine at speed). Its yard (its grounds, but for its
     buildings and roads) full of prisoners in orange jumpsuits, one for every 90 m² of
@@ -1321,7 +1339,15 @@ but the water and the buildings.
   - Bowls: the green mown in stripes along its rinks (5.5 m), the ditch round it; on up
     to three rinks, two at the mat rolling bowls up to the jack and one up at the far
     end. Croquet: the lawn, its six hoops and the peg; two playing on half.
-  - A skate park: concrete. A table-tennis table: two playing at half of them.
+  - A skate park: concrete; a quarter pipe (3 m by 6 m) at each end, facing in, where
+    it's long enough (two of them and a funbox's length) and wide enough (6 m, nearly); a
+    funbox (5 m by 3 m) in the middle; grind rails (4 m) either side of it, where there's
+    room. Ramps and rails are drawn on the ground (nothing to hit). Skaters ride round it
+    (one for every 50 m², two to eight): an oval nearly to its ends (up the quarter pipes)
+    and over the funbox, either way, 4 to 6 m/s, weaving a little; every 2.5 to 7.5 s a
+    trick (0.7 s up in the air, a full spin), and one in six they bail (down on the
+    concrete a moment, then back on). A few watch from beside its long sides.
+    A table-tennis table: two playing at half of them.
   - All the goals, posts, hoops, stumps and croquet hoops are loose things, knocked about
     and broken (goals buckled, stumps sent flying); each game's ball its own (a tennis
     ball, a basketball, a rugby ball, ...), passed and hit as its game is: over the net
