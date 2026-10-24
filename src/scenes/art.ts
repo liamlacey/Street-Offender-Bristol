@@ -1226,6 +1226,106 @@ export function createArt(scene: Phaser.Scene): void {
     circle(ctx, 2.9, 2.9, 1.8, '#c4c9cd');
     circle(ctx, 2.9, 2.9, 0.6, '#3a3d40');
   });
+  // Round the works (see places.ts). A bulk bag of sand: the white bag, its lifting loops at the corners, the sand heaped in its top.
+  canvasTexture(scene, TEX.prop('bags'), 9, 9, (ctx) => {
+    shade(ctx, 8, 8);
+    roundRect(ctx, 0, 0, 8, 8, 0.6, '#e8e6df');
+    circle(ctx, 4, 4, 2.8, '#c9a86a');
+    circle(ctx, 3.6, 3.6, 1.4, '#d8bc84');
+    ctx.fillStyle = '#e8e6df';
+    for (const [x, y] of [[0.4, 0.4], [6.6, 0.4], [0.4, 6.6], [6.6, 6.6]]) ctx.fillRect(x, y, 1, 1);
+  });
+  // A car crushed for scrap: flattened, its roof gone in, rust through the paint; in what colour it was.
+  ['#7a2e2a', '#2f4f7a', '#5d6266', '#a8a49a'].forEach((paint, v) => {
+    canvasTexture(scene, `${TEX.prop('crushed')}-${v}`, 32, 15, (ctx) => {
+      shade(ctx, 31, 14);
+      roundRect(ctx, 0, 0, 31, 14, 1, shadeOf(paint, -0.15));
+      const rand = seeded(17 + v);
+      for (let i = 0; i < 26; i++) {
+        ctx.fillStyle = i % 3 ? paint : '#6b4a2e';
+        ctx.fillRect(rand() * 28, rand() * 12, 2 + rand() * 4, 1 + rand() * 2);
+      }
+      ctx.fillStyle = 'rgba(20,24,28,0.55)';
+      ctx.fillRect(10, 3, 9, 8);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      for (let x = 3; x < 30; x += 5) ctx.fillRect(x, 0, 0.6, 14);
+    });
+  });
+  // A battery storage unit: a white steel box, its vents along both sides, the warning sign.
+  canvasTexture(scene, TEX.prop('battery'), 49, 20, (ctx) => {
+    shade(ctx, 48, 19.4);
+    roundRect(ctx, 0, 0, 48, 19.4, 0.5, '#dfe3e2');
+    ctx.fillStyle = '#a9b0b1';
+    for (let x = 3; x < 45; x += 3) {
+      ctx.fillRect(x, 1, 1.6, 2.4);
+      ctx.fillRect(x, 16, 1.6, 2.4);
+    }
+    roundRect(ctx, 4, 6, 40, 7.4, 0.4, '#cfd5d4');
+    ctx.fillStyle = '#2a8a4a';
+    ctx.fillRect(4, 8.8, 40, 1.4);
+    ctx.fillStyle = '#f2c500';
+    ctx.beginPath();
+    ctx.moveTo(43, 6.6);
+    ctx.lineTo(45.8, 12);
+    ctx.lineTo(40.2, 12);
+    ctx.closePath();
+    ctx.fill();
+  });
+  // A pumping station's pipework: two blue pipes, their flanges, a valve's red wheel on each.
+  canvasTexture(scene, TEX.prop('valve'), 19, 9, (ctx) => {
+    shade(ctx, 18, 8);
+    for (const y of [1, 5]) {
+      roundRect(ctx, 0, y, 18, 2.6, 1.2, '#2f5f9a');
+      ctx.fillStyle = '#244a78';
+      for (const x of [2, 9, 16]) ctx.fillRect(x - 0.5, y - 0.4, 1, 3.4);
+    }
+    for (const [x, y] of [[5.5, 2.3], [12.5, 6.3]]) {
+      ctx.strokeStyle = '#c8302a';
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 1.6, y);
+      ctx.lineTo(x + 1.6, y);
+      ctx.moveTo(x, y - 1.6);
+      ctx.lineTo(x, y + 1.6);
+      ctx.stroke();
+    }
+  });
+  // A heap of aggregate (gravel or sand), from above: darker round its foot, its stones, a lighter top.
+  ['#8f8a80', '#c2a46a'].forEach((stone, v) => {
+    canvasTexture(scene, `${TEX.prop('heap')}-${v}`, 46, 46, (ctx) => {
+      circle(ctx, 24, 24.5, 21.5, 'rgba(0,0,0,0.25)');
+      circle(ctx, 23, 23, 21.5, shadeOf(stone, -0.2));
+      circle(ctx, 22, 22, 15, stone);
+      circle(ctx, 20.5, 20.5, 7, shadeOf(stone, 0.15));
+      const rand = seeded(23 + v);
+      for (let i = 0; i < 160; i++) {
+        const [a, r] = [rand() * Math.PI * 2, Math.sqrt(rand()) * 20];
+        ctx.fillStyle = rand() < 0.5 ? shadeOf(stone, -0.3) : shadeOf(stone, 0.25);
+        ctx.fillRect(23 + Math.cos(a) * r, 23 + Math.sin(a) * r, 0.7, 0.7);
+      }
+    });
+  });
+  // An electricity pylon's foot: its four legs on their concrete pads, the bracing between them (the rest of it's drawn rising: see
+  // Workings.ts).
+  canvasTexture(scene, TEX.prop('pylon'), 54, 54, (ctx) => {
+    const [a, b] = [5, 49];
+    ctx.strokeStyle = 'rgba(70,74,78,0.9)';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(a, a);
+    ctx.lineTo(b, b);
+    ctx.moveTo(b, a);
+    ctx.lineTo(a, b);
+    ctx.rect(a, a, b - a, b - a);
+    ctx.stroke();
+    for (const [x, y] of [[a, a], [b, a], [a, b], [b, b]]) {
+      roundRect(ctx, x - 3.5, y - 3.5, 7, 7, 0.5, '#a9a59b');
+      roundRect(ctx, x - 1.6, y - 1.6, 3.2, 3.2, 0.3, '#5e6266');
+    }
+  });
   // Headstones, from above: their tops (rounded, square, a cross), a little lichen; weathered grey, a pale one, a dark one.
   ['#8f8d87', '#c9c4b8', '#4c4d50'].forEach((stone, v) => {
     canvasTexture(scene, `${TEX.prop('headstone')}-${v}`, 4, 7, (ctx) => {

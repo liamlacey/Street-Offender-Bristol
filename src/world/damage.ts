@@ -16,9 +16,9 @@ import type { HomeKind } from './homes';
 export type Material = 'wood' | 'electric' | 'metal' | 'iron' | 'glass' | 'stone' | 'plant' | 'timber' | 'plastic';
 
 /** Things that stand in one place until they're knocked down. */
-export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'mooring' | 'postbox' | 'phone' | 'meter' | 'pump' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'crane' | 'stump' | 'cctv' | 'charger' | 'railsignal';
+export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'mooring' | 'postbox' | 'phone' | 'meter' | 'pump' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'crane' | 'stump' | 'cctv' | 'charger' | 'railsignal' | 'pylon';
 /** What doesn't topple like the street furniture: a tree (it splits and falls its own way), and what's left of one (low enough to drive over). */
-export type Structure = 'tree' | 'stump';
+export type Structure = 'tree' | 'stump' | 'pylon';
 /**
  * What's left where it stood, broken, knocked hard enough: a statue's plinth, a fountain's basin. Still in the way, but hit
  * again (much more easily: REMAINS_TOUGH), it's smashed to rubble.
@@ -65,6 +65,8 @@ export const THINGS: Record<Exclude<ThingKind, 'tree'>, Toughness> = {
   crane: { material: 'iron', strength: 330, absorb: 0.75 },
   // What's left of a tree: it's not going anywhere.
   stump: { material: 'wood', strength: Infinity, absorb: 0 },
+  // An electricity pylon: a steel lattice on concrete feet, its wires holding it up. Nothing brings one down.
+  pylon: { material: 'iron', strength: Infinity, absorb: 0 },
   // A CCTV camera on its pole; an electric car's charging post; a railway signal on its post.
   cctv: { material: 'electric', strength: 130, absorb: 0.2 },
   charger: { material: 'electric', strength: 150, absorb: 0.25 },
@@ -314,7 +316,7 @@ export function fallen(kind: Exclude<ThingKind, Structure>, x: number, y: number
  * ground) and smaller, the smaller the easier, down to bits too small to break.
  * What each piece is, how strong (as `Toughness`), and what it breaks into.
  */
-export const BREAKUP: Partial<Record<DebrisKind | 'bin' | 'cafetable' | 'moped' | 'flowers' | 'crates' | 'newsstand' | 'boards' | 'transformer' | 'butt' | 'compost' | 'toolchest' | 'cabinet' | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block' | 'trolley' | 'foodcart' | 'stall' | 'aboard' | 'swings' | 'slide' | 'roundabout' | 'climbframe' | 'sandpit' | 'seesaw' | 'springy' | 'cabin' | 'portaloo' | 'skip' | 'pallet' | 'pipes' | 'digger' | 'dumper' | 'mattress' | 'sofa' | 'tyres' | 'binbags' | 'fridge' | 'drum' | 'cone' | 'woodpallet' | 'washer' | 'carpet' | 'burntcar' | 'tent' | 'campfire' | HomeKind | 'parasol' | 'keg' | 'headstone' | 'tomb' | 'bigbin' | 'forklift' | 'container' | 'goal' | 'goalsmall' | 'hockeygoal' | 'rugbypost' | 'hoop' | 'netpost' | 'stumps' | 'wicket' | 'peg' | 'pingpong', Toughness & { into: [DebrisKind, number][] }>> = {
+export const BREAKUP: Partial<Record<DebrisKind | 'bin' | 'cafetable' | 'moped' | 'flowers' | 'crates' | 'newsstand' | 'boards' | 'transformer' | 'butt' | 'compost' | 'toolchest' | 'cabinet' | 'bags' | 'crushed' | 'battery' | 'valve' | 'heap' | 'bench' | 'picnic' | 'gritbin' | 'planter' | 'block' | 'trolley' | 'foodcart' | 'stall' | 'aboard' | 'swings' | 'slide' | 'roundabout' | 'climbframe' | 'sandpit' | 'seesaw' | 'springy' | 'cabin' | 'portaloo' | 'skip' | 'pallet' | 'pipes' | 'digger' | 'dumper' | 'mattress' | 'sofa' | 'tyres' | 'binbags' | 'fridge' | 'drum' | 'cone' | 'woodpallet' | 'washer' | 'carpet' | 'burntcar' | 'tent' | 'campfire' | HomeKind | 'parasol' | 'keg' | 'headstone' | 'tomb' | 'bigbin' | 'forklift' | 'container' | 'goal' | 'goalsmall' | 'hockeygoal' | 'rugbypost' | 'hoop' | 'netpost' | 'stumps' | 'wicket' | 'peg' | 'pingpong', Toughness & { into: [DebrisKind, number][] }>> = {
   // A shopping trolley, hit hard: mangled, its basket's wires and its handle in bits.
   trolley: { material: 'metal', strength: 170, absorb: 0.06, into: [['rail', 3], ['plastic', 2]] },
   // A food cart: its panels and its parasol in bits.
@@ -420,6 +422,13 @@ export const BREAKUP: Partial<Record<DebrisKind | 'bin' | 'cafetable' | 'moped' 
   compost: { material: 'plastic', strength: 40, absorb: 0.03, into: [['plastic', 3], ['foliage', 2]] },
   toolchest: { material: 'metal', strength: 110, absorb: 0.1, into: [['rail', 2], ['plastic', 2]] },
   cabinet: { material: 'electric', strength: 150, absorb: 0.15, into: [['rail', 2], ['plastic', 3]] },
+  // A builders' merchant's bulk bag of sand, burst; a crushed car for scrap, falling apart; a battery storage unit (a steel box, its
+  // cells inside), smashed open, sparking; a pumping station's pipework, its valves knocked off; a heap of aggregate, spread.
+  bags: { material: 'plastic', strength: 120, absorb: 0.35, into: [['rubble', 3], ['plastic', 2]] },
+  crushed: { material: 'metal', strength: 260, absorb: 0.5, into: [['rail', 3], ['glass', 2], ['plastic', 2]] },
+  battery: { material: 'electric', strength: 400, absorb: 0.7, into: [['rail', 4], ['plastic', 3]] },
+  valve: { material: 'metal', strength: 220, absorb: 0.4, into: [['rail', 3], ['shortpole', 1]] },
+  heap: { material: 'stone', strength: 300, absorb: 0.6, into: [['rubble', 4]] },
   // A bench and a picnic table, standing loose: smashed to planks.
   bench: { material: 'timber', strength: BENCH_SMASH, absorb: 0.12, into: [['plank', 5]] },
   picnic: { material: 'timber', strength: BENCH_SMASH, absorb: 0.15, into: [['plank', 7]] },

@@ -14,6 +14,25 @@ const RAISING = 3;
 const SIGNAL_NEAR = 250 * M;
 /** A lock's gates: shut, opening, open, shutting, s (round and round, each lock in its own time). */
 const LOCK = [50, 10, 50, 10];
+/** A pylon: how far out its feet are from its middle, and its waist (where it narrows), px; its arms (how high, as a share of its
+ * height, and how far out each side), px; how far its wires sag in the middle of a span, as a share of the span. */
+const PYLON_FOOT = 3.3 * M;
+const PYLON_WAIST = 1.1 * M;
+const PYLON_ARMS: [number, number][] = [
+  [0.62, 5.5 * M],
+  [0.74, 6.5 * M],
+  [0.86, 5 * M],
+];
+const SAG = 0.05;
+
+interface Pylon {
+  x: number;
+  y: number;
+  z: number;
+  angle: number;
+  height: number;
+  to: number[];
+}
 
 interface Crossing {
   x: number;
@@ -35,11 +54,17 @@ export class Workings {
   private crossings: Crossing[] = [];
   private signals: { x: number; y: number; z: number }[] = [];
   private gates: { x: number; y: number; z: number; angle: number; wide: number; phase: number }[] = [];
+  /** The pylons, and where they are by the metre (to find the one a wire goes to). */
+  private pylons: Pylon[] = [];
+  private pylonAt = new Map<string, Pylon>();
+  /** The pylons and their wires: over everything, the buildings too. */
+  private readonly high: Phaser.GameObjects.Graphics;
   /** The crossings shut, for the traffic to stop at: where, and how wide (half the road's width, and a little). */
   readonly shut: { x: number; y: number; r: number }[] = [];
 
-  constructor(scene: Phaser.Scene, depth: number) {
+  constructor(scene: Phaser.Scene, depth: number, highDepth: number) {
     this.g = scene.add.graphics().setDepth(depth);
+    this.high = scene.add.graphics().setDepth(highDepth);
   }
 
   /** The region's (see streamer.ts): its crossings, signals and locks, from its fixed things. */
@@ -47,7 +72,15 @@ export class Workings {
     this.crossings = [];
     this.signals = [];
     this.gates = [];
+    this.pylons = [];
+    this.pylonAt.clear();
     for (const p of fixed) {
+      if (p.kind === 'pylon') {
+        const pylon = { x: p.x, y: p.y, z: groundAt(p.x, p.y), angle: p.angle ?? 0, height: p.height ?? 26 * M, to: p.to ?? [] };
+        this.pylons.push(pylon);
+        this.pylonAt.set(`${Math.round(p.x / M)},${Math.round(p.y / M)}`, pylon);
+        continue;
+      }
       if (p.kind === 'levelcrossing') this.crossings.push({ x: p.x, y: p.y, z: groundAt(p.x, p.y), angle: p.angle ?? 0, wide: p.length ?? 7 * M, down: 0 });
       else if (p.kind === 'railsignal') this.signals.push({ x: p.x, y: p.y, z: groundAt(p.x, p.y) });
       else if (p.kind === 'lockgate') this.gates.push({ x: p.x, y: p.y, z: groundAt(p.x, p.y), angle: p.angle ?? 0, wide: p.length ?? 12 * M, phase: Math.abs(Math.round(p.x * 7 + p.y * 13)) % 120 });
@@ -85,6 +118,93 @@ export class Workings {
     for (const gate of this.gates) {
       if (!seen(gate.x, gate.y)) continue;
       this.gate(g, gate, perspective, time);
+    }
+    this.power(view, perspective);
+  }
+
+  /** The pylons in view (they lean out from the middle of it, as tall as they are), and the wires between them. */
+  private power(view: Phaser.Geom.Rectangle, p: Perspective): void {
+    const h = this.high.clear();
+    // (Tall: one well out of view leans into it.)
+    const pad = 60 * M;
+    const near = (x: number, y: number) => x > view.left - pad && x < view.right + pad && y > view.top - pad && y < view.bottom + pad;
+    for (const a of this.pylons) {
+      const [ux, uy] = [Math.cos(a.angle), Math.sin(a.angle)];
+      const [nx, ny] = [-uy, ux];
+      // Its wires to the next: from each arm's end to the same arm's on the next (or, not a pylon, down to the next's top).
+      for (let k = 0; k + 1 < a.to.length; k += 2) {
+        const [bx, by] = [a.to[k], a.to[k + 1]];
+        if (!near(a.x, a.y) && !near(bx, by) && !near((a.x + bx) / 2, (a.y + by) / 2)) continue;
+        const b = this.pylonAt.get(`${Math.round(bx / M)},${Math.round(by / M)}`);
+        const bz = b ? b.z : a.z;
+        const bh = b ? b.height : a.height * 0.5;
+        // (Its arms across the line; the next's the same way across, whichever way it's turned.)
+        const [bnx, bny] = b ? [-Math.sin(b.angle), Math.cos(b.angle)] : [nx, ny];
+        const flip = bnx * nx + bny * ny < 0 ? -1 : 1;
+        const span = Math.hypot(bx - a.x, by - a.y);
+        h.lineStyle(0.35 * M, 0x2b2e31, 0.85);
+        for (const [share, out] of PYLON_ARMS) {
+          for (const side of [1, -1]) {
+            const [x0, y0, z0] = [a.x + nx * out * side, a.y + ny * out * side, a.z + a.height * share];
+            const [x1, y1, z1] = [bx + bnx * out * side * flip, by + bny * out * side * flip, bz + bh * share];
+            this.wire(h, p, x0, y0, z0, x1, y1, z1, span * SAG);
+          }
+        }
+        // The earth wire, from peak to peak.
+        this.wire(h, p, a.x, a.y, a.z + a.height, bx, by, bz + bh, span * SAG);
+      }
+      if (near(a.x, a.y)) this.pylon(h, a, p, ux, uy, nx, ny);
+    }
+  }
+
+  /** A wire from one point to another, sagging in the middle (heights in px). */
+  private wire(h: Phaser.GameObjects.Graphics, p: Perspective, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, sag: number): void {
+    const steps = 6;
+    let [px, py] = [0, 0];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const z = z0 + (z1 - z0) * t - sag * 4 * t * (1 - t);
+      const l = p.lift(z);
+      const [sx, sy] = [p.x(x0 + (x1 - x0) * t, l), p.y(y0 + (y1 - y0) * t, l)];
+      if (i) h.lineBetween(px, py, sx, sy);
+      [px, py] = [sx, sy];
+    }
+  }
+
+  /** A pylon, rising from its feet: its four legs narrowing to the waist and the peak, its cross-bracing, its arms. */
+  private pylon(h: Phaser.GameObjects.Graphics, a: Pylon, p: Perspective, ux: number, uy: number, nx: number, ny: number): void {
+    const at = (along: number, across: number, up: number): [number, number] => {
+      const l = p.lift(a.z + up);
+      return [p.x(a.x + ux * along + nx * across, l), p.y(a.y + uy * along + ny * across, l)];
+    };
+    const half = (up: number) => (up < 0.62 * a.height ? PYLON_FOOT + (PYLON_WAIST - PYLON_FOOT) * (up / (0.62 * a.height)) : PYLON_WAIST * (1 - (up - 0.62 * a.height) / (0.38 * a.height)) + 0.2 * M);
+    const levels = [0, 0.2, 0.4, 0.62, 0.74, 0.86, 1].map((s) => s * a.height);
+    h.lineStyle(0.45 * M, 0x6c7176, 1);
+    for (const [s, t] of [[1, 1], [1, -1], [-1, -1], [-1, 1]]) {
+      for (let i = 0; i + 1 < levels.length; i++) {
+        const [p0, p1] = [at(s * half(levels[i]), t * half(levels[i]), levels[i]), at(s * half(levels[i + 1]), t * half(levels[i + 1]), levels[i + 1])];
+        h.lineBetween(p0[0], p0[1], p1[0], p1[1]);
+      }
+    }
+    // Its bracing, across each face between the levels.
+    h.lineStyle(0.2 * M, 0x7d8287, 1);
+    for (let i = 0; i + 1 < 4; i++) {
+      const [z0, z1] = [levels[i], levels[i + 1]];
+      const [w0, w1] = [half(z0), half(z1)];
+      for (const [s, t] of [[1, 1], [-1, 1], [1, -1], [-1, -1]] as [number, number][]) {
+        const a0 = s === t ? at(s * w0, -t * w0, z0) : at(-s * w0, t * w0, z0);
+        const b1 = at(s * w1, t * w1, z1);
+        h.lineBetween(a0[0], a0[1], b1[0], b1[1]);
+      }
+    }
+    // Its arms, out across the line, each end its insulators.
+    h.lineStyle(0.4 * M, 0x6c7176, 1);
+    for (const [share, out] of PYLON_ARMS) {
+      const up = a.height * share;
+      const [l0, l1] = [at(0, -out, up), at(0, out, up)];
+      h.lineBetween(l0[0], l0[1], l1[0], l1[1]);
+      h.fillStyle(0xd7dadc, 1);
+      for (const e of [l0, l1]) h.fillCircle(e[0], e[1], 0.35 * M * p.lift(a.z + up));
     }
   }
 
@@ -144,5 +264,6 @@ export class Workings {
 
   destroy(): void {
     this.g.destroy();
+    this.high.destroy();
   }
 }

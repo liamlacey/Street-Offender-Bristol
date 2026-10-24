@@ -603,7 +603,15 @@ export type PropKind =
   | 'charger'
   | 'railsignal'
   | 'levelcrossing'
-  | 'lockgate';
+  | 'lockgate'
+  // An electricity pylon (`power=tower`), its wires to the next (see Prop's `to`); and round the works (see src/world/places.ts): bulk
+  // bags of sand, a car crushed for scrap, a battery storage unit, a pumping station's pipework and valves, a heap of aggregate.
+  | 'pylon'
+  | 'bags'
+  | 'crushed'
+  | 'battery'
+  | 'valve'
+  | 'heap';
 
 export interface Prop {
   kind: PropKind;
@@ -617,6 +625,8 @@ export interface Prop {
   tower?: boolean;
   /** How long, px: a level crossing's barriers (the road's width), a lock's gates (the lock's). */
   length?: number;
+  /** An electricity pylon's: where the next ones along its lines are (x, y, ...), px; their wires strung to them. */
+  to?: number[];
 }
 
 export interface Crossing {
@@ -765,7 +775,14 @@ export type PlaceKind =
   // A café or restaurant; a takeaway; tables outside (`leisure=outdoor_seating`); a car dealer; a garage that mends them; a taxi
   // rank; an electricity substation; allotments; a shop of a kind that has its goods out front (its kind in `sub`); a cash
   // machine; an electric car's charging point.
-  | 'food' | 'takeaway' | 'seating' | 'cardealer' | 'carrepair' | 'taxi' | 'substation' | 'allotments' | 'shop' | 'atm' | 'charger';
+  | 'food' | 'takeaway' | 'seating' | 'cardealer' | 'carrepair' | 'taxi' | 'substation' | 'allotments' | 'shop' | 'atm' | 'charger'
+  // A builders' merchant or trade counter, or a builder's (or roofer's, stonemason's...) yard (its kind in `sub`); a scrap yard; a
+  // brewery; a battery storage plant; a pumping station or water works; a car hire's lot; a bunker silo (aggregate, in bays).
+  | 'trade' | 'scrapyard' | 'brewery' | 'battery' | 'pumping' | 'carhire' | 'bunker';
+
+/** The trade counters and builders' merchants (`shop=*`), and the trades with a yard (`craft=*`): see Place's 'trade'. */
+export const TRADE_SHOPS = new Set(['trade', 'doityourself', 'tool_hire', 'building_materials', 'plumbing', 'timber']);
+export const TRADE_CRAFTS = new Set(['roofer', 'stonemason', 'metal_construction', 'builder', 'scaffolder', 'carpenter', 'plumber', 'electrician', 'glaziery']);
 
 /** The shops that put their goods (or what they are) out front: flowers, fruit and veg, bikes, papers; and the empty ones, boarded up. */
 export const SHOP_FRONTS = new Set(['florist', 'greengrocer', 'bicycle', 'newsagent', 'vacant', 'convenience', 'charity', 'hardware', 'furniture']);
@@ -809,8 +826,16 @@ export function placeKind(t: Tags): PlaceKind | null {
       return 'atm';
     case 'charging_station':
       return 'charger';
+    case 'car_rental':
+      return 'carhire';
   }
   if (t.leisure === 'outdoor_seating') return 'seating';
+  if (t.industrial === 'scrap_yard' || (t.landuse === 'industrial' && /scrap|salvage|breakers/i.test(t.name ?? ''))) return 'scrapyard';
+  if (t.craft === 'brewery' || t.industrial === 'brewery') return 'brewery';
+  if ((t.power === 'plant' && t['plant:source'] === 'battery') || (t.power === 'generator' && t['generator:source'] === 'battery')) return 'battery';
+  if (t.man_made === 'water_works' || t.man_made === 'pumping_station' || t.man_made === 'wastewater_plant') return 'pumping';
+  if (t.man_made === 'bunker_silo') return 'bunker';
+  if ((t.shop && TRADE_SHOPS.has(t.shop)) || (t.craft && TRADE_CRAFTS.has(t.craft)) || t.trade === 'building_materials') return 'trade';
   if (t.shop === 'car') return 'cardealer';
   if (t.shop === 'car_repair' || t.shop === 'tyres') return 'carrepair';
   if (t.power === 'substation' && t.location !== 'indoor' && t.location !== 'underground') return 'substation';
@@ -1422,6 +1447,8 @@ export const ROOF_MATERIALS: Record<string, string> = {
 const STRUCTURE_LOOK: Record<string, { wall: string; roof: string }> = {
   chimney: { wall: '#8a4b38', roof: '#2a2522' },
   funnel: { wall: '#d4ac54', roof: '#1e1e20' },
+  // A storage tank: pale steel, its roof a shallow cone.
+  storage_tank: { wall: '#c4c9c6', roof: '#aeb4b1' },
 };
 
 /** Trees' species, from OSM's `genus`, `taxon`, `species` or `leaf_type`: which crown each is drawn with. */
@@ -1465,6 +1492,11 @@ const ISLAND_WIDE = 1.2 * PX_PER_METRE;
 /** How far out round its canopy a forecourt's made, where none's mapped, px. */
 const FORECOURT_ROUND = 5 * PX_PER_METRE;
 
+/** A bunker silo's walls' height, m. */
+const BUNKER_WALL = 3;
+/** An electricity pylon's height, where it's not tagged, m (a 400 kV one's 50 m; Bristol's mostly 132 kV, 25 m or so). */
+const PYLON_HEIGHT = 26;
+
 /** A bus shelter's length, px; a kiosk's height mapped as a point, m. */
 const SHELTER_LONG = 4 * PX_PER_METRE;
 const KIOSK_HEIGHT = 2.6;
@@ -1480,6 +1512,7 @@ const DROPPED_KERB = new Set(['lowered', 'flush', 'no']);
 /** Default heights in metres for each kind of building, when there's nothing better to go on. */
 const BUILDING_HEIGHT: Record<string, number> = {
   house: 8,
+  storage_tank: 10,
   terrace: 9,
   detached: 8,
   semidetached_house: 8,
@@ -1647,6 +1680,7 @@ export function propKind(tags: Tags): PropKind | null {
   if (tags.railway === 'signal') return 'railsignal';
   if (tags.railway === 'level_crossing') return 'levelcrossing';
   if (tags.waterway === 'lock_gate') return 'lockgate';
+  if (tags.power === 'tower') return 'pylon';
   if (tags.amenity === 'bicycle_parking') return 'bikes';
   return null;
 }
@@ -1853,6 +1887,31 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       const ring = ringOf(way.nodes);
       if (ring) addBuilding('way', way.id, t, [ring], !t.building || t.building === 'no' || !!t['building:part']);
       continue;
+    }
+    // A storage tank (or a silo) mapped as only its outline: a building, all the same (its height from the LIDAR).
+    if (closed && (t.man_made === 'storage_tank' || t.man_made === 'silo') && t.location !== 'underground') {
+      const ring = ringOf(way.nodes);
+      if (ring) addBuilding('way', way.id, { ...t, building: 'storage_tank' }, [ring], false);
+      continue;
+    }
+    // A bunker silo: its walls round three sides (open at its shortest end, where the loader goes in).
+    if (closed && t.man_made === 'bunker_silo') {
+      const ring = ringOf(way.nodes);
+      if (ring) {
+        let [open, shortest] = [-1, Infinity];
+        const n = ring.length / 2;
+        for (let k = 0; k < n; k++) {
+          const j = (k + 1) % n;
+          const d = Math.hypot(ring[j * 2] - ring[k * 2], ring[j * 2 + 1] - ring[k * 2 + 1]);
+          if (d < shortest) [open, shortest] = [k, d];
+        }
+        const wall: number[] = [];
+        for (let i = 1; i <= n; i++) {
+          const k = (open + i) % n;
+          wall.push(ring[k * 2], ring[k * 2 + 1]);
+        }
+        for (const piece of clipLine(wall, cx0, cy0, cx1, cy1)) lines.push({ kind: 'wall', pts: roundPts(piece), height: round(BUNKER_WALL * PX_PER_METRE) });
+      }
     }
 
     const road = roadKind(t);
@@ -2278,6 +2337,16 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       else waysOfNode.set(id, [{ way, index, kind }]);
     });
   }
+  // The power lines' pylons: each the next along every line through it (its wires strung to them).
+  const pylonNext = new Map<number, number[]>();
+  for (const way of data.ways.values()) {
+    if (way.tags.power !== 'line') continue;
+    for (let k = 0; k + 1 < way.nodes.length; k++) {
+      const list = pylonNext.get(way.nodes[k]);
+      if (list) list.push(way.nodes[k + 1]);
+      else pylonNext.set(way.nodes[k], [way.nodes[k + 1]]);
+    }
+  }
   // The waterways through the lock gates (to put each across its lock).
   const lockWays = new Map<number, OsmWay>();
   const gates = new Set<number>();
@@ -2579,6 +2648,18 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       props.push({ kind: prop, x: round(x - Math.sin(along) * 2.6 * PX_PER_METRE), y: round(y + Math.cos(along) * 2.6 * PX_PER_METRE), angle: +along.toFixed(3) });
       continue;
     }
+    if (prop === 'pylon') {
+      // Its wires to the next along its lines; turned along them (the way its arms go across).
+      const to: number[] = [];
+      for (const id of pylonNext.get(node.id) ?? []) {
+        const q = xy(id);
+        if (q) to.push(round(q[0]), round(q[1]));
+      }
+      const along = to.length ? Math.atan2(to[1] - y, to[0] - x) : 0;
+      const tall = Math.max(10, Math.min(60, metres(t.height) ?? PYLON_HEIGHT));
+      props.push({ kind: prop, x: round(x), y: round(y), angle: +along.toFixed(3), height: round(tall * PX_PER_METRE), ...(to.length ? { to } : {}) });
+      continue;
+    }
     if (prop === 'lockgate') {
       // Across the lock: the waterway it's on, as wide as it's tagged (or the lock's usual).
       const way = lockWays.get(node.id);
@@ -2853,7 +2934,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     for (const r of rings) for (let k = 0; k + 1 < r.length; k += 2) [sx, sy, n] = [sx + r[k], sy + r[k + 1], n + 1];
     const [x, y] = [sx / n, sy / n];
     if (x < 0 || y < 0 || x > width || y > height) return;
-    const sub = kind === 'shop' ? t.shop : kind === 'food' ? t.amenity : undefined;
+    const sub = kind === 'shop' ? t.shop : kind === 'food' ? t.amenity : kind === 'trade' ? (t.trade ?? t.shop ?? t.craft) : undefined;
     places.push({ kind, ...(t.name ? { name: t.name } : {}), ...(sub ? { sub } : {}), x: round(x), y: round(y), rings: rings.map(roundPts) });
   };
   for (const way of data.ways.values()) {

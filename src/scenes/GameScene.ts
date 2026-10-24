@@ -139,7 +139,7 @@ const HOP_TIME = 0.35;
 /** At most this often your vehicle's damage is repainted, ms. */
 const REPAINT_EVERY = 250;
 /** The loose things with more than one look (which, by their `variant`). */
-const VARIED: ReadonlySet<string> = new Set(['foodcart', 'stall', 'wheelie', 'parasol', 'headstone', 'bigbin', 'container', 'cafetable', 'moped', 'flowers', 'crates']);
+const VARIED: ReadonlySet<string> = new Set(['foodcart', 'stall', 'wheelie', 'parasol', 'headstone', 'bigbin', 'container', 'cafetable', 'moped', 'flowers', 'crates', 'crushed', 'heap']);
 /** How many bits of what's been broken (not the benches, bins and the rest standing about) before the smallest stop being kept. */
 const MAX_PIECES = 1500;
 
@@ -429,7 +429,7 @@ export class GameScene extends Phaser.Scene {
     this.trainLayer = new TrainLayer(this, this.trains, (x, y, level) => this.surfaceHeight(x, y, level), (level) =>
       level === 2 ? (this.level === 2 ? DEPTH.inTunnel - 0.05 : null) : level === 1 ? DEPTH.onDeck : DEPTH.car - 0.05,
     );
-    this.workings = new Workings(this, DEPTH.props + 0.02);
+    this.workings = new Workings(this, DEPTH.props + 0.02, DEPTH.buildings + 0.5);
     this.workings.use(this.world.fixed, (x, y) => this.groundAt(x, y));
     this.trafficLayer = new TrafficLayer(this, this.traffic, (x, y, level) => this.surfaceHeight(x, y, level), (x, y, reach) => this.decks.atEnd(x, y, reach), {
       ground: DEPTH.car - 0.05,

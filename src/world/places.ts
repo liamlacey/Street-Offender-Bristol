@@ -76,7 +76,7 @@ export interface PlaceLife {
   /** Where those at a place wander about (a school's grounds). */
   rings: Pts[];
   /** Where a vehicle's parked (a lorry at a loading bay, a car at a lock-up), and how likely it's there. */
-  spaces: { x: number; y: number; angle: number; length: number; taken: number; endOn: boolean; kind?: string; sale?: boolean }[];
+  spaces: { x: number; y: number; angle: number; length: number; taken: number; endOn: boolean; kind?: string; sale?: boolean; colour?: number }[];
   /** The games on the pitches and courts (see sports.ts). */
   games: SportsGame[];
 }
@@ -119,7 +119,7 @@ export function* placesWork(map: GameMap): Work<PlaceLife> {
   // The car dealers' lots: the shops' (or businesses') land each is on, if it's no bigger than a lot (laid out as one: see dealer).
   const lots = new Map<Place, Pts>();
   for (const d of places) {
-    if (d.kind !== 'cardealer') continue;
+    if (d.kind !== 'cardealer' && d.kind !== 'carhire') continue;
     for (const c of places) if (c.kind === 'commercial' && c.rings[0] && pointInRing(d.x, d.y, c.rings[0])) lots.set(d, c.rings[0]);
   }
   const lotRings = new Set([...lots.values()].filter((r) => Math.abs(ringArea(r)) <= LOT * M * M));
@@ -191,6 +191,27 @@ export function* placesWork(map: GameMap): Work<PlaceLife> {
       case 'charger':
         charging(place, ground, out);
         break;
+      case 'trade':
+        trade(place, ground, out);
+        break;
+      case 'scrapyard':
+        scrapyard(place, ground, out);
+        break;
+      case 'brewery':
+        brewery(place, ground, out);
+        break;
+      case 'battery':
+        batteries(place, ground, out);
+        break;
+      case 'pumping':
+        pumping(place, ground, out);
+        break;
+      case 'carhire':
+        carHire(place, ground, out, lots.get(place));
+        break;
+      case 'bunker':
+        bunker(place, ground, out);
+        break;
     }
   }
   // The blocks of flats, and the lock-up garages.
@@ -218,7 +239,7 @@ class Ground {
   private readonly buildings = new Map<number, number[]>();
   private readonly boxes: [number, number, number, number][];
   private readonly areas = new Map<number, Area[]>();
-  private readonly roads = new Map<number, { ax: number; ay: number; bx: number; by: number; reach: number; half: number; vehicle: boolean }[]>();
+  private readonly roads = new Map<number, { ax: number; ay: number; bx: number; by: number; reach: number; half: number; vehicle: boolean; driven: boolean }[]>();
   private readonly trees = new Map<number, [number, number][]>();
 
   constructor(readonly map: GameMap) {
@@ -233,7 +254,7 @@ class Ground {
       if (r.tunnel || r.bridge) continue;
       const reach = r.width / 2 + (VEHICLE_ROADS.has(r.kind) && r.pavement ? 2.4 * M : 0);
       for (let k = 0; k + 3 < r.pts.length; k += 2) {
-        const s = { ax: r.pts[k], ay: r.pts[k + 1], bx: r.pts[k + 2], by: r.pts[k + 3], reach, half: VEHICLE_ROADS.has(r.kind) ? r.width / 2 : Number.NaN, vehicle: VEHICLE_ROADS.has(r.kind) && r.kind !== 'service' && r.kind !== 'track' };
+        const s = { ax: r.pts[k], ay: r.pts[k + 1], bx: r.pts[k + 2], by: r.pts[k + 3], reach, half: VEHICLE_ROADS.has(r.kind) ? r.width / 2 : Number.NaN, vehicle: VEHICLE_ROADS.has(r.kind) && r.kind !== 'service' && r.kind !== 'track', driven: VEHICLE_ROADS.has(r.kind) && r.kind !== 'track' && !r.aisle };
         this.add(this.roads, s, [Math.min(s.ax, s.bx) - reach, Math.min(s.ay, s.by) - reach, Math.max(s.ax, s.bx) + reach, Math.max(s.ay, s.by) + reach]);
       }
     }
@@ -311,14 +332,14 @@ class Ground {
     return false;
   }
 
-  /** The nearest point on a road (a carriageway) within `reach` px, or null. */
-  nearestRoad(x: number, y: number, reach: number): [number, number] | null {
+  /** The nearest point on a road (a carriageway; or, `service`, a service road too: an estate's) within `reach` px, or null. */
+  nearestRoad(x: number, y: number, reach: number, service = false): [number, number] | null {
     let best: [number, number] | null = null;
     let d = reach;
     for (let i = Math.floor((x - reach) / CELL); i <= Math.floor((x + reach) / CELL); i++) {
       for (let j = Math.floor((y - reach) / CELL); j <= Math.floor((y + reach) / CELL); j++) {
         for (const s of this.roads.get(i * 100003 + j) ?? []) {
-          if (!s.vehicle) continue;
+          if (!(service ? s.driven : s.vehicle)) continue;
           const [px, py] = nearestOnSeg(x, y, s.ax, s.ay, s.bx, s.by);
           const dd = Math.hypot(px - x, py - y);
           if (dd < d) [best, d] = [[px, py], dd];
@@ -496,12 +517,12 @@ function shape(ring: Pts): { cx: number; cy: number; ux: number; uy: number; a0:
 }
 
 /** The point on a building's edge nearest the road (its door, near enough), and the way out of it, towards the road; or null. */
-function doorOf(ring: Pts, ground: Ground, reach = 40 * M): { x: number; y: number; ox: number; oy: number; road: [number, number] } | null {
+function doorOf(ring: Pts, ground: Ground, reach = 40 * M, service = false): { x: number; y: number; ox: number; oy: number; road: [number, number] } | null {
   let best: { x: number; y: number; d: number; road: [number, number] } | null = null;
   for (let k = 0; k + 1 < ring.length; k += 2) {
     const j = (k + 2) % ring.length;
     const [x, y] = [(ring[k] + ring[j]) / 2, (ring[k + 1] + ring[j + 1]) / 2];
-    const road = ground.nearestRoad(x, y, reach);
+    const road = ground.nearestRoad(x, y, reach, service);
     if (!road) continue;
     const d = Math.hypot(road[0] - x, road[1] - y);
     if (!best || d < best.d) best = { x, y, d, road };
@@ -687,7 +708,11 @@ function garages(i: number, ground: Ground, out: PlaceLife): void {
 function works(place: Place, ground: Ground, out: PlaceLife): void {
   const ring = place.rings[0];
   if (!ring || ring.length < 6 || Math.abs(ringArea(ring)) < 800 * M * M) return;
-  const industrial = place.kind === 'industrial';
+  // (A trading estate's often mapped as businesses' land, not industrial: it's sheds, all the same.)
+  const industrial = place.kind === 'industrial' || isEstate(place, ground);
+  // Its yards and aisles: the vans and the workers' cars parked along them.
+  if (industrial) onLot(place, ground, out, seeded(hash(ring[0] + 1, ring[1])), YARD_VEHICLES, ring, { whole: true, taken: 0.55, sale: false, most: 120 });
+  if (industrial) kerbside(ring, ground, out, seeded(hash(ring[0] + 2, ring[1])));
   if (industrial) out.areas.push({ kind: 'works', rings: [ring] });
   const box = bounds(ring);
   const rand = seeded(hash(ring[0], ring[1]));
@@ -698,7 +723,8 @@ function works(place: Place, ground: Ground, out: PlaceLife): void {
     const area = Math.abs(ringArea(b.rings[0]));
     const { cx, cy } = shape(b.rings[0]);
     if (!pointInRing(cx, cy, ring) || area < (industrial ? 300 : 500) * M * M || b.kind === 'house' || b.kind === 'apartments') continue;
-    const door = doorOf(b.rings[0], ground, 45 * M);
+    // (An estate's units face its service roads.)
+    const door = doorOf(b.rings[0], ground, 45 * M, industrial);
     if (!door) continue;
     sheds++;
     const { x, y, ox, oy } = door;
@@ -709,6 +735,11 @@ function works(place: Place, ground: Ground, out: PlaceLife): void {
       // A lorry backed up to the loading door (most of the time), its back to the door.
       const bay = out1(5.5 * M, 0);
       if (clear(bay) && clear(out1(9 * M, 0))) out.spaces.push({ x: r1(bay[0]), y: r1(bay[1]), angle: +Math.atan2(oy, ox).toFixed(3), length: 10 * M, taken: 0.7, endOn: true, kind: 'lorry' });
+      // A van or two by the door, along the wall.
+      for (const s of [-12, 12]) {
+        const at = out1(2.6 * M, s * M);
+        if (rand() < 0.5 && clear(at) && clear(out1(2.6 * M, (s + 3) * M)) && clear(out1(2.6 * M, (s - 3) * M))) out.spaces.push({ x: r1(at[0]), y: r1(at[1]), angle: +Math.atan2(sy, sx).toFixed(3), length: 6 * M, taken: 0.8, endOn: false, kind: rand() < 0.75 ? 'van' : 'estate' });
+      }
       // A forklift; pallets stacked by the wall; a container or two; a skip; big bins.
       const spots: [string, number, number, number, number?][] = [
         ['forklift', 3.5 * M, 4.5 * M, Math.atan2(oy, ox) + rand() * 2],
@@ -734,6 +765,246 @@ function works(place: Place, ground: Ground, out: PlaceLife): void {
       }
     }
   }
+}
+
+/** An estate's service roads: vans and cars parked along both sides (half up on the edge), a third of the places taken, up to 60. */
+function kerbside(ring: Pts, ground: Ground, out: PlaceLife, rand: () => number): void {
+  const had = out.spaces.length;
+  const roads = (ground.map.roads ?? []).filter((r) => r.kind === 'service' && !r.aisle && !r.tunnel && !r.bridge && r.pts.some((v, k) => k % 2 === 0 && pointInRing(v, r.pts[k + 1], ring)));
+  const step = 7 * M;
+  for (const r of roads) {
+    const p = r.pts;
+    for (let k = 0; k + 3 < p.length; k += 2) {
+      const [ax, ay, bx, by] = [p[k], p[k + 1], p[k + 2], p[k + 3]];
+      const len = Math.hypot(bx - ax, by - ay);
+      if (len < step) continue;
+      const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
+      for (const side of [-1, 1]) {
+        const [nx, ny] = [-uy * side, ux * side];
+        const off = r.width / 2 + 0.9 * M;
+        for (let d = step / 2; d <= len - step / 2; d += step) {
+          if (out.spaces.length - had >= 60) return;
+          if (rand() > 0.35) continue;
+          const [x, y] = [ax + ux * d + nx * off, ay + uy * d + ny * off];
+          const ends: [number, number][] = [[x + ux * 3 * M, y + uy * 3 * M], [x - ux * 3 * M, y - uy * 3 * M], [x + nx * M, y + ny * M]];
+          if (![[x, y] as [number, number], ...ends].every(([cx, cy]) => pointInRing(cx, cy, ring) && !ground.inBuilding(cx, cy) && !ground.onCarriageway(cx, cy, 0) && !ground.inMapped(cx, cy))) continue;
+          if (out.spaces.some((o) => Math.hypot(o.x - x, o.y - y) < 6 * M) || out.things.some((t) => Math.hypot(t.x - x, t.y - y) < 4 * M)) continue;
+          out.spaces.push({ x: r1(x), y: r1(y), angle: +Math.atan2(uy, ux).toFixed(3), length: 6.5 * M, taken: 1, endOn: false, kind: YARD_VEHICLES[Math.floor(rand() * YARD_VEHICLES.length)] });
+        }
+      }
+    }
+  }
+}
+
+/** What's parked in an estate's yards: vans mostly, the odd lorry (in a long bay), the workers' cars. */
+const YARD_VEHICLES = ['van', 'van', 'van', 'estate', 'hatch', 'saloon', 'suv'];
+/** The names of businesses' land that's sheds, whatever it's tagged. */
+const ESTATE_NAME = /trading estate|industrial estate|industrial park|trade park|trade centre|business centre|works|depot|enterprise park|distribution/i;
+
+/**
+ * Whether businesses' land is really an industrial estate: named one, or most of what's built on it sheds (big units, not shops,
+ * offices or homes: what OSM calls just `building=yes`, or industrial, a warehouse).
+ */
+function isEstate(place: Place, ground: Ground): boolean {
+  if (place.kind === 'industrial') return true;
+  if (place.name && ESTATE_NAME.test(place.name)) return true;
+  const ring = place.rings[0];
+  if (!ring) return false;
+  let [sheds, other] = [0, 0];
+  for (const i of ground.buildingsIn(...bounds(ring))) {
+    const b = ground.map.buildings[i];
+    const { cx, cy } = shape(b.rings[0]);
+    if (!pointInRing(cx, cy, ring)) continue;
+    const area = Math.abs(ringArea(b.rings[0]));
+    if (SHED_KINDS.has(b.kind ?? 'yes') && area >= 300 * M * M) sheds += area;
+    else other += area;
+  }
+  return sheds > 0 && sheds >= 0.6 * (sheds + other);
+}
+const SHED_KINDS = new Set(['yes', 'industrial', 'warehouse', 'manufacture', 'storage_tank', 'hangar', 'shed']);
+
+/**
+ * A builders' merchant or trade counter (or a roofer's, a stonemason's, a builder's yard): out in front, pallets of bricks and
+ * blocks, bulk bags of sand, stacks of pipes and timber, a forklift; a van or two being loaded; tradesmen in hi-vis.
+ */
+function trade(place: Place, ground: Ground, out: PlaceLife): void {
+  const front = frontOf(place, ground, 40 * M, true);
+  if (!front) return;
+  const { door } = front;
+  const rand = seeded(hash(place.x, place.y));
+  const turn = Math.atan2(door.ox, -door.oy);
+  const stock: [string, number, number][] = [
+    ['pallet', -5, 2],
+    ['pallet', -6.4, 2],
+    ['bags', -5.6, 3.6],
+    ['bags', -7, 3.6],
+    ['pipes', 6, 2.2],
+    ['woodpallet', 7.4, 4],
+    ['pallet', -8, 2],
+    ['bags', -8.4, 3.6],
+    ['woodpallet', 9, 2.4],
+  ];
+  for (const [kind, along, off] of stock) {
+    if (rand() < 0.2) continue;
+    const at = onFront(door, ground, along * M, off * M, 0.8 * M);
+    if (at) thing(out, kind, at[0], at[1], turn + (rand() - 0.5) * 0.2);
+  }
+  const lift = onFront(door, ground, 2.5 * M, 5.5 * M, 1.5 * M);
+  if (lift && rand() < 0.8) thing(out, 'forklift', lift[0], lift[1], Math.atan2(door.oy, door.ox) + (rand() - 0.5) * 1.5);
+  // Vans out front, nose to the door, being loaded.
+  for (const along of [-2.5, 11]) {
+    const at = onFront(door, ground, along * M, 6.5 * M, 1.5 * M);
+    if (at && onFront(door, ground, along * M, 9.5 * M, 0.5 * M)) out.spaces.push({ x: r1(at[0]), y: r1(at[1]), angle: +Math.atan2(-door.oy, -door.ox).toFixed(3), length: 6 * M, taken: 0.75, endOn: true, kind: 'van' });
+  }
+  for (const along of [0, 4]) {
+    const at = outOf(door, ground, 1.8 * M);
+    if (at && rand() < 0.7) out.spots.push({ x: r1(at[0] - door.oy * along * M), y: r1(at[1] + door.ox * along * M), angle: 0, weight: 0.7, group: rand() < 0.4, hivis: true });
+  }
+}
+
+/** A scrap yard: concrete; its crushed cars stacked in rows, the grab (a digger) working them, skips of scrap, tyres; a worker. */
+function scrapyard(place: Place, ground: Ground, out: PlaceLife): void {
+  const ring = place.rings[0];
+  if (!ring || Math.abs(ringArea(ring)) < 300 * M * M) return;
+  out.areas.push({ kind: 'works', rings: [ring] });
+  const rand = seeded(hash(place.x, place.y));
+  const { cx, cy, ux, uy, a0, a1, b0, b1 } = shape(ring);
+  const [nx, ny] = [-uy, ux];
+  const free = (x: number, y: number, r: number) => pointInRing(x, y, ring) && !ground.inBuilding(x, y) && !ground.onRoad(x, y, r);
+  let n = 0;
+  // Rows of crushed cars along it, a gap to drive down between each pair.
+  for (let b = b0 + 4 * M; b <= b1 - 4 * M && n < 120; b += 9 * M) {
+    for (let a = a0 + 3 * M; a <= a1 - 3 * M && n < 120; a += 4.2 * M) {
+      const [x, y] = [cx + ux * a + nx * b, cy + uy * a + ny * b];
+      if (rand() < 0.15 || !free(x, y, 2 * M) || !free(x + nx * 2 * M, y + ny * 2 * M, M) || !free(x - nx * 2 * M, y - ny * 2 * M, M)) continue;
+      thing(out, 'crushed', x, y, Math.atan2(ny, nx) + (rand() - 0.5) * 0.25, Math.floor(rand() * 4));
+      n++;
+    }
+  }
+  // The grab, skips of scrap, tyres; a worker.
+  const spot = (): [number, number] | null => {
+    for (let k = 0; k < 12; k++) {
+      const [a, b] = [a0 + rand() * (a1 - a0), b0 + rand() * (b1 - b0)];
+      const [x, y] = [cx + ux * a + nx * b, cy + uy * a + ny * b];
+      if (free(x, y, 3 * M) && out.things.every((t) => Math.hypot(t.x - x, t.y - y) > 5 * M)) return [x, y];
+    }
+    return null;
+  };
+  for (const [kind, count] of [['digger', 1], ['skip', 2], ['tyres', 3], ['drum', 2]] as [string, number][]) {
+    for (let k = 0; k < count; k++) {
+      const at = spot();
+      if (at) thing(out, kind, at[0], at[1], rand() * Math.PI * 2);
+    }
+  }
+  const at = spot();
+  if (at) out.spots.push({ x: r1(at[0]), y: r1(at[1]), angle: 0, weight: 0.6, group: false, hivis: true });
+}
+
+/** A brewery: out the back (by its door), its kegs in rows and on pallets, casks, a dray backed up to be loaded; a brewer or two. */
+function brewery(place: Place, ground: Ground, out: PlaceLife): void {
+  const front = frontOf(place, ground, 40 * M, true);
+  if (!front) return;
+  // (Its front right on the road: round the side with most room, its yard.)
+  const door = onFront(front.door, ground, -4 * M, 1.6 * M, 0.2 * M) ? front.door : (roomiest(front.ring, ground) ?? front.door);
+  const rand = seeded(hash(place.x, place.y));
+  for (let row = 0; row < 3; row++) {
+    for (let k = 0; k < 6; k++) {
+      if (rand() < 0.25) continue;
+      const at = onFront(door, ground, (-4 - k * 0.8) * M, (0.8 + row * 0.8) * M, 0.2 * M);
+      if (at) thing(out, 'keg', at[0], at[1], 0);
+    }
+  }
+  for (const along of [4, 5.6]) {
+    const at = onFront(door, ground, along * M, 1.4 * M, 0.5 * M);
+    if (at) thing(out, 'woodpallet', at[0], at[1], Math.atan2(door.ox, -door.oy));
+  }
+  const bay = onFront(door, ground, 0, 5.5 * M, 0.5 * M);
+  if (bay && onFront(door, ground, 0, 9 * M, 0.5 * M)) out.spaces.push({ x: r1(bay[0]), y: r1(bay[1]), angle: +Math.atan2(door.oy, door.ox).toFixed(3), length: 10 * M, taken: 0.6, endOn: true, kind: 'lorry' });
+  const at = outOf(door, ground, 1.8 * M);
+  if (at && rand() < 0.8) out.spots.push({ x: at[0], y: at[1], angle: 0, weight: 0.6, group: true });
+}
+
+/** The side of a building with the most room out from it (none of it road or building, 2 m out, along 8 m): as a door, or null. */
+function roomiest(ring: Pts, ground: Ground): { x: number; y: number; ox: number; oy: number } | null {
+  let best: { x: number; y: number; ox: number; oy: number; room: number } | null = null;
+  const n = ring.length / 2;
+  for (let k = 0; k < n; k++) {
+    const j = (k + 1) % n;
+    const [ax, ay, bx, by] = [ring[k * 2], ring[k * 2 + 1], ring[j * 2], ring[j * 2 + 1]];
+    const len = Math.hypot(bx - ax, by - ay);
+    if (len < 6 * M) continue;
+    let [ox, oy] = [(by - ay) / len, -(bx - ax) / len];
+    const [x, y] = [(ax + bx) / 2, (ay + by) / 2];
+    if (pointInRing(x + ox * M, y + oy * M, ring)) [ox, oy] = [-ox, -oy];
+    let room = 0;
+    for (let a = -4; a <= 4; a += 2) for (const o of [1, 2.4]) {
+      const [px, py] = [x + ox * o * M - oy * a * M, y + oy * o * M + ox * a * M];
+      if (!ground.inBuilding(px, py) && !ground.onCarriageway(px, py, 0.5 * M)) room++;
+    }
+    if (!best || room > best.room) best = { x, y, ox, oy, room };
+  }
+  return best && best.room > 4 ? best : null;
+}
+
+/** A battery storage plant: its units in rows inside its fence (mapped), a transformer at the end of each row. */
+function batteries(place: Place, ground: Ground, out: PlaceLife): void {
+  const ring = place.rings[0];
+  if (!ring || Math.abs(ringArea(ring)) < 200 * M * M) return;
+  out.areas.push({ kind: 'works', rings: [ring] });
+  const { cx, cy, ux, uy, a0, a1, b0, b1 } = shape(ring);
+  const [nx, ny] = [-uy, ux];
+  const free = (x: number, y: number) => pointInRing(x, y, ring) && !ground.inBuilding(x, y) && !ground.onRoad(x, y, 0.5 * M);
+  for (let b = b0 + 4 * M; b <= b1 - 4 * M; b += 7 * M) {
+    let last: [number, number] | null = null;
+    for (let a = a0 + 5 * M; a <= a1 - 5 * M; a += 7.5 * M) {
+      const [x, y] = [cx + ux * a + nx * b, cy + uy * a + ny * b];
+      if (![[x, y], [x + ux * 3.2 * M, y + uy * 3.2 * M], [x - ux * 3.2 * M, y - uy * 3.2 * M]].every(([px, py]) => free(px, py))) continue;
+      thing(out, 'battery', x, y, Math.atan2(uy, ux));
+      last = [x, y];
+    }
+    if (last && free(last[0] + ux * 6 * M, last[1] + uy * 6 * M)) thing(out, 'transformer', last[0] + ux * 6 * M, last[1] + uy * 6 * M, Math.atan2(uy, ux));
+  }
+}
+
+/** A pumping station or water works: its pipework and valves by its building (or in its grounds), a cabinet; concrete about it. */
+function pumping(place: Place, ground: Ground, out: PlaceLife): void {
+  const front = frontOf(place, ground, 30 * M, true);
+  if (!front) return;
+  const { door } = front;
+  const turn = Math.atan2(door.ox, -door.oy);
+  // (Close along its wall: a pumping station's often right by the road.)
+  for (const [kind, along, off] of [['valve', -4, 1.1], ['valve', 4, 1.1], ['valve', -4, 2.4], ['valve', 4, 2.4], ['cabinet', 8, 0.8]] as [string, number, number][]) {
+    const at = onFront(door, ground, along * M, off * M, 0.2 * M);
+    if (at) thing(out, kind, at[0], at[1], turn);
+  }
+}
+
+/** A car hire's: its fleet (all one make, white) on its forecourt and along its lot's aisles, a van or two. */
+function carHire(place: Place, ground: Ground, out: PlaceLife, lot?: Pts): void {
+  const rand = seeded(hash(place.x, place.y));
+  const kinds = ['hatch', 'hatch', 'hatch', 'saloon', 'van'];
+  const front = frontOf(place, ground, 40 * M);
+  if (front) forecourt(front.door, ground, out, rand, kinds, HIRE_WHITE);
+  // (Its own land, if it's mapped as that.)
+  const own = place.rings[0] && Math.abs(ringArea(place.rings[0])) > 400 * M * M ? place.rings[0] : lot;
+  onLot(place, ground, out, rand, kinds, own, { taken: 0.8, sale: false, colour: HIRE_WHITE });
+}
+/** A car hire fleet's paint: white (see traffic.ts's COLOURS). */
+const HIRE_WHITE = 2;
+
+/** A bunker silo: its bays' aggregate heaped up (gravel, sand) along it, the loader working it now and then. */
+function bunker(place: Place, ground: Ground, out: PlaceLife): void {
+  const ring = place.rings[0];
+  if (!ring || Math.abs(ringArea(ring)) < 40 * M * M) return;
+  const rand = seeded(hash(place.x, place.y));
+  const { cx, cy, ux, uy, a0, a1 } = shape(ring);
+  const variant = rand() < 0.5 ? 0 : 1;
+  for (let a = a0 + 3 * M; a <= a1 - 3 * M; a += 6 * M) {
+    const [x, y] = [cx + ux * a, cy + uy * a];
+    if (rand() < 0.75 && pointInRing(x, y, ring)) thing(out, 'heap', x, y, rand() * Math.PI * 2, variant);
+  }
+  const [lx, ly] = [cx + ux * (a1 + 6 * M), cy + uy * (a1 + 6 * M)];
+  if (rand() < 0.5 && !ground.inBuilding(lx, ly) && !ground.onRoad(lx, ly, 2 * M)) thing(out, 'digger', lx, ly, Math.atan2(-uy, -ux));
 }
 
 /** A university, a hospital, a library, a sports centre, a stadium: people about its doors, bikes, benches; a crowd at a stadium. */
@@ -799,11 +1070,11 @@ function tableAt(tables: Set<string>, x: number, y: number): boolean {
 }
 
 /** A place's building (the one it's mapped as, or the one it's in), and its door: or null. */
-function frontOf(place: Place, ground: Ground, reach = 25 * M): { ring: Pts; door: NonNullable<ReturnType<typeof doorOf>> } | null {
+function frontOf(place: Place, ground: Ground, reach = 25 * M, service = false): { ring: Pts; door: NonNullable<ReturnType<typeof doorOf>> } | null {
   const b = ground.buildingAt(place.x, place.y);
   const ring = b >= 0 ? ground.map.buildings[b].rings[0] : place.rings[0];
   if (!ring) return null;
-  const door = doorOf(ring, ground, reach);
+  const door = doorOf(ring, ground, reach, service);
   return door ? { ring, door } : null;
 }
 
@@ -893,8 +1164,9 @@ const LOT_MOST = 400;
  * A dealer's lot: the aisles through the land it's on (`service=parking_aisle`, mapped through it but not in a car park), its cars for
  * sale end on along both sides, nose out, a car every 2.6 m.
  */
-function onLot(place: Place, ground: Ground, out: PlaceLife, rand: () => number, kinds: string[], lot?: Pts): void {
-  const whole = lot && Math.abs(ringArea(lot)) <= LOT * M * M;
+function onLot(place: Place, ground: Ground, out: PlaceLife, rand: () => number, kinds: string[], lot?: Pts, how: LotLook = {}): void {
+  const { taken = 0.92, sale = true, colour, most = LOT_MOST } = how;
+  const whole = how.whole ?? (lot && Math.abs(ringArea(lot)) <= LOT * M * M);
   const inLot = (x: number, y: number) => !lot || pointInRing(x, y, lot);
   const near = (x: number, y: number) => whole || Math.hypot(x - place.x, y - place.y) < LOT_NEAR;
   const parks = (ground.map.areas ?? []).filter((a) => a.kind === 'parking' && a.rings[0]?.some((v, k) => k % 2 === 0 && Math.abs(v - place.x) < 400 * M && Math.abs(a.rings[0][k + 1] - place.y) < 400 * M));
@@ -916,22 +1188,31 @@ function onLot(place: Place, ground: Ground, out: PlaceLife, rand: () => number,
         // Out from the aisle's edge, the car's middle; its nose (to the aisle) and its back.
         const mid = r.width / 2 + 0.4 * M + deep / 2;
         for (let d = wide / 2; d <= len - wide / 2; d += wide) {
-          if (out.spaces.length - had >= LOT_MOST) return;
+          if (out.spaces.length - had >= most) return;
           const [x, y] = [ax + ux * d + nx * mid, ay + uy * d + ny * mid];
           const ends: [number, number][] = [[x - nx * (deep / 2), y - ny * (deep / 2)], [x + nx * (deep / 2), y + ny * (deep / 2)]];
           const corners: [number, number][] = ends.flatMap(([ex, ey]) => [[ex + ux * 0.9 * M, ey + uy * 0.9 * M], [ex - ux * 0.9 * M, ey - uy * 0.9 * M]] as [number, number][]);
           if (!near(x, y) || inPark(x, y)) continue;
           if (![[x, y], ...corners].every(([cx, cy]) => inLot(cx, cy) && !ground.inBuilding(cx, cy) && !ground.onCarriageway(cx, cy, 0.2 * M))) continue;
           if (!clearOf(x, y)) continue;
-          out.spaces.push({ x: r1(x), y: r1(y), angle: +Math.atan2(-ny, -nx).toFixed(3), length: 5 * M, taken: 0.92, endOn: true, kind: kinds[Math.floor(rand() * kinds.length)], sale: true });
+          out.spaces.push({ x: r1(x), y: r1(y), angle: +Math.atan2(-ny, -nx).toFixed(3), length: 5 * M, taken, endOn: true, kind: kinds[Math.floor(rand() * kinds.length)], ...(sale ? { sale } : {}), ...(colour === undefined ? {} : { colour }) });
         }
       }
     }
   }
 }
 
-/** A dealer's forecourt: rows of cars for sale out in front, nose to the road, and an A-board. */
-function forecourt(door: { x: number; y: number; ox: number; oy: number }, ground: Ground, out: PlaceLife, rand: () => number, kinds: string[]): void {
+/** How a lot's filled (see onLot): all of the land it's given, or only by the place; how full; for sale; all one colour; how many at most. */
+interface LotLook {
+  whole?: boolean;
+  taken?: number;
+  sale?: boolean;
+  colour?: number;
+  most?: number;
+}
+
+/** A dealer's forecourt: rows of cars for sale out in front, nose to the road, and an A-board (a car hire's, its fleet, all one colour). */
+function forecourt(door: { x: number; y: number; ox: number; oy: number }, ground: Ground, out: PlaceLife, rand: () => number, kinds: string[], colour?: number): void {
   const nose = +Math.atan2(door.oy, door.ox).toFixed(3);
   let put = 0;
   for (let row = 0; row < 3 && put < 14; row++) {
@@ -941,7 +1222,7 @@ function forecourt(door: { x: number; y: number; ox: number; oy: number }, groun
       // (Room for the whole car: its front and back clear too.)
       const at = onFront(door, ground, k * 2.7 * M, out1, 1.5 * M);
       if (!at || !onFront(door, ground, k * 2.7 * M, out1 + 2.5 * M, 1 * M) || !onFront(door, ground, k * 2.7 * M, out1 - 2.5 * M, 0)) continue;
-      out.spaces.push({ x: r1(at[0]), y: r1(at[1]), angle: nose, length: 5 * M, taken: 1, endOn: true, kind: kinds[Math.floor(rand() * kinds.length)], sale: true });
+      out.spaces.push({ x: r1(at[0]), y: r1(at[1]), angle: nose, length: 5 * M, taken: colour === undefined ? 1 : 0.8, endOn: true, kind: kinds[Math.floor(rand() * kinds.length)], ...(colour === undefined ? { sale: true } : { colour }) });
       put++;
     }
   }
@@ -1044,6 +1325,8 @@ function allotments(place: Place, ground: Ground, out: PlaceLife): void {
 function shopFront(place: Place, ground: Ground, out: PlaceLife): void {
   const front = frontOf(place, ground);
   if (!front) return;
+  // (A hardware shop in a big shed, on an estate: a trade counter.)
+  if (place.sub === 'hardware' && Math.abs(ringArea(front.ring)) >= 400 * M * M) return trade(place, ground, out);
   const { door } = front;
   const rand = seeded(hash(place.x, place.y));
   const along = Math.atan2(door.ox, -door.oy);

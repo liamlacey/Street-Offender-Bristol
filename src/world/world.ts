@@ -54,6 +54,8 @@ const POST_RADIUS: Partial<Record<PropKind, number>> = {
   cctv: 1.6,
   charger: 2.5,
   railsignal: 2,
+  // An electricity pylon's feet, square, 8 m or so across.
+  pylon: 26,
 };
 
 /** Street furniture that can be knocked about: how big, and how heavy (1 / mass, the car's being 1). */
@@ -76,6 +78,13 @@ const LOOSE: Partial<Record<PropKind, { r: number; length?: number; invMass: num
   compost: { r: 3, invMass: 8 },
   toolchest: { r: 2.5, length: 7, invMass: 2 },
   cabinet: { r: 3.5, length: 10, invMass: 0.6 },
+  // Round the works (see places.ts): a bulk bag of sand (a tonne); a crushed car (a stack of them, heavy); a battery storage unit (a
+  // container's size, hardly moved); a pumping station's pipework and valves (bolted down); a heap of aggregate (barely shoved).
+  bags: { r: 4, invMass: 0.8 },
+  crushed: { r: 7, length: 30, invMass: 0.3 },
+  battery: { r: 9.5, length: 48, invMass: 0.05 },
+  valve: { r: 4, length: 18, invMass: 0.15 },
+  heap: { r: 22, invMass: 0.02 },
   block: { r: 5, invMass: 0.4 },
   // A shopping trolley: on wheels, it rolls a long way.
   trolley: { r: 2.5, length: 8, invMass: 9 },

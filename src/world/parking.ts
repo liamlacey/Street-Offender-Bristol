@@ -38,6 +38,8 @@ export interface Space {
   kind?: string;
   /** On a car dealer's forecourt, for sale (a card in its windscreen). */
   sale?: boolean;
+  /** Its paint, if it's always the one (a car hire's fleet: see traffic.ts's COLOURS). */
+  colour?: number;
 }
 
 /** The bays' lines (x0, y0, x1, y1, ...) and the bays between them. */
@@ -188,9 +190,9 @@ export function streetBays(r: Road, lane: Lane, from: number, to: number): Bays 
     const length = parallel ? PARALLEL_BAY : depth;
     // (Not round a bend so tight the bay would stick out into the road: its corners, a little in, all by the kerb.)
     const [ca, sa] = [Math.cos(angle), Math.sin(angle)];
-    // (Parallel: a long car's own corners, which on a bend are what reach out into the lane.)
-    const [hl, hw] = parallel ? [2.7 * 8, depth / 2 - 0.2 * 8] : [length / 2 - 0.5 * 8, BAY_WIDTH / 2 - 0.5 * 8];
-    const out = [[hl, hw], [hl, -hw], [-hl, hw], [-hl, -hw]].some(([a, b]) => distanceTo(cx + ca * a - sa * b, cy + sa * a + ca * b, r.pts) < kerb - depth - (parallel ? 0 : 0.3 * 8));
+    // (Parallel: a long car's own corners, which on a bend are what reach out into the lane; and a little room to spare.)
+    const [hl, hw] = parallel ? [2.7 * 8, depth / 2 - 0.5 * 8] : [length / 2 - 0.5 * 8, BAY_WIDTH / 2 - 0.5 * 8];
+    const out = [[hl, hw], [hl, -hw], [-hl, hw], [-hl, -hw]].some(([a, b]) => distanceTo(cx + ca * a - sa * b, cy + sa * a + ca * b, r.pts) < kerb - depth - (parallel ? -0.45 * 8 : 0.3 * 8));
     if (!out) spaces.push({ x: cx, y: cy, angle, length, taken, endOn: !parallel });
   }
   return { lines, spaces, edge, start, end };

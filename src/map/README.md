@@ -1023,6 +1023,17 @@ but the water and the buildings.
   else 12 m), hinged at its sides; they open and shut, each lock in its own time (shut
   50 s, opening 10, open 50, shutting 10): shut, they meet in the middle, angled 17°
   upstream; open, they're back against its sides.
+- **Storage tanks** (`man_made=storage_tank` or `silo`, mapped as only an outline, not
+  underground): buildings all the same, pale steel, 10 m high where the LIDAR doesn't
+  say otherwise.
+- **Electricity pylons** (`power=tower`) and their lines (`power=line`): each pylon
+  (its `height`, else 26 m, 10–60 m) is solid (its feet, 6.5 m across), and nothing
+  brings one down; drawn rising from its feet, its four legs narrowing to a waist at
+  62% of its height and a peak, braced, with three pairs of arms across the line (at
+  62%, 74% and 86%, 5.5 to 6.5 m out). Each holds the next along each line it's on (as
+  `to`, x and y), and from each arm's end a wire runs to the same arm on the next (or,
+  where that's not a pylon, to half the height there), and an earth wire peak to peak,
+  each sagging 5% of the span in the middle: over everything, the buildings too.
 - **Murals** (`artwork_type=mural`, a point or a line along a wall): on the nearest side
   of a building's outline within 6 m, painted in bright panels about 1.5 m wide, from a
   metre up to near its top (and no windows on that side).
@@ -1141,8 +1152,18 @@ but the water and the buildings.
   - Industrial land (800 m² or more): its yards concrete; at each shed (300 m² or
     more, up to 30), from its door (the side nearest a road): a lorry backed up to it
     (70%), a forklift, pallets, a container, a skip, big bins (each most of the
-    time), a worker or two in hi-vis. Shops' and offices' land: big bins and a pallet
-    out the back of each building of 500 m² or more.
+    time), a worker or two in hi-vis; a van or two along the wall by its door (half the
+    time each); and its yards' aisles (`service=parking_aisle`, not in a car park) lined
+    end on with vans and the workers' cars, a little over half the places taken, up to
+    120; along its service roads, vans and cars parked both sides, a third of the places
+    (7 m apart), up to 60. An estate's units take their doors from its service roads too.
+    Businesses' land (`commercial`/`retail`) is laid out as an industrial estate too
+    if it's named one (trading or industrial estate, industrial, trade or enterprise
+    park, trade or business centre, works, depot, distribution), or if most of what's
+    built on it (60% by area) is sheds (300 m² or more, `building=yes`, `industrial`,
+    `warehouse`, `manufacture`, `hangar`, `shed`): OSM tags most of Bristol's trading
+    estates `landuse=commercial`. Otherwise, shops' and offices' land: big bins and a
+    pallet out the back of each building of 500 m² or more.
   - A university, college, hospital, library, sports or community centre: people at
     each building's door (more at a university, a hospital's smokers to one side),
     bikes (not a hospital), a bench. A stadium: a crowd all round it (a match on),
@@ -1184,6 +1205,29 @@ but the water and the buildings.
   - A cash machine (`amenity=atm`): a queue of none to three from its wall.
   - An electric car's charging point (`amenity=charging_station`): its post, and a car on
     charge beside it (three times in four).
+  - A builders' merchant or trade counter (`shop=trade`, `doityourself`, `tool_hire`,
+    `building_materials`, `plumbing`, `timber`, `trade=building_materials`; a big
+    `hardware` shop, 400 m² or more), or a trade with a yard (`craft=roofer`,
+    `stonemason`, `metal_construction`, `builder`, `scaffolder`, `carpenter`, `plumber`,
+    `electrician`, `glaziery`): out in front, pallets of bricks, bulk bags of sand,
+    drainage pipes, wooden pallets (each most of the time), a forklift, two vans nose to
+    the door being loaded, tradesmen in hi-vis.
+  - A scrap yard (`industrial=scrap_yard`, or industrial land named scrap, salvage or
+    breakers): concrete; crushed cars in rows along it (4.2 m apart, a 9 m lane between
+    the rows, up to 120), the grab (a digger), skips, tyres and oil drums, a worker.
+  - A brewery (`craft=brewery`, `industrial=brewery`): rows of kegs by its door (or, its
+    front right on the road, round the side of it with most room), pallets,
+    a dray (a lorry) backed up to it, people about.
+  - A battery storage plant (`power=plant` with `plant:source=battery`, or such a
+    `generator`): concrete; its units (white steel boxes the size of a container) in
+    rows inside its fence, a transformer at the end of each row.
+  - A pumping station or water works (`man_made=water_works`, `pumping_station`,
+    `wastewater_plant`): blue pipework with red valve wheels by its door, a cabinet.
+  - A car hire's (`amenity=car_rental`, over the land it's on): its fleet, white, on its
+    forecourt and along its lot's aisles, as a car dealer's (above), without the cards.
+  - A bunker silo (`man_made=bunker_silo`): its walls (3 m, round all but its shortest
+    side, where the loader goes in); heaps of aggregate along it, gravel or sand; a
+    loader (a digger) at its open end half the time.
 - **Sports pitches and courts** (`src/world/sports.ts`), by their sport (see the ground):
   each fitted with a rectangle (lined up with whichever edge gives the smallest one round
   it, then drawn in till its corners are on it).
