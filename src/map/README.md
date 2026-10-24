@@ -1159,7 +1159,13 @@ but the water and the buildings.
   - A car dealer (`shop=car`): its forecourt in front, up to three rows of up to 14 cars
     for sale (hatchbacks, saloons, SUVs, small cars, estates), 2.7 m apart, noses to the
     road, each with its price on a card in the windscreen; any of them can be driven
-    off. An A-board.
+    off. An A-board. And its lot: if it's on shops' or businesses' land
+    (`landuse=retail/commercial`) no bigger than 25,000 m², that's its lot (none of an
+    industrial estate's yard clutter there), and every parking aisle through it
+    (`service=parking_aisle`) is lined both sides with its cars for sale, end on, nose
+    to the aisle, 2.6 m apart (up to 400); on bigger land (a retail park), only the
+    aisles within 50 m of it. Never an aisle in a car park (`amenity=parking`): those
+    are the car park's.
   - A garage (`shop=car_repair`, `tyres`): a car or two out front waiting, old tyres
     stacked, a tool chest, an oil drum; a mechanic in hi-vis.
   - A taxi rank (`amenity=taxi`): up to 3 waiting in a line along the kerb by it (its

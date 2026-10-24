@@ -116,6 +116,13 @@ export function* placesWork(map: GameMap): Work<PlaceLife> {
   const seen = new Set<string>();
   // (Where the cafés' tables are, by the metre: one place's not put over another's.)
   const tables = new Set<string>();
+  // The car dealers' lots: the shops' (or businesses') land each is on, if it's no bigger than a lot (laid out as one: see dealer).
+  const lots = new Map<Place, Pts>();
+  for (const d of places) {
+    if (d.kind !== 'cardealer') continue;
+    for (const c of places) if (c.kind === 'commercial' && c.rings[0] && pointInRing(d.x, d.y, c.rings[0])) lots.set(d, c.rings[0]);
+  }
+  const lotRings = new Set([...lots.values()].filter((r) => Math.abs(ringArea(r)) <= LOT * M * M));
   for (const place of places) {
     if (pause()) yield;
     // (The same place twice over, in two tiles: once.)
@@ -135,6 +142,8 @@ export function* placesWork(map: GameMap): Work<PlaceLife> {
         break;
       case 'industrial':
       case 'commercial':
+        // (A car dealer's lot: its aisles lined with the cars for sale instead.)
+        if (place.rings[0] && lotRings.has(place.rings[0])) break;
         works(place, ground, out);
         break;
       case 'university':
@@ -159,7 +168,7 @@ export function* placesWork(map: GameMap): Work<PlaceLife> {
         seating(place, ground, out, tables);
         break;
       case 'cardealer':
-        dealer(place, ground, out);
+        dealer(place, ground, out, lots.get(place));
         break;
       case 'carrepair':
         repairs(place, ground, out);
@@ -865,12 +874,64 @@ function seating(place: Place, ground: Ground, out: PlaceLife, tables: Set<strin
 }
 
 /** A car dealer: its forecourt full of cars for sale (in rows, noses to the road; any of them can be driven off), an A-board. */
-function dealer(place: Place, ground: Ground, out: PlaceLife): void {
-  const front = frontOf(place, ground, 40 * M);
-  if (!front) return;
-  const { door } = front;
+function dealer(place: Place, ground: Ground, out: PlaceLife, lot?: Pts): void {
   const rand = seeded(hash(place.x, place.y));
   const kinds = ['hatch', 'saloon', 'suv', 'small', 'estate'];
+  const front = frontOf(place, ground, 40 * M);
+  if (front) forecourt(front.door, ground, out, rand, kinds);
+  onLot(place, ground, out, rand, kinds, lot);
+}
+
+/** How big a dealer's lot is at most, m² (the land it's on, if it's mapped: bigger, it's a retail park, and only the aisles by it are its). */
+const LOT = 25_000;
+/** A dealer's aisles in a retail park: those this near it, px. */
+const LOT_NEAR = 50 * M;
+/** How many cars a lot has for sale, at most. */
+const LOT_MOST = 400;
+
+/**
+ * A dealer's lot: the aisles through the land it's on (`service=parking_aisle`, mapped through it but not in a car park), its cars for
+ * sale end on along both sides, nose out, a car every 2.6 m.
+ */
+function onLot(place: Place, ground: Ground, out: PlaceLife, rand: () => number, kinds: string[], lot?: Pts): void {
+  const whole = lot && Math.abs(ringArea(lot)) <= LOT * M * M;
+  const inLot = (x: number, y: number) => !lot || pointInRing(x, y, lot);
+  const near = (x: number, y: number) => whole || Math.hypot(x - place.x, y - place.y) < LOT_NEAR;
+  const parks = (ground.map.areas ?? []).filter((a) => a.kind === 'parking' && a.rings[0]?.some((v, k) => k % 2 === 0 && Math.abs(v - place.x) < 400 * M && Math.abs(a.rings[0][k + 1] - place.y) < 400 * M));
+  const inPark = (x: number, y: number) => parks.some((a) => a.rings.every((r, i) => pointInRing(x, y, r) === (i === 0)));
+  const aisles = (ground.map.roads ?? []).filter((r) => r.aisle && !r.tunnel && !r.bridge && r.pts.some((v, k) => k % 2 === 0 && inLot(v, r.pts[k + 1]) && near(v, r.pts[k + 1]) && !inPark(v, r.pts[k + 1])));
+  if (!aisles.length) return;
+  const had = out.spaces.length;
+  const [deep, wide] = [4.8 * M, 2.6 * M];
+  const clearOf = (x: number, y: number) => out.spaces.every((o, i) => i < had - 40 || Math.hypot(o.x - x, o.y - y) > wide * 0.95);
+  for (const r of aisles) {
+    const p = r.pts;
+    for (let k = 0; k + 3 < p.length; k += 2) {
+      const [ax, ay, bx, by] = [p[k], p[k + 1], p[k + 2], p[k + 3]];
+      const len = Math.hypot(bx - ax, by - ay);
+      if (len < wide) continue;
+      const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
+      for (const side of [-1, 1]) {
+        const [nx, ny] = [-uy * side, ux * side];
+        // Out from the aisle's edge, the car's middle; its nose (to the aisle) and its back.
+        const mid = r.width / 2 + 0.4 * M + deep / 2;
+        for (let d = wide / 2; d <= len - wide / 2; d += wide) {
+          if (out.spaces.length - had >= LOT_MOST) return;
+          const [x, y] = [ax + ux * d + nx * mid, ay + uy * d + ny * mid];
+          const ends: [number, number][] = [[x - nx * (deep / 2), y - ny * (deep / 2)], [x + nx * (deep / 2), y + ny * (deep / 2)]];
+          const corners: [number, number][] = ends.flatMap(([ex, ey]) => [[ex + ux * 0.9 * M, ey + uy * 0.9 * M], [ex - ux * 0.9 * M, ey - uy * 0.9 * M]] as [number, number][]);
+          if (!near(x, y) || inPark(x, y)) continue;
+          if (![[x, y], ...corners].every(([cx, cy]) => inLot(cx, cy) && !ground.inBuilding(cx, cy) && !ground.onCarriageway(cx, cy, 0.2 * M))) continue;
+          if (!clearOf(x, y)) continue;
+          out.spaces.push({ x: r1(x), y: r1(y), angle: +Math.atan2(-ny, -nx).toFixed(3), length: 5 * M, taken: 0.92, endOn: true, kind: kinds[Math.floor(rand() * kinds.length)], sale: true });
+        }
+      }
+    }
+  }
+}
+
+/** A dealer's forecourt: rows of cars for sale out in front, nose to the road, and an A-board. */
+function forecourt(door: { x: number; y: number; ox: number; oy: number }, ground: Ground, out: PlaceLife, rand: () => number, kinds: string[]): void {
   const nose = +Math.atan2(door.oy, door.ox).toFixed(3);
   let put = 0;
   for (let row = 0; row < 3 && put < 14; row++) {
