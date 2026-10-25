@@ -252,8 +252,17 @@ tertiary 8, streets 7, service 4.5, driveways 3.5, pedestrian streets 5, footway
 `width`, with a bus stop's sign or platform (see Bus shelters: a disused one with its
 shelter counts) within 12 m of its kerb, alongside it, is 3 m wider: its one lane
 for the traffic, and the kerb side for the buses to pull in (The Horsefair). One-way
-and bridges from their tags. **Pavements**, 2.4 m wide, along every
-road but service roads and tracks: on both sides unless `sidewalk`,
+and bridges from their tags. **Backstreets**: a street (`residential`, `unclassified`,
+`living_street`) that doesn't say how wide it is (no `width`, `width:carriageway` or
+`lanes`), not a bridge or a tunnel, hemmed in by what's along it: looked along every
+3 m (not within 10 m of its ends, nor where a building's over it), how far it is from
+its line to the nearest building on the ground, wall, fence, hedge or railing on its
+nearer side (up to 4 m). Where that's under 2.5 m at four or more of those points and
+at least 30% of them, it's a backstreet (Pitch Lane, Picton Lane, Elton Lane, the old
+streets by Broadmead): twice the middle of those, less 0.3 m, wide (3.5 m at least),
+no pavements, so no centre line and no cars parked along it; two-way, it's one lane
+both ways, and the traffic keeps out of it (you can drive it). **Pavements**, 2.4 m wide, along every
+road but service roads, tracks and backstreets: on both sides unless `sidewalk`,
 `sidewalk:both`, `sidewalk:left` or `sidewalk:right` say otherwise (left and right
 as the way runs); none on a side where it's `no` or `separate` (mapped as a footpath
 of its own), or where a `footway=sidewalk` path runs alongside, within 4 m of the

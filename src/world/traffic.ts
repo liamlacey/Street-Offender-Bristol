@@ -506,7 +506,8 @@ export function* lanesWork(map: GameMap, paths = false, joins: Join[] = []): Wor
   // The roads; or (a network of their own, for the bikes) the cycle paths.
   const roads = map.roads
     .map((r, i) => ({ r, i }))
-    .filter(({ r }) => (paths ? r.kind === 'cycleway' : DRIVEN.has(r.kind) || r.bus) && r.pts.length >= 4)
+    // (Not a backstreet, both ways in one lane: the traffic keeps out, as there'd be no passing. One-way, it's just narrow.)
+    .filter(({ r }) => (paths ? r.kind === 'cycleway' : (DRIVEN.has(r.kind) && !(r.backstreet && !r.oneway)) || r.bus) && r.pts.length >= 4)
     // Each road with a point put in where a cycle path joins it (if it's not one of its points already): a junction for the bikes.
     .map(({ r, i }) => ({ r: !paths && joinsOf.get(i)?.some((j) => j.t > 0 && j.t < 1) ? { ...r, pts: withJoins(r.pts, joinsOf.get(i)!) } : r, i }));
   yield;
@@ -740,7 +741,7 @@ export function* cycleJoinsWork(map: GameMap): Work<Join[]> {
   const joins: Join[] = [];
   const roads = map.roads
     .map((r, i) => ({ r, i }))
-    .filter(({ r }) => DRIVEN.has(r.kind) && r.pts.length >= 4)
+    .filter(({ r }) => DRIVEN.has(r.kind) && !(r.backstreet && !r.oneway) && r.pts.length >= 4)
     .map(({ r, i }) => {
       let box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
       for (let k = 0; k < r.pts.length; k += 2) box = [Math.min(box[0], r.pts[k]), Math.min(box[1], r.pts[k + 1]), Math.max(box[2], r.pts[k]), Math.max(box[3], r.pts[k + 1])];

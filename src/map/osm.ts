@@ -188,6 +188,9 @@ export interface Road {
   laneSpans?: number[];
   /** Only for buses (`access=no` with `bus` or `psv=yes`: a bus station's yard, its bays): the rest of the traffic keeps out. */
   bus?: boolean;
+  /** A backstreet: a street hemmed in by the buildings and walls along it (see `hemmed`), as narrow as the room between them, no
+   * pavement; two-way, one lane for both ways (the traffic keeps out: there'd be no passing). */
+  backstreet?: boolean;
   /** How busy it is: the shops, cafés, bars, offices and the like within ACTIVITY_REACH of it, per 100 m of it (more traffic, and more parked). */
   activity?: number;
   /** Steps: how many there are up the flight (OSM's `step_count`, or from how far it rises, measured by the LIDAR). */
@@ -1312,6 +1315,47 @@ const ROAD_KINDS: Record<string, RoadKind> = {
 };
 
 /** Carriageway width in metres by kind, when it isn't tagged. */
+/**
+ * A street that doesn't say how wide it is (no `width`, no `lanes`), hemmed in by the buildings and walls (fences, hedges,
+ * railings) along it: looked along it every 3 m (not within 10 m of its ends, at its junctions, nor where a building's over
+ * it), how far out to the nearest on its nearer side (up to 4 m); where that's under HEMMED for at least four of those points and
+ * at least 30% of them, it's a backstreet: as wide as twice the middle of those, less 0.3 m, and no narrower than BACKSTREET. Its
+ * width then, px; or null.
+ */
+function hemmed(pts: Pts, built: (x: number, y: number) => boolean): number | null {
+  const M = PX_PER_METRE;
+  let total = 0;
+  for (let k = 0; k + 3 < pts.length; k += 2) total += Math.hypot(pts[k + 2] - pts[k], pts[k + 3] - pts[k + 1]);
+  const rooms: number[] = [];
+  let run = 0;
+  for (let k = 0; k + 3 < pts.length; k += 2) {
+    const len = Math.hypot(pts[k + 2] - pts[k], pts[k + 3] - pts[k + 1]);
+    if (!len) continue;
+    const [nx, ny] = [-(pts[k + 3] - pts[k + 1]) / len, (pts[k + 2] - pts[k]) / len];
+    for (let s = 0; s < len; s += 3 * M) {
+      if (run + s < 10 * M || run + s > total - 10 * M) continue;
+      const [x, y] = [pts[k] + ((pts[k + 2] - pts[k]) * s) / len, pts[k + 1] + ((pts[k + 3] - pts[k + 1]) * s) / len];
+      if (built(x, y)) continue;
+      let room = 4 * M;
+      for (const side of [1, -1]) {
+        for (let d = 0.5 * M; d < room; d += 0.25 * M) {
+          if (!built(x + nx * side * d, y + ny * side * d)) continue;
+          room = d;
+          break;
+        }
+      }
+      rooms.push(room);
+    }
+    run += len;
+  }
+  const tight = rooms.filter((r) => r < HEMMED * M).sort((a, b) => a - b);
+  if (tight.length < 4 || tight.length < rooms.length * 0.3) return null;
+  return Math.max(BACKSTREET * M, 2 * tight[Math.floor(tight.length / 2)] - 0.3 * M);
+}
+/** A street's room (from its middle out, to the nearer side) under which it's hemmed in, m; a backstreet's narrowest, m. */
+const HEMMED = 2.5;
+const BACKSTREET = 3.5;
+
 const ROAD_WIDTH: Record<RoadKind, number> = {
   trunk: 12,
   primary: 10,
@@ -2059,6 +2103,44 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     }
     return width;
   };
+  // What hems a street in (see `hemmed`): the buildings on the ground, and the walls, fences, hedges and railings; by 16 m square.
+  const HEM_CELL = 16 * PX_PER_METRE;
+  const hemCells = new Map<number, { ring?: Pts; box?: [number, number, number, number]; seg?: [number, number, number, number] }[]>();
+  const hemAdd = (x0: number, y0: number, x1: number, y1: number, item: { ring?: Pts; box?: [number, number, number, number]; seg?: [number, number, number, number] }) => {
+    for (let i = Math.floor(x0 / HEM_CELL); i <= Math.floor(x1 / HEM_CELL); i++) {
+      for (let j = Math.floor(y0 / HEM_CELL); j <= Math.floor(y1 / HEM_CELL); j++) {
+        const k = i * 100003 + j;
+        const list = hemCells.get(k);
+        if (list) list.push(item);
+        else hemCells.set(k, [item]);
+      }
+    }
+  };
+  for (const b of buildings) {
+    if (!b.solid || b.bottom > 0) continue;
+    const r = b.rings[0];
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let k = 0; k + 1 < r.length; k += 2) [x0, y0, x1, y1] = [Math.min(x0, r[k]), Math.min(y0, r[k + 1]), Math.max(x1, r[k]), Math.max(y1, r[k + 1])];
+    hemAdd(x0, y0, x1, y1, { ring: r, box: [x0, y0, x1, y1] });
+  }
+  for (const l of lines) {
+    if (l.kind !== 'wall' && l.kind !== 'fence' && l.kind !== 'hedge' && l.kind !== 'railing') continue;
+    for (let k = 0; k + 3 < l.pts.length; k += 2) {
+      const seg: [number, number, number, number] = [l.pts[k], l.pts[k + 1], l.pts[k + 2], l.pts[k + 3]];
+      hemAdd(Math.min(seg[0], seg[2]), Math.min(seg[1], seg[3]), Math.max(seg[0], seg[2]), Math.max(seg[1], seg[3]), { seg });
+    }
+  }
+  const hems = (x: number, y: number): boolean => {
+    for (const h of hemCells.get(Math.floor(x / HEM_CELL) * 100003 + Math.floor(y / HEM_CELL)) ?? []) {
+      if (h.seg) {
+        const [ax, ay, bx, by] = h.seg;
+        const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+        const u = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2));
+        if (Math.hypot(ax + (bx - ax) * u - x, ay + (by - ay) * u - y) < 0.2 * PX_PER_METRE) return true;
+      } else if (h.ring && h.box && x >= h.box[0] && x <= h.box[2] && y >= h.box[1] && y <= h.box[3] && pointInRing(x, y, h.ring)) return true;
+    }
+    return false;
+  };
   const sidewalks: Pts[] = [];
   for (const { way } of roadWays) {
     if (way.tags.footway !== 'sidewalk') continue;
@@ -2070,10 +2152,14 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     const t = way.tags;
     const pts = pointsOf(way.nodes);
     if (!pts) continue;
-    const width = stopWidened(kind, t, pts, roadWidth(kind, t) * PX_PER_METRE);
+    let width = stopWidened(kind, t, pts, roadWidth(kind, t) * PX_PER_METRE);
     const vehicle = VEHICLE_ROADS.has(kind);
     const oneway = t.oneway === 'yes' || t.oneway === '1' || t.junction === 'roundabout';
     const bridge = t.bridge !== undefined && t.bridge !== 'no';
+    // A street hemmed in by the buildings and walls along it: a backstreet, as narrow as the room it has.
+    const narrow = kind === 'street' && !t.width && !t.lanes && !t['width:carriageway'] && !bridge && !t.tunnel ? hemmed(pts, hems) : null;
+    const backstreet = narrow !== null && narrow < width;
+    if (backstreet) width = narrow;
     const arcade = t.covered === 'arcade' || t.covered === 'colonnade';
     const passage = t.tunnel === 'building_passage' || arcade;
     const tunnel = kind === 'rail' && inTunnel(t);
@@ -2100,7 +2186,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       if (marks.length === 0) marks = undefined;
     }
     let pavement: Road['pavement'];
-    if (vehicle && kind !== 'service' && kind !== 'track') {
+    if (vehicle && kind !== 'service' && kind !== 'track' && !backstreet) {
       let [left, right] = pavementSides(t);
       // Where the pavement's mapped as a footpath of its own, it's that, not one drawn with the road too.
       if (left && sidewalkAlong(pts, width, 1, sidewalks)) left = false;
@@ -2149,6 +2235,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       ...(lanes && laneSpans?.length ? { lanes, laneSpans } : {}),
       ...(kind === 'steps' && stepCount(t) ? { steps: stepCount(t) } : {}),
       ...(vehicle && busOnly(t) ? { bus: true } : {}),
+      ...(backstreet ? { backstreet } : {}),
     });
   }
   // A lane that carries on from the same lane on the road before it: its name's painted only where it starts.
