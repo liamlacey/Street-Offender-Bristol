@@ -188,8 +188,8 @@ export interface Road {
   laneSpans?: number[];
   /** Only for buses (`access=no` with `bus` or `psv=yes`: a bus station's yard, its bays): the rest of the traffic keeps out. */
   bus?: boolean;
-  /** A backstreet: a street hemmed in by the buildings and walls along it (see `hemmed`), as narrow as the room between them, no
-   * pavement; two-way, one lane for both ways (the traffic keeps out: there'd be no passing). */
+  /** A backstreet: a street hemmed in by the buildings and walls along it (see `hemmed`), no wider than the room between them, no
+   * pavements. */
   backstreet?: boolean;
   /** How busy it is: the shops, cafés, bars, offices and the like within ACTIVITY_REACH of it, per 100 m of it (more traffic, and more parked). */
   activity?: number;
@@ -1318,14 +1318,16 @@ const ROAD_KINDS: Record<string, RoadKind> = {
 /**
  * A street that doesn't say how wide it is (no `width`, no `lanes`), hemmed in by the buildings and walls (fences, hedges,
  * railings) along it: looked along it every 3 m (not within 10 m of its ends, at its junctions, nor where a building's over
- * it), how far out to the nearest on its nearer side (up to 4 m); where that's under HEMMED for at least four of those points and
- * at least 30% of them, it's a backstreet: as wide as twice the middle of those, less 0.3 m, and no narrower than BACKSTREET. Its
- * width then, px; or null.
+ * it), how far out to the nearest each side (up to FAR). Where its nearer side's under HEMMED for at least four of those points
+ * and at least 30% of them, it's a backstreet: as wide as the room it has there (the middle of them, less 0.3 m; and no
+ * narrower than BACKSTREET): from one side to the other; or, where its far side's open (gardens, a yard: nothing within FAR),
+ * twice its nearer side (its line down its middle, near enough). That width, px; or null.
  */
 function hemmed(pts: Pts, built: (x: number, y: number) => boolean): number | null {
   const M = PX_PER_METRE;
   let total = 0;
   for (let k = 0; k + 3 < pts.length; k += 2) total += Math.hypot(pts[k + 2] - pts[k], pts[k + 3] - pts[k + 1]);
+  let looked = 0;
   const rooms: number[] = [];
   let run = 0;
   for (let k = 0; k + 3 < pts.length; k += 2) {
@@ -1336,25 +1338,26 @@ function hemmed(pts: Pts, built: (x: number, y: number) => boolean): number | nu
       if (run + s < 10 * M || run + s > total - 10 * M) continue;
       const [x, y] = [pts[k] + ((pts[k + 2] - pts[k]) * s) / len, pts[k + 1] + ((pts[k + 3] - pts[k + 1]) * s) / len];
       if (built(x, y)) continue;
-      let room = 4 * M;
-      for (const side of [1, -1]) {
-        for (let d = 0.5 * M; d < room; d += 0.25 * M) {
-          if (!built(x + nx * side * d, y + ny * side * d)) continue;
-          room = d;
-          break;
-        }
-      }
-      rooms.push(room);
+      looked++;
+      const out = (side: number) => {
+        for (let d = 0.5 * M; d < FAR * M; d += 0.25 * M) if (built(x + nx * side * d, y + ny * side * d)) return d;
+        return FAR * M;
+      };
+      const [a, b] = [out(1), out(-1)];
+      const [near, far] = [Math.min(a, b), Math.max(a, b)];
+      if (near < HEMMED * M) rooms.push(far < FAR * M ? near + far : 2 * near);
     }
     run += len;
   }
-  const tight = rooms.filter((r) => r < HEMMED * M).sort((a, b) => a - b);
-  if (tight.length < 4 || tight.length < rooms.length * 0.3) return null;
-  return Math.max(BACKSTREET * M, 2 * tight[Math.floor(tight.length / 2)] - 0.3 * M);
+  if (rooms.length < 4 || rooms.length < looked * 0.3) return null;
+  rooms.sort((a, b) => a - b);
+  return Math.max(BACKSTREET * M, rooms[Math.floor(rooms.length / 2)] - 0.3 * M);
 }
-/** A street's room (from its middle out, to the nearer side) under which it's hemmed in, m; a backstreet's narrowest, m. */
+/** A street's room (from its line out, to the nearer side) under which it's hemmed in, m; a backstreet's narrowest, m; how far
+ * out its far side's looked for, m. */
 const HEMMED = 2.5;
 const BACKSTREET = 3.5;
+const FAR = 8;
 
 const ROAD_WIDTH: Record<RoadKind, number> = {
   trunk: 12,
@@ -2158,15 +2161,16 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     const bridge = t.bridge !== undefined && t.bridge !== 'no';
     // A street hemmed in by the buildings and walls along it: a backstreet, as narrow as the room it has.
     const narrow = kind === 'street' && !t.width && !t.lanes && !t['width:carriageway'] && !bridge && !t.tunnel ? hemmed(pts, hems) : null;
-    const backstreet = narrow !== null && narrow < width;
-    if (backstreet) width = narrow;
+    const backstreet = narrow !== null;
+    if (narrow !== null) width = Math.min(width, narrow);
     const arcade = t.covered === 'arcade' || t.covered === 'colonnade';
     const passage = t.tunnel === 'building_passage' || arcade;
     const tunnel = kind === 'rail' && inTunnel(t);
     const siding = kind === 'rail' && !!t.service;
     const surface = paving(t.surface);
     let marks: number[] | undefined;
-    if (vehicle && kind !== 'service' && kind !== 'track' && width >= 6 * PX_PER_METRE) {
+    // (None down a backstreet, nor where it's said there's none: `lane_markings=no`.)
+    if (vehicle && kind !== 'service' && kind !== 'track' && width >= 6 * PX_PER_METRE && !backstreet && t.lane_markings !== 'no') {
       // Junction points along the road: anywhere another road joins it.
       const stops: number[] = [];
       let dist = 0;

@@ -256,12 +256,14 @@ and bridges from their tags. **Backstreets**: a street (`residential`, `unclassi
 `living_street`) that doesn't say how wide it is (no `width`, `width:carriageway` or
 `lanes`), not a bridge or a tunnel, hemmed in by what's along it: looked along every
 3 m (not within 10 m of its ends, nor where a building's over it), how far it is from
-its line to the nearest building on the ground, wall, fence, hedge or railing on its
-nearer side (up to 4 m). Where that's under 2.5 m at four or more of those points and
-at least 30% of them, it's a backstreet (Pitch Lane, Picton Lane, Elton Lane, the old
-streets by Broadmead): twice the middle of those, less 0.3 m, wide (3.5 m at least),
-no pavements, so no centre line and no cars parked along it; two-way, it's one lane
-both ways, and the traffic keeps out of it (you can drive it). **Pavements**, 2.4 m wide, along every
+its line to the nearest building on the ground, wall, fence, hedge or railing each
+side (up to 8 m). Where its nearer side's under 2.5 m at four or more of those points
+and at least 30% of them, it's a backstreet: no pavements, and no wider than the room
+it has there (the middle of them, less 0.3 m; 3.5 m at least), from one side to the
+other; or, where its far side's open (gardens, a yard: nothing within 8 m), twice its
+nearer side. So Pitch Lane is one lane (3.7 m: no centre line, no cars parked), the
+traffic squeezing by each other along it; Picton Lane, built up both sides, keeps its
+7 m, its cars parked along one side and a lane to drive (no centre line). **Pavements**, 2.4 m wide, along every
 road but service roads, tracks and backstreets: on both sides unless `sidewalk`,
 `sidewalk:both`, `sidewalk:left` or `sidewalk:right` say otherwise (left and right
 as the way runs); none on a side where it's `no` or `separate` (mapped as a footpath
@@ -272,7 +274,7 @@ way, unless it's `kerb=lowered`, `flush` or `no`. Where a node says the kerb's
 dropped (`kerb=lowered`, `flush` or `no`), and across every crossing (half the
 road's width plus 3 m from its middle), there's no kerb to mount; anywhere else,
 going up a kerb at speed takes 8% off it and coming down 4% (`src/world/kerbs.ts`). Dashed centre lines on
-roads 6 m or wider (not service roads or tracks), stopping 9 m short of each junction, and not on cobbles. The
+roads 6 m or wider (not service roads, tracks or backstreets, nor where `lane_markings=no`), stopping 9 m short of each junction, and not on cobbles. The
 surface (`surface=*`) is sorted into tarmac, paving, setts (cobbles), concrete,
 gravel, decking or grass, and drawn as that and driven on as that.
 

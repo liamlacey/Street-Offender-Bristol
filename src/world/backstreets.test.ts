@@ -24,7 +24,15 @@ describe('backstreets', () => {
     for (const name of ['Gloucester Road', 'Cheltenham Road', 'Whiteladies Road', 'Park Street']) expect(whole.roads.some((r) => r.name === name && r.backstreet)).toBe(false);
   });
 
-  it("the traffic keeps out of a two-way one (there'd be no passing)", () => {
+  it('Picton Lane, its far side built up too, has room for cars parked along it and a lane to drive (no pavements)', () => {
+    const lane = whole.roads.find((r) => r.name === 'Picton Lane' && r.backstreet)!;
+    expect(lane.width).toBeGreaterThanOrEqual(6.5 * M);
+    expect(lane.pavement).toBeUndefined();
+    expect(lane.lanes?.some((l) => l.kind === 'parking')).toBe(true);
+    expect(lane.marks).toBeUndefined();
+  });
+
+  it('the traffic drives them, even a one-lane one, squeezing by', () => {
     const lane = whole.roads.find((r) => r.name === 'Pitch Lane')!;
     const { index, tiles } = splitMap(whole);
     const [cx, cy] = [Math.round(lane.pts[0] / TILE) * TILE, Math.round(lane.pts[1] / TILE) * TILE];
@@ -33,6 +41,6 @@ describe('backstreets', () => {
     const traffic = new Traffic(map, { rand: () => 0.4 });
     const ours = map.roads.findIndex((r) => r.name === 'Pitch Lane');
     expect(ours).toBeGreaterThanOrEqual(0);
-    expect((traffic as unknown as { lanes: { road: number }[] }).lanes.some((l) => l.road === ours)).toBe(false);
+    expect((traffic as unknown as { lanes: { road: number }[] }).lanes.filter((l) => l.road === ours).length).toBe(2);
   }, 60_000);
 });
