@@ -43,6 +43,8 @@ export interface Region {
   boats: Boats;
   people: People;
   trains: Trains;
+  /** The ground's height under each of the map's trees, px (worked out as it's made, not as it's taken over). */
+  treeGround: Float32Array;
 }
 
 /** How far along making a region is (0 to 1), and what it's doing. */
@@ -80,11 +82,11 @@ export function* regionWork(map: RegionMap, ids: FirstIds, surfaces: (world: Wor
   for (const level of [0, 1, 2]) {
     for (const [k, w] of world.walls[level].entries()) {
       walls[level].add(w);
-      if (k % 4000 === 3999) yield;
+      if (k % 1000 === 999) yield;
     }
     for (const [k, p] of world.posts[level].entries()) {
       posts[level].add(p);
-      if (k % 8000 === 7999) yield;
+      if (k % 2000 === 1999) yield;
     }
   }
   stage(0.3, 'Putting up the buildings');
@@ -98,6 +100,11 @@ export function* regionWork(map: RegionMap, ids: FirstIds, surfaces: (world: Wor
   const humps = new Humps(map);
   yield;
   const buildings = yield* buildingIndexWork(world, terrain);
+  const treeGround = new Float32Array(map.trees.length / 4);
+  for (let i = 0; i < treeGround.length; i++) {
+    treeGround[i] = terrain.at(map.trees[i * 4], map.trees[i * 4 + 1]) * terrain.px;
+    if (i % 4000 === 3999) yield;
+  }
   stage(0.38, 'Starting the traffic');
   const traffic = new Traffic(map, { terrain, firstId: ids.traffic }, true);
   yield* traffic.setup(map, { terrain, firstId: ids.traffic });
@@ -111,5 +118,5 @@ export function* regionWork(map: RegionMap, ids: FirstIds, surfaces: (world: Wor
   const trains = new Trains(map, { firstId: ids.trains }, true);
   yield* trains.setup();
   stage(0.95, 'Looking round');
-  return { map, world, terrain, surfaces: grid, walls, posts, decks, tunnels, ledges, kerbs, humps, buildings, traffic, boats, people, trains };
+  return { map, world, terrain, surfaces: grid, walls, posts, decks, tunnels, ledges, kerbs, humps, buildings, traffic, boats, people, trains, treeGround };
 }

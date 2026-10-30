@@ -501,6 +501,8 @@ export function buildLanes(map: GameMap, paths = false, joins: Join[] = []): { l
 /** The same, a little at a time (see work.ts). */
 export function* lanesWork(map: GameMap, paths = false, joins: Join[] = []): Work<{ lanes: Lane[]; nodes: Node[] }> {
   const pause = every(120);
+  // (Each lane's bends worked out, all along it: a pause every few.)
+  const laning = every(20);
   const joinsOf = new Map<number, Join[]>();
   for (const j of joins) joinsOf.set(j.road, [...(joinsOf.get(j.road) ?? []), j]);
   // The roads; or (a network of their own, for the bikes) the cycle paths.
@@ -586,7 +588,7 @@ export function* lanesWork(map: GameMap, paths = false, joins: Join[] = []): Wor
 
   const lanes: Lane[] = [];
   for (const [edge, e] of edges.entries()) {
-    if (pause()) yield;
+    if (laning()) yield;
     const r = e.road;
     const length = lineLength(e.pts);
     const trimA = Math.min(clear[e.a], length * 0.4);
@@ -736,7 +738,7 @@ export function cycleJoins(map: GameMap): Join[] {
 
 /** The same, a little at a time (see work.ts). */
 export function* cycleJoinsWork(map: GameMap): Work<Join[]> {
-  const pause = every(60);
+  const pause = every(15);
   const joins: Join[] = [];
   const roads = map.roads
     .map((r, i) => ({ r, i }))
@@ -1077,6 +1079,8 @@ export class Traffic {
   private readonly parkedById = new Map<number, Vehicle>();
   /** The lanes along each edge each way, kerb first; who's been waiting a while to pull out at each junction. */
   private readonly lanesOf = new Map<string, Lane[]>();
+  /** Its lanes by where they run (see `laneKey`), worked out as it's set up. */
+  private byKey: Map<string, Lane> | null = null;
   private readonly waitingAt = new Map<number, Vehicle>();
   private readonly entering = new Map<number, { v: Vehicle; d: number; via: Path }[]>();
   private terrain!: Terrain;
@@ -1202,6 +1206,13 @@ export class Traffic {
       this.posts.push(post);
       for (const spot of spots) if (this.rand() < POST_FILLED) this.parkAt(this.posts.length - 1, spot, this.make(kind, spot.x, spot.y, spot.angle, 0), this.rand() < 0.15);
     }
+    // Its lanes by where they run (for taking over from the last region's traffic: see `adopt`).
+    const byKey = new Map<string, Lane>();
+    for (const l of this.lanes) {
+      byKey.set(laneKey(l), l);
+      if (pause()) yield;
+    }
+    this.byKey = byKey;
   }
 
   /** One of a post's vehicles, parked in its place (its blue lights left on a while, or not). */
@@ -3162,7 +3173,7 @@ export class Traffic {
       this.take(v);
       if (v.spot?.taken === v.id) v.spot.taken = null;
     }
-    const byKey = new Map<string, Lane>(this.lanes.map((l) => [laneKey(l), l]));
+    const byKey = this.byKey ?? new Map<string, Lane>(this.lanes.map((l) => [laneKey(l), l]));
     const lane = (l: Lane | undefined): Lane | undefined => (l ? (byKey.get(laneKey(l)) ?? this.likeLane(l)) : undefined);
     const bayOf = (b: StationBay): StationBay | undefined => {
       const l = lane(b.lane);
@@ -3240,11 +3251,36 @@ export class Traffic {
    * this one's own they'd be on top of.
    */
   putBack(list: Vehicle[]): void {
+    if (!list.length) return;
+    // (The parked by where they are, in 16 m squares: there are thousands, and as many put back as you've left about.)
+    const CELL = 16 * M;
+    const cell = (x: number, y: number) => Math.floor(x / CELL) * 100003 + Math.floor(y / CELL);
+    const grid = new Map<number, Vehicle[]>();
+    const index = (o: Vehicle) => {
+      const k = cell(o.x, o.y);
+      const at = grid.get(k);
+      if (at) at.push(o);
+      else grid.set(k, [o]);
+    };
+    for (const o of this.parked) index(o);
+    const taken = new Set<Vehicle>();
     for (const v of list) {
-      for (const o of [...this.parked]) if (Math.hypot(o.x - v.x, o.y - v.y) < (o.length + v.length) / 2) this.take(o);
+      // Anything parked where it is goes (the longest's within a cell and a bit of it).
+      const reach = Math.ceil((v.length + 14 * M) / 2 / CELL);
+      const [ci, cj] = [Math.floor(v.x / CELL), Math.floor(v.y / CELL)];
+      for (let i = ci - reach; i <= ci + reach; i++) {
+        for (let j = cj - reach; j <= cj + reach; j++) {
+          for (const o of grid.get(i * 100003 + j) ?? []) {
+            if (taken.has(o) || Math.hypot(o.x - v.x, o.y - v.y) >= (o.length + v.length) / 2) continue;
+            taken.add(o);
+            this.take(o);
+          }
+        }
+      }
       Object.assign(v, { mode: 'parked', vx: 0, vy: 0, spin: 0, speed: 0, post: undefined, spot: undefined, parking: false, siren: false, blues: 0 });
       this.parked.push(v);
       this.parkedById.set(v.id, v);
+      index(v);
     }
   }
 

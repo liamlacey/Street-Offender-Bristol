@@ -32,13 +32,13 @@ const IN_HAND = 4;
  * here, a piece a frame.
  */
 export class GroundLayer {
-  private readonly pieces = new Map<string, { sheet: TerrainSheet; key: string; used: number }>();
+  private readonly pieces = new Map<number, { sheet: TerrainSheet; key: string; used: number }>();
   private palette: Palette | null = null;
   private frame = 0;
   private painted = 0;
   private worker: Worker | null = null;
   /** The pieces the worker's painting (by chunk): which request's the latest for each. */
-  private readonly asked = new Map<string, number>();
+  private readonly asked = new Map<number, number>();
   private requests = 0;
 
   constructor(
@@ -234,7 +234,7 @@ export class GroundLayer {
     }
   }
 
-  private forget(chunk: string): void {
+  private forget(chunk: number): void {
     const piece = this.pieces.get(chunk);
     if (!piece) return;
     piece.sheet.destroy();
@@ -249,7 +249,7 @@ export class GroundLayer {
 }
 
 /** Rows of the surface grid painted at a time (see `surfacesWork`). */
-const STRIP = 64;
+const STRIP = 32;
 
 /** Paints the map (or the part of it from (x0, y0) to (x1, y1), px) in its surfaces' flat colours, a metre to a pixel, and reads it back as the surface grid. */
 export function paintSurfaces(world: World, bounds?: { x0: number; y0: number; x1: number; y1: number }): SurfaceGrid {

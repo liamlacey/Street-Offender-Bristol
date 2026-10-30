@@ -117,7 +117,7 @@ function* fillRingsWork(cells: Uint8Array, cols: number, rows: number, cell: num
   const r1 = Math.min(rows - 1, Math.ceil((y1 - oy) / cell));
   for (let r = r0; r <= r1; r++) {
     done += edges;
-    if (done > 60_000) {
+    if (done > 15_000) {
       done = 0;
       yield;
     }
@@ -197,11 +197,24 @@ export class WaterGrid {
     for (const a of map.areas) if (a.kind === 'water') (yield* shore(a.rings, 1), yield);
     for (const a of map.areas) if (a.kind === 'pontoon' || a.kind === 'pier') (yield* shore(a.rings, 0), yield);
     yield;
-    // The ships moored for good (mapped as buildings), and anything else built out over the water.
-    const built = map.buildings.filter((b) => b.solid);
+    // The ships moored for good (mapped as buildings), and anything else built out over the water. (Only those over it: any of
+    // the water's cells in the box round it. The rest of the map's buildings, on dry land, change nothing.)
+    const overWater = (ring: Pts) => {
+      let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+      for (let i = 0; i + 1 < ring.length; i += 2) [x0, y0, x1, y1] = [Math.min(x0, ring[i]), Math.min(y0, ring[i + 1]), Math.max(x1, ring[i]), Math.max(y1, ring[i + 1])];
+      const [c0, c1] = [Math.max(0, Math.floor((x0 - this.ox) / SHORE_CELL)), Math.min(this.wetCols - 1, Math.floor((x1 - this.ox) / SHORE_CELL))];
+      const [r0, r1] = [Math.max(0, Math.floor((y0 - this.oy) / SHORE_CELL)), Math.min(this.wetRows - 1, Math.floor((y1 - this.oy) / SHORE_CELL))];
+      for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (this.wet[r * this.wetCols + c]) return true;
+      return false;
+    };
+    const built: typeof map.buildings = [];
+    for (const [k, b] of map.buildings.entries()) {
+      if (k % 400 === 399) yield;
+      if (b.solid && overWater(b.rings[0])) built.push(b);
+    }
     for (const [k, b] of built.entries()) {
       yield* shore(b.rings, 0);
-      if (k % 150 === 149) yield;
+      if (k % 30 === 29) yield;
     }
     yield;
     const wet = new Uint8Array(this.cols * this.rows);
@@ -209,7 +222,7 @@ export class WaterGrid {
     for (const a of map.areas) if (a.kind === 'pontoon' || a.kind === 'pier') (yield* fill(wet, a.rings, 0), yield);
     for (const [k, b] of built.entries()) {
       yield* fill(wet, b.rings, 0);
-      if (k % 150 === 149) yield;
+      if (k % 30 === 29) yield;
     }
     // The moored boats (and where they will be), half a metre round.
     for (const [k, b] of berths.entries()) {
@@ -224,7 +237,7 @@ export class WaterGrid {
     const queue = new Int32Array(wet.length);
     let [head, tail] = [0, 0];
     for (let i = 0; i < wet.length; i++) {
-      if ((i & 65535) === 0) yield;
+      if ((i & 4095) === 0) yield;
       const [c, r] = [i % this.cols, Math.floor(i / this.cols)];
       if (!wet[i]) continue;
       this.clear[i] = 255;
@@ -234,7 +247,7 @@ export class WaterGrid {
       }
     }
     for (let i = 0; i < wet.length; i++) {
-      if ((i & 16383) === 0) yield;
+      if ((i & 4095) === 0) yield;
       if (!wet[i] || this.clear[i] === 1) continue;
       if (this.next(i, (j) => !wet[j])) {
         this.clear[i] = 1;
@@ -243,7 +256,7 @@ export class WaterGrid {
     }
     yield;
     while (head < tail) {
-      if ((head & 16383) === 0) yield;
+      if ((head & 4095) === 0) yield;
       const i = queue[head++];
       this.next(i, (j) => {
         if (this.clear[j] > this.clear[i] + 1) {
@@ -255,7 +268,7 @@ export class WaterGrid {
     yield;
     let parts = 0;
     for (let i = 0; i < wet.length; i++) {
-      if ((i & 16383) === 0) yield;
+      if ((i & 4095) === 0) yield;
       if (this.part[i] || this.clear[i] < CLEAR) continue;
       this.part[i] = Math.min(65535, ++parts);
       [head, tail] = [0, 0];

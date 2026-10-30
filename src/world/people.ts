@@ -508,6 +508,10 @@ const seatWeight = (s: Seat) => (PLAY.has(s.kind) ? PLAY_WEIGHT : s.kind === 'ca
 /** Cells for finding who's close, px. */
 const NEAR_CELL = 4 * M;
 const key = (x: number, y: number) => `${Math.floor(x / GRID)},${Math.floor(y / GRID)}`;
+/** The same cells, numbered (no string made for each look: see `inRoad`, called a great deal). */
+const cellOf = (x: number, y: number) => (Math.floor(x / GRID) + 50_000) * 100_000 + Math.floor(y / GRID) + 50_000;
+/** A piece of a road's carriageway in the grid: its road times this, plus which piece along it. */
+const PIECES = 65_536;
 
 /** A line's name, by where it is (the same walk or ring, made again, has the same one). */
 /** How far a point is from a ring's edge, px. */
@@ -560,7 +564,10 @@ export class People {
   private readonly spotGrid = new Map<string, number[]>();
   /** The roads' carriageways: where people mustn't walk (but to cross). */
   private readonly roads: { pts: Pts; half: number; level: number }[] = [];
-  private readonly roadGrid = new Map<string, number[]>();
+  /** The pieces of the walks looked at, by `nearestWalk` (kept, rather than made each time). */
+  private readonly seenPieces = new Set<number>();
+  /** The pieces of them (see PIECES) by the cells they pass through (and either side). */
+  private readonly roadGrid = new Map<number, number[]>();
   private nextId = 1;
   private readonly rand: () => number;
   /** Who's where (by 4 m cells), each frame. */
@@ -677,17 +684,23 @@ export class People {
       if (!VEHICLE_ROADS.has(r.kind) || r.kind === 'track') continue;
       this.roads.push({ pts: r.pts, half: r.width / 2, level: r.bridge ? 1 : 0 });
       const k = this.roads.length - 1;
-      const index = (x: number, y: number) => {
-        const list = this.roadGrid.get(key(x, y)) ?? [];
-        if (!list.includes(k)) list.push(k);
-        this.roadGrid.set(key(x, y), list);
-      };
       for (let j = 0; j + 3 < r.pts.length; j += 2) {
+        const piece = k * PIECES + j / 2;
+        const index = (x: number, y: number) => {
+          const c = cellOf(x, y);
+          const list = this.roadGrid.get(c);
+          if (!list) this.roadGrid.set(c, [piece]);
+          else if (list[list.length - 1] !== piece && !list.includes(piece)) list.push(piece);
+        };
         const len = Math.hypot(r.pts[j + 2] - r.pts[j], r.pts[j + 3] - r.pts[j + 1]);
         // Every cell it passes through, and those either side (a wide road reaches into them).
         for (let d = 0; d <= len; d += GRID / 4) {
           const [x, y] = [r.pts[j] + ((r.pts[j + 2] - r.pts[j]) * d) / (len || 1), r.pts[j + 1] + ((r.pts[j + 3] - r.pts[j + 1]) * d) / (len || 1)];
-          for (const [ox, oy] of [[0, 0], [r.width, 0], [-r.width, 0], [0, r.width], [0, -r.width]]) index(x + ox, y + oy);
+          index(x, y);
+          index(x + r.width, y);
+          index(x - r.width, y);
+          index(x, y + r.width);
+          index(x, y - r.width);
         }
       }
     }
@@ -732,8 +745,9 @@ export class People {
       });
     this.inPark = (x, y) => parks.some((a) => x >= a.x0 && x <= a.x1 && y >= a.y0 && y <= a.y1 && pointInRing(x, y, a.ring));
     // Over the bridges too (a road bridge's pavements are decks of their own: see Decks), on their level.
+    const walking = every(4);
     for (const [i, r] of roads.entries()) {
-      if (pause()) yield;
+      if (walking()) yield;
       const level = r.bridge ? 1 : 0;
       if (VEHICLE_ROADS.has(r.kind)) {
         if (!r.pavement) continue;
@@ -916,21 +930,23 @@ export class People {
     let best: [number, number, number, number, number] | null = null;
     let bestD = reach;
     const cells = Math.ceil(reach / GRID) + 1;
-    const seen = new Set<number>();
+    // (Each piece of a walk near enough: those its points every 10 m are in, round about. Not all of a long walk.)
+    const seen = this.seenPieces;
+    seen.clear();
     for (let i = -cells; i <= cells; i++) {
       for (let j = -cells; j <= cells; j++) {
-        for (const [k] of this.along.get(key(x + i * GRID, y + j * GRID)) ?? []) {
-          if (seen.has(k) || this.walks[k].level !== level) continue;
-          seen.add(k);
+        for (const [k, seg] of this.along.get(key(x + i * GRID, y + j * GRID)) ?? []) {
+          const piece = k * PIECES + seg;
+          if (seen.has(piece) || this.walks[k].level !== level) continue;
+          seen.add(piece);
           const p = this.walks[k].pts;
-          for (let s = 0; s + 3 < p.length; s += 2) {
-            const [ax, ay, bx, by] = [p[s], p[s + 1], p[s + 2], p[s + 3]];
-            const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
-            const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2));
-            const [px, py] = [ax + (bx - ax) * t, ay + (by - ay) * t];
-            const d = Math.hypot(px - x, py - y);
-            if (d < bestD && (!offRoad || this.clear(x, y, px, py, level))) [best, bestD] = [[px, py, k, s / 2, t], d];
-          }
+          const s = seg * 2;
+          const [ax, ay, bx, by] = [p[s], p[s + 1], p[s + 2], p[s + 3]];
+          const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+          const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2));
+          const [px, py] = [ax + (bx - ax) * t, ay + (by - ay) * t];
+          const d = Math.hypot(px - x, py - y);
+          if (d < bestD && (!offRoad || this.clear(x, y, px, py, level))) [best, bestD] = [[px, py, k, seg, t], d];
         }
       }
     }
@@ -975,15 +991,18 @@ export class People {
   }
 
   inRoad(x: number, y: number, margin = -0.5 * M, level = 0): boolean {
-    for (const k of this.roadGrid.get(key(x, y)) ?? []) {
-      const { pts, half, level: on } = this.roads[k];
+    const list = this.roadGrid.get(cellOf(x, y));
+    if (!list) return false;
+    for (const piece of list) {
+      const { pts, half, level: on } = this.roads[Math.floor(piece / PIECES)];
       if (on !== level) continue;
-      for (let i = 0; i + 3 < pts.length; i += 2) {
-        const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
-        const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
-        const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2));
-        if (Math.hypot(ax + (bx - ax) * t - x, ay + (by - ay) * t - y) < half + margin) return true;
-      }
+      const i = (piece % PIECES) * 2;
+      const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
+      const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / len2));
+      const reach = half + margin;
+      const [ex, ey] = [ax + (bx - ax) * t - x, ay + (by - ay) * t - y];
+      if (ex * ex + ey * ey < reach * reach && reach > 0) return true;
     }
     return false;
   }

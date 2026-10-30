@@ -11,7 +11,7 @@ import { footprints, onFootprints, streetLifeWork } from './streetLife';
 import { rectsOverlap } from './playgrounds';
 import { homesWork } from './homes';
 import { placesWork } from './places';
-import { type Work, drain } from './work.ts';
+import { type Work, drain, every } from './work.ts';
 import { distanceTo } from './geometry';
 
 /** A car park's bays: how wide, how deep, and the aisle between rows, px. */
@@ -313,7 +313,9 @@ export function* parkingWork(map: GameMap): Work<Space[]> {
   };
   // The drives in front of people's houses (see homes.ts); at the places (see places.ts), a lorry backed up to a loading bay, a car
   // at a lock-up garage. (Not over a car park's bays, nor each other.)
+  const pause = every(100);
   for (const s of [...(yield* homesWork(map)).spaces, ...(yield* placesWork(map)).spaces]) {
+    if (pause()) yield;
     if (!free(s) || !clearOfLots(s)) continue;
     keep(s);
     out.push({ ...s });

@@ -89,6 +89,21 @@ export function waterOf(map: Pick<GameMap, 'areas'>): (x: number, y: number) => 
 }
 
 const mouths = new WeakMap<Road, [number, number]>();
+/** Each road's box (x0, y0, x1, y1), worked out once for a map's roads (they're looked through for each tunnel's ends). */
+const roadBoxes = new WeakMap<Road[], Float64Array>();
+
+function boxesOf(roads: Road[]): Float64Array {
+  let boxes = roadBoxes.get(roads);
+  if (boxes) return boxes;
+  boxes = new Float64Array(roads.length * 4);
+  for (const [k, r] of roads.entries()) {
+    let [a, b, c, d] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let i = 0; i + 1 < r.pts.length; i += 2) [a, b, c, d] = [Math.min(a, r.pts[i]), Math.min(b, r.pts[i + 1]), Math.max(c, r.pts[i]), Math.max(d, r.pts[i + 1])];
+    boxes.set([a, b, c, d], k * 4);
+  }
+  roadBoxes.set(roads, boxes);
+  return boxes;
+}
 
 /**
  * How far into a tunnel its mouth goes at each end (`end` 0 its start, 1
@@ -102,12 +117,12 @@ export function tunnelMouth(tunnel: Road, end: 0 | 1, roads: Road[]): number {
     const p = tunnel.pts;
     const length = lineLength(p);
     const reach = Math.min(length, DECK_END);
+    const boxes = boxesOf(roads);
     const over = (x0: number, y0: number, x1: number, y1: number) =>
-      roads.filter((r) => {
+      roads.filter((r, k) => {
         if (r === tunnel || r.tunnel || r.bridge || r.kind === 'rail' || r.kind === 'steps') return false;
         const pad = r.width / 2 + PAVEMENT + 8;
-        let [a, b, c, d] = [Infinity, Infinity, -Infinity, -Infinity];
-        for (let i = 0; i + 1 < r.pts.length; i += 2) [a, b, c, d] = [Math.min(a, r.pts[i]), Math.min(b, r.pts[i + 1]), Math.max(c, r.pts[i]), Math.max(d, r.pts[i + 1])];
+        const [a, b, c, d] = [boxes[k * 4], boxes[k * 4 + 1], boxes[k * 4 + 2], boxes[k * 4 + 3]];
         return c + pad > x0 && a - pad < x1 && d + pad > y0 && b - pad < y1;
       });
     had = [0, 1].map((e) => {

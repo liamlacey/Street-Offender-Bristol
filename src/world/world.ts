@@ -265,8 +265,10 @@ export interface LooseProp extends Body {
   moved: boolean;
   /** When it broke off something, seconds (game time), if it did. */
   born?: number;
-  /** Where it stood on the map (see `homeOf`), if it's one of the map's (not a piece of something). */
+  /** Where it stood on the map (see `homeOf`), if it's one of the map's (not a piece of something); and that, as numbers. */
   home?: string;
+  homeX?: number;
+  homeY?: number;
   /** A trolley: taken into the shop (not there), or full of shopping (see people.ts). */
   inside?: boolean;
   full?: boolean;
@@ -277,6 +279,13 @@ export interface LooseProp extends Body {
 /** A loose thing's place on the map: what it is and where it stood (the same in each region of the map it's in). */
 export function homeOf(p: { kind: string; x: number; y: number }): string {
   return `${p.kind},${p.x},${p.y}`;
+}
+
+/** Whether a loose thing's where it stood on the map (as `homeOf(b) === b.home`, but nothing made: tens of thousands are asked). */
+export function atHome(b: { kind: string; x: number; y: number; home?: string; homeX?: number; homeY?: number }): boolean {
+  if (!b.home) return false;
+  if (b.homeX !== undefined) return b.x === b.homeX && b.y === b.homeY;
+  return homeOf(b) === b.home;
 }
 
 /** What's in one chunk of the map: indices into the map's lists. */
@@ -307,13 +316,13 @@ export interface World {
   loose: LooseProp[];
   /** The props that are fixed or painted on (all but the loose ones). */
   fixed: FixedProp[];
-  chunks: Map<string, ChunkIndex>;
+  chunks: Map<number, ChunkIndex>;
   /** The bridges' decks, their edges worked out (for the region's use: see region.ts). */
   decks?: Decks;
 }
 
-export function chunkKey(cx: number, cy: number): string {
-  return `${cx},${cy}`;
+export function chunkKey(cx: number, cy: number): number {
+  return (cx + 50_000) * 100_000 + (cy + 50_000);
 }
 
 /** An archway is at least this wide, px, so a car fits through. */
@@ -715,12 +724,14 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   const buildingIds = (map as GameMap & { ids?: { buildings: number[] } }).ids?.buildings;
   // The bigger buildings, by where they are: a small one inside one of them (a stair tower, a lift's housing, up on its roof) is
   // part of it, not a hut.
-  const bigger = new BoxGrid(
-    map.buildings.filter((b) => b.drawn && Math.abs(ringArea(b.rings[0])) >= HUT_AREA * map.pxPerMetre ** 2).map((b) => {
-      const [x0, y0, x1, y1] = bounds(b.rings[0]);
-      return { x0, y0, x1, y1, ring: b.rings[0] };
-    }),
-  );
+  const big: { x0: number; y0: number; x1: number; y1: number; ring: Pts }[] = [];
+  for (const b of map.buildings) {
+    if (pause()) yield;
+    if (!b.drawn || Math.abs(ringArea(b.rings[0])) < HUT_AREA * map.pxPerMetre ** 2) continue;
+    const [x0, y0, x1, y1] = bounds(b.rings[0]);
+    big.push({ x0, y0, x1, y1, ring: b.rings[0] });
+  }
+  const bigger = new BoxGrid(big);
   const within = (b: Building) => {
     const [x0, y0, x1, y1] = bounds(b.rings[0]);
     const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2];
@@ -753,10 +764,19 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
     if (pause()) yield;
   }
   // The gardens' walls, fences and hedges (see homes.ts); the places' fences (see places.ts).
-  for (const l of homes.lines) addRing(ground, l.pts, LINE_THICKNESS[l.kind]!, false, 0, l.kind, l.height);
-  for (const l of places.lines) addRing(ground, l.pts, l.kind === 'mesh' || l.kind === 'net' ? 0.6 : l.kind === 'prison' ? 3 : LINE_THICKNESS[l.kind]!, false, 0, l.kind, l.height);
+  for (const l of homes.lines) {
+    addRing(ground, l.pts, LINE_THICKNESS[l.kind]!, false, 0, l.kind, l.height);
+    if (pause()) yield;
+  }
+  for (const l of places.lines) {
+    addRing(ground, l.pts, l.kind === 'mesh' || l.kind === 'net' ? 0.6 : l.kind === 'prison' ? 3 : LINE_THICKNESS[l.kind]!, false, 0, l.kind, l.height);
+    if (pause()) yield;
+  }
   // The building sites' fences (Heras panels: see sites.ts).
-  for (const run of (yield* siteLifeWork(map)).fences) addRing(ground, run, 0.6, false, 0, 'heras');
+  for (const run of (yield* siteLifeWork(map)).fences) {
+    addRing(ground, run, 0.6, false, 0, 'heras');
+    if (pause()) yield;
+  }
   // The edge of the map.
   const edge: Wall[] = [];
   addRing(edge, [0, 0, map.width, 0, map.width, map.height, 0, map.height], 0, true, 0);
@@ -791,7 +811,7 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
       // Benches face along the nearest wall or path; without knowing which (unless the map says), turn each its own way.
       // (Turned by where it is, not its place in the list: the same in each region of the map it's in.)
       const turn = (Math.abs(Math.round(p.x * 7 + p.y * 13)) * 2.399) % Math.PI;
-      loose.push({ kind: p.kind, x: p.x, y: p.y, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: p.angle ?? turn - Math.PI / 2, spin: 0, moved: false, level, home: homeOf(p) });
+      loose.push({ kind: p.kind, x: p.x, y: p.y, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: p.angle ?? turn - Math.PI / 2, spin: 0, moved: false, level, home: homeOf(p), homeX: p.x, homeY: p.y });
     } else {
       fixed.push({ ...p, level });
     }
@@ -801,7 +821,7 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   const add = (kind: 'foodcart' | 'stall' | 'aboard', x: number, y: number, angle: number, variant?: number) => {
     const l = LOOSE[kind]!;
     const p = { kind, x, y };
-    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle, spin: 0, moved: false, level: 0, home: homeOf(p), ...(variant === undefined ? {} : { variant }) });
+    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle, spin: 0, moved: false, level: 0, home: homeOf(p), homeX: p.x, homeY: p.y, ...(variant === undefined ? {} : { variant }) });
   };
   for (const c of life.carts) add('foodcart', c.x, c.y, c.angle, c.kind);
   for (const s of life.stalls) add('stall', s.x, s.y, s.angle - Math.PI / 2, s.kind);
@@ -813,7 +833,7 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
   for (const t of [...sites.things, ...sites.tips]) {
     const l = LOOSE[t.kind]!;
     const p = { kind: t.kind, x: t.x, y: t.y };
-    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: t.angle, spin: 0, moved: false, level: 0, home: homeOf(p) });
+    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: t.angle, spin: 0, moved: false, level: 0, home: homeOf(p), homeX: p.x, homeY: p.y });
   }
   for (const c of sites.cranes) {
     posts[0].push({ x: c.x, y: c.y, r: POST_RADIUS.crane!, thing: 'crane', index: fixed.length });
@@ -824,7 +844,7 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
     if (pause()) yield;
     const l = LOOSE[t.kind]!;
     const p = { kind: t.kind, x: t.x, y: t.y };
-    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: t.angle, spin: 0, moved: false, level: 0, home: homeOf(p), ...(t.variant === undefined ? {} : { variant: t.variant }) });
+    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: t.angle, spin: 0, moved: false, level: 0, home: homeOf(p), homeX: p.x, homeY: p.y, ...(t.variant === undefined ? {} : { variant: t.variant }) });
   }
   // What's round the places (see places.ts).
   for (const t of places.things) {
@@ -838,13 +858,13 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
     const l = LOOSE[t.kind as PropKind];
     if (!l) continue;
     const p = { kind: t.kind as PropKind, x: t.x, y: t.y };
-    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: t.angle, spin: 0, moved: false, level: 0, home: homeOf(p), ...(t.variant === undefined ? {} : { variant: t.variant }) });
+    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: t.angle, spin: 0, moved: false, level: 0, home: homeOf(p), homeX: p.x, homeY: p.y, ...(t.variant === undefined ? {} : { variant: t.variant }) });
   }
   // What's in the playgrounds (see playgrounds.ts).
   for (const t of yield* playgroundsWork(map)) {
     const l = LOOSE[t.kind]!;
     const p = { kind: t.kind, x: t.x, y: t.y };
-    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: t.angle, spin: 0, moved: false, level: 0, home: homeOf(p) });
+    loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: t.angle, spin: 0, moved: false, level: 0, home: homeOf(p), homeX: p.x, homeY: p.y });
   }
   // The trolleys in the big shops' car parks' shelters (more than half full, each its own way).
   for (const rows of trolleyRows(map)) {
@@ -853,7 +873,7 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
       const n = Math.round(count * (0.5 + (Math.abs(Math.round(x * 7 + y * 13)) % 5) / 10));
       for (let k = 0; k < n; k++) {
         const p = { kind: 'trolley' as const, x: Math.round((x + Math.cos(angle) * k * 0.4 * 8) * 10) / 10, y: Math.round((y + Math.sin(angle) * k * 0.4 * 8) * 10) / 10 };
-        loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: angle + Math.PI, spin: 0, moved: false, level: 0, home: homeOf(p) });
+        loose.push({ ...p, r: l.r, length: l.length, invMass: l.invMass, vx: 0, vy: 0, angle: angle + Math.PI, spin: 0, moved: false, level: 0, home: homeOf(p), homeX: p.x, homeY: p.y });
       }
     }
   }
@@ -863,9 +883,9 @@ export function* worldWork(map: GameMap, shared?: Terrain): Work<World> {
 }
 
 /** Which chunks each thing reaches into (with its shadow, for buildings). */
-export function* indexChunks(map: GameMap): Work<Map<string, ChunkIndex>> {
-  const pause = every(800);
-  const chunks = new Map<string, ChunkIndex>();
+export function* indexChunks(map: GameMap): Work<Map<number, ChunkIndex>> {
+  const pause = every(200);
+  const chunks = new Map<number, ChunkIndex>();
   const add = (list: keyof ChunkIndex, i: number, x0: number, y0: number, x1: number, y1: number) => {
     for (let cx = Math.floor(x0 / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
       for (let cy = Math.floor(y0 / CHUNK); cy <= Math.floor(y1 / CHUNK); cy++) {
@@ -879,28 +899,28 @@ export function* indexChunks(map: GameMap): Work<Map<string, ChunkIndex>> {
       }
     }
   };
-  map.areas.forEach((a, i) => {
+  for (const [i, a] of map.areas.entries()) {
     const [x0, y0, x1, y1] = bounds(a.rings[0]);
     add('areas', i, x0 - 4, y0 - 4, x1 + 4, y1 + 4);
-  });
-  yield;
-  map.roads.forEach((r, i) => {
+    if (pause()) yield;
+  }
+  for (const [i, r] of map.roads.entries()) {
     // Wide enough for the pavements either side.
     const pad = r.width / 2 + 24;
     const [x0, y0, x1, y1] = bounds(r.pts);
     add('roads', i, x0 - pad, y0 - pad, x1 + pad, y1 + pad);
-  });
-  yield;
+    if (pause()) yield;
+  }
   (map.paint ?? []).forEach((p, i) => {
     // Arrows and boxes run a few metres along their way.
     const reach = p.width + 6 * 8;
     add('paint', i, p.x - reach, p.y - reach, p.x + reach, p.y + reach);
   });
-  map.lines.forEach((l, i) => {
+  for (const [i, l] of map.lines.entries()) {
     const [x0, y0, x1, y1] = bounds(l.pts);
     add('lines', i, x0 - 8, y0 - 8, x1 + 8, y1 + 8);
-  });
-  yield;
+    if (pause()) yield;
+  }
   for (const [i, b] of map.buildings.entries()) {
     const [x0, y0, x1, y1] = bounds(b.rings[0]);
     const [sx, sy] = shadowOffset(b.top);

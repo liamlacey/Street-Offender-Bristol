@@ -1727,9 +1727,16 @@ as a `GameMap` like the whole one, of only what's in it (`assemble`):
 `region.ts` makes everything the game needs from the region: the world, the
 surfaces, the decks, the traffic, the people and the boats.
 
-When you're 300 m from the region's middle (either way), the next region is
-made ready. It's made a few milliseconds a frame as you drive; every long
-loop pauses now and then (`work.ts`). Then it takes over (`GameScene.enter`):
+When you'll be 300 m from the region's middle (either way) in 8 s, at the
+speed you're going, the next region is made ready. Its layout (gardens,
+places, sites, street and park life, playgrounds) is worked out in a worker
+(`layoutWorker.ts`), and the rest a few milliseconds a frame as you drive:
+each frame, enough to have it ready 3 s before you'd reach the edge of the one
+in use (from how long the last ones took in all), at least what the frame can
+spare and at most 10 ms; only if you'd otherwise drive off the edge, all at
+once. Every long loop pauses every few milliseconds (`work.ts`). Then its trees
+and loose things are got ready to take over, a few frames more
+(`GameScene.readyWork`), and it takes over (`GameScene.enter`):
 
 - **Round the view** (100 m out from it), what's there is carried over as it
   is. The traffic, people and boats are adopted onto the new region's lanes,
@@ -1740,7 +1747,9 @@ loop pauses now and then (`work.ts`). Then it takes over (`GameScene.enter`):
   walls knocked through, posts knocked down, trees felled, parapets. Loose
   things moved or smashed, and vehicles left standing (dented, shoved, got
   out of), are put by outside the region and put back when it's back.
-  Tyre marks are kept up to a limit (the oldest out of sight go first).
+  Tyre marks are kept in 64 textures, made at the start (making one as you
+  drive holds the frame up while the GPU catches up): past that, the one
+  longest out of sight is wiped and used again.
 
 Only the region's tiles are kept, so the game holds two regions at most. A
 jump from the menu to somewhere outside the region makes the region there

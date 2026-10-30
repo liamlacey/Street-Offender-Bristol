@@ -4,7 +4,7 @@ import { HudScene } from './scenes/HudScene';
 import { LoadingScene } from './scenes/LoadingScene';
 import { MenuScene } from './scenes/MenuScene';
 import { TitleScene } from './scenes/TitleScene';
-import { watch } from './scenes/perfMeter';
+import { PERF, watch } from './scenes/perfMeter';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -27,5 +27,6 @@ const game = new Phaser.Game({
 // (`?perf` on the address: how smoothly it's running, over the game.)
 watch(game);
 
-// For poking at the game from the browser's console (and the screenshot scripts) while developing.
-if (import.meta.env.DEV) (window as unknown as { game: Phaser.Game }).game = game;
+// For poking at the game from the browser's console (and the screenshot scripts) while developing; and, with `?perf`, timing it
+// as it's played (the built game, as the phone has it).
+if (import.meta.env.DEV || PERF) (window as unknown as { game: Phaser.Game }).game = game;

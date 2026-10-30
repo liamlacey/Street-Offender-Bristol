@@ -43,7 +43,7 @@ export function buildingIndex(world: World, terrain: Terrain): BuildingIndex {
 
 /** The same, a little at a time (see work.ts). */
 export function* buildingIndexWork(world: World, terrain: Terrain): Work<BuildingIndex> {
-  const pause = every(400);
+  const pause = every(100);
   const all: BuildingEntry[] = [];
   const ids = (world.map as { ids?: { buildings: number[] } }).ids?.buildings;
   for (const [k, b] of world.map.buildings.entries()) {

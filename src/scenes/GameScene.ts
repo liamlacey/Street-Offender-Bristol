@@ -34,7 +34,8 @@ import { Perspective } from '../world/perspective';
 import { Terrain } from '../world/terrain';
 import { SURFACE_KIND, Surface, type SurfaceGrid } from '../world/surface';
 import { type Light, lightAt } from '../world/lights';
-import { CHUNK, type LooseProp, type Post, type World, beacons, chunkKey, homeOf, ruin, shadowOffset } from '../world/world';
+import { CHUNK, type LooseProp, type Post, type World, beacons, atHome, chunkKey, ruin, shadowOffset } from '../world/world';
+import { type Work, drain, every, runFor } from '../world/work.ts';
 import { Changes } from '../world/changes';
 import type { FirstIds, Progress, Region } from '../world/region';
 import { type Obstacle, Trains } from '../world/trains';
@@ -183,21 +184,7 @@ export class GameScene extends Phaser.Scene {
    * its trunk where it stands (seen through the crown when you're under it),
    * how see-through its crown is.
    */
-  private trees: {
-    x: number;
-    y: number;
-    z: number;
-    h: number;
-    gone?: boolean;
-    foot: { x: number; y: number; r: number };
-    /** Its pictures, only while it's in or near the view (and its crown's picture, and how big): a big map has many thousands. */
-    art: { image: Phaser.GameObjects.Image; trunk: Phaser.GameObjects.Image; bole: Phaser.GameObjects.Image } | null;
-    tex: string;
-    scale: number;
-    alpha: number;
-    /** Its crown's turn as it stands (it sways about it), or as it lies, fallen. */
-    turn: number;
-  }[] = [];
+  private trees: TreeShown[] = [];
   /** Trees' pictures not in use, to use again. */
   private readonly treeArtPool: { image: Phaser.GameObjects.Image; trunk: Phaser.GameObjects.Image; bole: Phaser.GameObjects.Image }[] = [];
   /** Each traffic light's head, up its pole, with what it's showing. */
@@ -256,7 +243,7 @@ export class GameScene extends Phaser.Scene {
   private region!: Region;
   private readonly changes = new Changes();
   /** The region's trees by their ids in the whole map. */
-  private readonly treeAt = new Map<number, number>();
+  private treeAt = new Map<number, number>();
   /** The trees, props and loose things by where they are (so only those round the view are looked at each frame), and those shown last frame. */
   private treeGrid!: Grid;
   private propGrid!: Grid;
@@ -271,9 +258,13 @@ export class GameScene extends Phaser.Scene {
   /** The building sites' diggers and dumpers at work (see sites.ts). */
   private machines: SiteMachines | null = null;
   private machineBodies: LooseProp[] = [];
-  private looseByChunk = new Map<string, number[]>();
+  private looseByChunk = new Map<number, number[]>();
+  /** Where the trolleys are in `loose` (people push them about: see `updateLoose`). */
+  private readonly trolleys: number[] = [];
+  /** The next region, made: its trees and loose things being got ready to take over (see `readyWork`). */
+  private readying: { region: Region; work: Work<Ready> } | null = null;
   /** Which chunk each loose thing's in the index under (by its place in `loose`). */
-  private readonly looseChunk: string[] = [];
+  private looseChunk: number[] = [];
   private effects!: CarEffects;
   private skids!: SkidMarks;
   private audio: CarAudio | null = null;
@@ -550,7 +541,7 @@ export class GameScene extends Phaser.Scene {
    * and boats, and the loose things where they lie. Everything drawn is
    * pointed at it; the things standing about it are its own.
    */
-  private enter(r: Region, carry: boolean): void {
+  private enter(r: Region, carry: boolean, ready: Ready = drain(this.readyWork(r))): void {
     const old = this.region === r ? undefined : this.region;
     const keep = carry && old ? this.keepView() : null;
     const down = this.changes.apply(r.walls, r.posts, r.map.region);
@@ -576,11 +567,11 @@ export class GameScene extends Phaser.Scene {
     this.parkedAway = left.filter((v) => !here(v));
     this.assign(r);
     this.placeProps();
-    this.placeTrees();
+    this.placeTrees(ready);
     this.placeLights();
-    this.placeLoose(r, keep);
+    this.placeLoose(r, keep, ready);
     for (const { post } of down) this.showDown(post);
-    this.people.useSeats(this.loose.map((l) => l.body));
+    this.people.useSeats(this.loose.flatMap((l) => (l.body.gone ? [] : [l.body])));
     if (old) {
       this.ground.use(this.world, this.terrain, r.prepared);
       this.skids.use(this.terrain);
@@ -665,41 +656,79 @@ export class GameScene extends Phaser.Scene {
    * this one put by till they're in one again); and, carrying on, those round
    * the view as they are (people sit on the benches).
    */
-  private placeLoose(r: Region, keep: { x0: number; y0: number; x1: number; y1: number } | null): void {
+  private placeLoose(r: Region, keep: { x0: number; y0: number; x1: number; y1: number } | null, ready: Ready): void {
     const { x0, y0, x1, y1 } = r.map.region;
     const inKeep = (b: LooseProp) => !!keep && b.x >= keep.x0 && b.x <= keep.x1 && b.y >= keep.y0 && b.y <= keep.y1;
-    const taken = new Set(this.lostHomes);
-    const loose: GameScene['loose'] = [];
+    // The region's own (made ready: see `readyWork`), as they stand; and the index of where they are.
+    const had = this.loose;
+    const loose = ready.loose;
+    this.looseByChunk = ready.byChunk;
+    this.looseChunk = ready.chunkOf;
+    this.loose = loose;
     const away: GameScene['loose'] = [];
-    for (const l of [...this.loose, ...this.away]) {
+    // What it has of the map's that's gone for good: gone here too.
+    for (const home of this.lostHomes) {
+      const i = ready.looseAt.get(home);
+      if (i !== undefined) loose[i].body.gone = true;
+    }
+    // Those of the last region and those put by, without making a list of them all (there are tens of thousands): one of the
+    // map's that's been moved (or is by you), in place of the region's own; the rest in too (pieces of things), at the end.
+    const was = this.away;
+    const placed = new Set<number>();
+    for (let k = 0; k < had.length + was.length; k++) {
+      const l = k < had.length ? had[k] : was[k - had.length];
       const b = l.body;
       if (b.gone) {
-        if (b.home) this.lostHomes.add(b.home);
-        if (b.home) taken.add(b.home);
+        if (b.home && !this.lostHomes.has(b.home)) {
+          this.lostHomes.add(b.home);
+          const i = ready.looseAt.get(b.home);
+          if (i !== undefined) loose[i].body.gone = true;
+        }
         l.image?.destroy();
         continue;
       }
       // One of the map's, where it stood (and not by you): this region has it.
-      if (b.home && !b.moved && !b.wrecked && homeOf(b) === b.home && !inKeep(b)) {
+      if (b.home && !b.moved && !b.wrecked && atHome(b) && !inKeep(b)) {
         l.image?.destroy();
         continue;
       }
-      if (b.home) taken.add(b.home);
-      if (b.x >= x0 && b.x < x1 && b.y >= y0 && b.y < y1) loose.push(l);
-      else {
+      if (!(b.x >= x0 && b.x < x1 && b.y >= y0 && b.y < y1)) {
         l.image?.destroy();
         away.push({ body: b, image: null });
+        // (Not here: if the region has it where it stood, that's not there either: in its place, nothing (not lost for good).)
+        const i = b.home ? ready.looseAt.get(b.home) : undefined;
+        if (i !== undefined && !placed.has(i)) {
+          placed.add(i);
+          loose[i] = { body: { ...loose[i].body, home: undefined, homeX: undefined, homeY: undefined, gone: true }, image: null };
+        }
+        continue;
+      }
+      const i = b.home ? ready.looseAt.get(b.home) : undefined;
+      if (i !== undefined && !placed.has(i)) {
+        placed.add(i);
+        loose[i] = l;
+        this.relocateLoose(i);
+      } else {
+        loose.push(l);
+        this.relocateLoose(loose.length - 1);
       }
     }
-    for (const body of r.world.loose) if (!body.home || !taken.has(body.home)) loose.push({ body, image: null });
-    this.loose = loose;
-    this.pieces = loose.filter((l) => !l.body.home).length;
-    // The building sites' machines, going about their work (the same jobs as before, for those carried over).
+    // How many are pieces of something; the building sites' machines, going about their work (the same jobs as before, for
+    // those carried over); the trolleys.
+    let pieces = 0;
+    const machines: LooseProp[] = [];
+    this.trolleys.length = 0;
+    for (let i = 0; i < loose.length; i++) {
+      const { body } = loose[i];
+      if (!body.home) pieces++;
+      if (MACHINES.has(body.kind)) machines.push(body);
+      if (body.kind === 'trolley') this.trolleys.push(i);
+    }
+    this.pieces = pieces;
     this.machines = new SiteMachines(siteLife(r.map).sites, Math.random, this.machines);
-    this.machineBodies = loose.map((l) => l.body).filter((b) => MACHINES.has(b.kind));
+    this.machineBodies = machines;
     this.away = away;
     this.shownLoose.clear();
-    this.reindexLoose();
   }
 
   /** The traffic lights' heads and the Belisha beacons' globes, up on their poles: the region's (their pictures made as they come into view). */
@@ -748,44 +777,84 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** The region's trees (those felled, where they fell). */
-  private placeTrees(): void {
-    // Their pictures back for the region's trees.
-    for (const t of this.trees) {
-      if (!t.art) continue;
+  private placeTrees(ready: Ready): void {
+    // Their pictures back for the region's trees. (Only those shown have them.)
+    for (const i of this.shownTrees) {
+      const t = this.trees[i];
+      if (!t?.art) continue;
       t.art.image.setVisible(false);
       t.art.trunk.setVisible(false);
       t.art.bole.setVisible(false);
       this.treeArtPool.push(t.art);
       t.art = null;
     }
-    this.trees = [];
-    this.treeAt.clear();
     this.shownTrees.clear();
-    const { trees: t, ids } = this.region.map;
+    // (Made ready already, as they stand: see `readyWork`. Those felled since, as they lie.)
+    this.trees = ready.trees;
+    this.treeAt = ready.treeAt;
+    this.treeGrid = ready.treeGrid;
+    const t = this.region.map.trees;
+    for (const [id, felled] of this.changes.trees) {
+      const i = this.treeAt.get(id);
+      if (i === undefined) continue;
+      const tree = this.trees[i];
+      const r = felled.r ?? t[i * 4 + 2];
+      Object.assign(tree, { x: felled.x, y: felled.y, h: felled.h, gone: felled.gone, scale: r / TREE_RADIUS / ART_SCALE, turn: felled.turn ?? tree.turn });
+      tree.foot.r = r;
+    }
+  }
+
+  /**
+   * What's got ready of a region before it's taken over, a little at a time (see `update`): its trees, as they stand (their
+   * crowns' looks, the ground under them); and its loose things, each its place in the list, and by where they stood (those
+   * carried over into it take their places: see `placeLoose`), and in the index of where they are.
+   */
+  private *readyWork(r: Region): Work<Ready> {
+    const pause = every(2000);
+    const { trees: t, ids } = r.map;
     // Those whose species is known, drawn as that.
     const species = new Map<number, string>();
-    const known = this.world.map.treeSpecies ?? [];
+    const known = r.map.treeSpecies ?? [];
     for (let k = 0; k + 1 < known.length; k += 2) species.set(known[k], TREE_SPECIES[known[k + 1]]);
+    const trees: TreeShown[] = [];
+    const treeAt = new Map<number, number>();
     for (let i = 0; i < t.length; i += 4) {
+      if (pause()) yield;
       const id = ids.trees[i / 4];
-      const felled = this.changes.trees.get(id);
-      this.treeAt.set(id, i / 4);
-      this.trees.push({
-        x: felled?.x ?? t[i],
-        y: felled?.y ?? t[i + 1],
-        z: this.groundAt(t[i], t[i + 1]),
-        h: felled?.h ?? t[i + 3],
-        gone: felled?.gone,
-        foot: { x: t[i], y: t[i + 1], r: felled?.r ?? t[i + 2] },
+      treeAt.set(id, i / 4);
+      trees.push({
+        x: t[i],
+        y: t[i + 1],
+        z: r.treeGround[i / 4] ?? r.terrain.at(t[i], t[i + 1]) * r.terrain.px,
+        h: t[i + 3],
+        foot: { x: t[i], y: t[i + 1], r: t[i + 2] },
         art: null,
         // (By its id: the same look in every region it's in.)
         tex: species.has(i / 4) ? TEX.species(species.get(i / 4)!) : TEX.tree(id % TREE_KINDS),
-        scale: (felled?.r ?? t[i + 2]) / TREE_RADIUS / ART_SCALE,
+        scale: t[i + 2] / TREE_RADIUS / ART_SCALE,
         alpha: 1,
-        turn: felled?.turn ?? ((id * 4 * 1.7) % 6.28) - 3.14,
+        turn: ((id * 4 * 1.7) % 6.28) - 3.14,
       });
     }
-    this.treeGrid = new Grid(this.trees.length, (i) => [this.trees[i].foot.x, this.trees[i].foot.y]);
+    yield;
+    const treeGrid = new Grid(trees.length, (i) => [trees[i].foot.x, trees[i].foot.y]);
+    yield;
+    const loose: Ready['loose'] = [];
+    const looseAt = new Map<string, number>();
+    const byChunk = new Map<number, number[]>();
+    const chunkOf: number[] = [];
+    for (const body of r.world.loose) {
+      if (pause()) yield;
+      const i = loose.length;
+      loose.push({ body, image: null });
+      if (body.home) looseAt.set(body.home, i);
+      const key = chunkKey(Math.floor(body.x / CHUNK), Math.floor(body.y / CHUNK));
+      chunkOf.push(key);
+      const list = byChunk.get(key);
+      if (list) list.push(i);
+      else byChunk.set(key, [i]);
+    }
+    return { trees, treeAt, treeGrid, loose, looseAt, byChunk, chunkOf };
   }
 
   /** A tree's pictures, now it's in view: its crown, and its trunk up from its foot into the crown, under it. */
@@ -815,7 +884,16 @@ export class GameScene extends Phaser.Scene {
     const next = this.streamer.update(this.car.x, this.car.y, this.making(), this.car.vx, this.car.vy);
     perf.stop('stream');
     perf.start('enter');
-    if (next) this.enter(next, true);
+    // (Made ready: its trees and loose things got ready to take over too, a little each frame; then in.)
+    if (next) this.readying = { region: next, work: this.readyWork(next) };
+    if (this.readying) {
+      const r = runFor(this.readying.work, Math.max(this.making(), 3));
+      if (r.done) {
+        const { region } = this.readying;
+        this.readying = null;
+        this.enter(region, true, r.value);
+      }
+    }
     perf.stop('enter');
     this.streamed = performance.now() - t0;
     this.readInput();
@@ -1014,6 +1092,8 @@ export class GameScene extends Phaser.Scene {
         await frames(1);
       })
       .then((region) => {
+        // (Not the one that was being got ready for where you were.)
+        this.readying = null;
         this.enter(region, false);
         this.putDown(exactly(region.map));
         // (The ground where you are now, all of it, before you see it: not where you were.)
@@ -1806,7 +1886,7 @@ export class GameScene extends Phaser.Scene {
   private updateLoose(): void {
     const dt = 1 / 60;
     // The trolleys being pushed about: kept where they are in the index (now and then).
-    if (++this.looseFrames % 15 === 0 && this.people.pushing()) this.reindexLoose();
+    if (++this.looseFrames % 15 === 0 && this.people.pushing()) for (const i of this.trolleys) this.relocateLoose(i);
     for (let i = 0; i < this.loose.length; i++) {
       const { body } = this.loose[i];
       if (!body.moved || body.gone) continue;
@@ -1836,18 +1916,6 @@ export class GameScene extends Phaser.Scene {
         this.relocateLoose(i);
       }
     }
-  }
-
-  private reindexLoose(): void {
-    this.looseByChunk.clear();
-    this.looseChunk.length = 0;
-    this.loose.forEach(({ body }, i) => {
-      const key = chunkKey(Math.floor(body.x / CHUNK), Math.floor(body.y / CHUNK));
-      this.looseChunk[i] = key;
-      const list = this.looseByChunk.get(key);
-      if (list) list.push(i);
-      else this.looseByChunk.set(key, [i]);
-    });
   }
 
   /** One loose thing's come to rest (or been put down): in the index under where it is now (there are tens of thousands of them). */
@@ -2365,6 +2433,40 @@ function vehicleShape(v: { kind: VehicleKind }): Shape {
  * px: so only those round the view are looked at each frame, not all of
  * them, however big the map.
  */
+/**
+ * A tree: its crown (where it is: it moves as the tree falls), and its trunk where it stands (seen through the crown when
+ * you're under it), how see-through its crown is.
+ */
+interface TreeShown {
+  x: number;
+  y: number;
+  z: number;
+  h: number;
+  gone?: boolean;
+  foot: { x: number; y: number; r: number };
+  /** Its pictures, only while it's in or near the view (and its crown's picture, and how big): a big map has many thousands. */
+  art: { image: Phaser.GameObjects.Image; trunk: Phaser.GameObjects.Image; bole: Phaser.GameObjects.Image } | null;
+  tex: string;
+  scale: number;
+  alpha: number;
+  /** Its crown's turn as it stands (it sways about it), or as it lies, fallen. */
+  turn: number;
+}
+
+/**
+ * A region's trees and loose things got ready to take over (see `readyWork`): its trees as they stand, by id, by where they are;
+ * its loose things, by where they stood (`homeOf`), and by the chunks they're in (each one's chunk).
+ */
+interface Ready {
+  trees: TreeShown[];
+  treeAt: Map<number, number>;
+  treeGrid: Grid;
+  loose: { body: LooseProp; image: Phaser.GameObjects.Image | null; parts?: Phaser.GameObjects.Image[] }[];
+  looseAt: Map<string, number>;
+  byChunk: Map<number, number[]>;
+  chunkOf: number[];
+}
+
 class Grid {
   private readonly cells = new Map<number, number[]>();
 

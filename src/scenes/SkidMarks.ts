@@ -7,8 +7,11 @@ import { TerrainSheet } from '../world/TerrainSheet';
 const CHUNK = 512;
 /** Texture px per world px: marks are soft anyway, and this keeps memory down on phones. */
 const RESOLUTION = 0.5;
-/** The most chunks of marks kept (a quarter of a MB each): past this, those longest out of sight are let go. */
-const MOST = 120;
+/**
+ * The most chunks of marks kept (a quarter of a MB each): past this, the one longest out of sight is wiped and used again.
+ * (Their textures are all made at the start: making one as you drive holds the frame up, while the GPU catches up.)
+ */
+const MOST = 64;
 
 interface Segment {
   x1: number;
@@ -23,17 +26,18 @@ interface Segment {
 /**
  * Tyre marks that stay on the streets. Segments are drawn into textures
  * covering the world in chunks (only where there are marks), so marks build
- * up and drawing them costs the same however many there are. The textures
- * are thrown away when the game scene ends; and, past MOST of them, those
- * longest out of sight (so a long game doesn't fill the phone). (From 2D Racer.)
+ * up and drawing them costs the same however many there are. There are
+ * MOST textures, made at the start: past that many chunks, the one longest
+ * out of sight is wiped and used for the next (so a long game doesn't fill
+ * the phone). They're thrown away when the game scene ends. (From 2D Racer.)
  */
 export class SkidMarks {
   private pending: Segment[] = [];
   private readonly pen: Phaser.GameObjects.Graphics;
-  /** Chunk textures created so far, and the images showing them. */
-  private readonly chunks = new Map<string, TerrainSheet>();
-  /** When each was last near the view (frames). */
-  private readonly seen = new Map<string, number>();
+  /** The chunks with marks (by `i,j`): which texture each is in, the picture showing it, when it was last near the view (frames). */
+  private readonly chunks = new Map<string, { i: number; j: number; key: string; sheet: TerrainSheet; seen: number }>();
+  /** The textures not in use. */
+  private readonly free: string[] = [];
   private frame = 0;
 
   constructor(
@@ -42,6 +46,11 @@ export class SkidMarks {
     private readonly depth: number,
   ) {
     this.pen = scene.make.graphics({}, false);
+    for (let k = 0; k < MOST; k++) {
+      const key = `skid:${k}`;
+      if (!scene.textures.exists(key)) scene.textures.addDynamicTexture(key, CHUNK * RESOLUTION, CHUNK * RESOLUTION);
+      this.free.push(key);
+    }
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroy());
   }
 
@@ -89,43 +98,42 @@ export class SkidMarks {
   update(view: Phaser.Geom.Rectangle, perspective: Perspective): void {
     const pad = 320;
     this.frame++;
-    for (const [key, sheet] of this.chunks) {
-      const [i, j] = key.slice(5).split(',').map(Number);
-      const near = (i + 1) * CHUNK > view.left - pad && i * CHUNK < view.right + pad && (j + 1) * CHUNK > view.top - pad && j * CHUNK < view.bottom + pad;
-      sheet.setVisible(near);
+    for (const c of this.chunks.values()) {
+      const near = (c.i + 1) * CHUNK > view.left - pad && c.i * CHUNK < view.right + pad && (c.j + 1) * CHUNK > view.top - pad && c.j * CHUNK < view.bottom + pad;
+      c.sheet.setVisible(near);
       if (!near) continue;
-      sheet.update(perspective);
-      this.seen.set(key, this.frame);
+      c.sheet.update(perspective);
+      c.seen = this.frame;
     }
-    if (this.chunks.size > MOST) {
-      const oldest = [...this.chunks.keys()].sort((a, b) => (this.seen.get(a) ?? 0) - (this.seen.get(b) ?? 0))[0];
-      this.chunks.get(oldest)!.destroy();
-      this.scene.textures.remove(oldest);
-      this.chunks.delete(oldest);
-      this.seen.delete(oldest);
-    }
-  }
-
-  private key(i: number, j: number): string {
-    return `skid:${i},${j}`;
   }
 
   private chunkTexture(i: number, j: number): Phaser.Textures.DynamicTexture {
-    const key = this.key(i, j);
-    if (!this.chunks.has(key)) {
-      this.scene.textures.addDynamicTexture(key, CHUNK * RESOLUTION, CHUNK * RESOLUTION);
-      this.chunks.set(key, new TerrainSheet(this.scene, key, i * CHUNK, j * CHUNK, CHUNK, CHUNK, this.depth, (x, y) => this.terrain.at(x, y) * this.terrain.px));
+    const id = `${i},${j}`;
+    let c = this.chunks.get(id);
+    if (!c) {
+      // A texture not in use; or, all in use, the one longest out of sight, wiped.
+      let key = this.free.pop();
+      if (!key) {
+        let [oldest, when] = ['', Infinity];
+        for (const [k, o] of this.chunks) if (o.seen < when) [oldest, when] = [k, o.seen];
+        const o = this.chunks.get(oldest)!;
+        o.sheet.destroy();
+        this.chunks.delete(oldest);
+        key = o.key;
+        (this.scene.textures.get(key) as Phaser.Textures.DynamicTexture).clear();
+      }
+      c = { i, j, key, sheet: new TerrainSheet(this.scene, key, i * CHUNK, j * CHUNK, CHUNK, CHUNK, this.depth, (x, y) => this.terrain.at(x, y) * this.terrain.px), seen: this.frame };
+      this.chunks.set(id, c);
     }
-    return this.scene.textures.get(key) as Phaser.Textures.DynamicTexture;
+    return this.scene.textures.get(c.key) as Phaser.Textures.DynamicTexture;
   }
 
   /** Frees the textures (they belong to the game, not the scene, so they'd otherwise outlive it). */
   private destroy(): void {
     this.pen.destroy();
-    for (const [key, sheet] of this.chunks) {
-      sheet.destroy();
-      this.scene.textures.remove(key);
-    }
+    for (const c of this.chunks.values()) c.sheet.destroy();
+    for (let k = 0; k < MOST; k++) this.scene.textures.remove(`skid:${k}`);
     this.chunks.clear();
+    this.free.length = 0;
   }
 }

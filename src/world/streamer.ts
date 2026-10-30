@@ -27,12 +27,21 @@ const MOVE_ON = 0.6 * TILE;
  * Where you'll be this far ahead, s, says when the next region's made ready and round where (so at speed it's begun in good
  * time); no further ahead than a tile.
  */
-const AHEAD = 6;
-/** With the edge of the region in use this near, s (at the speed you're going), the next is made faster: more of each frame. */
+const AHEAD = 8;
+/** With the edge of the region in use this near, s (at the speed you're going), the next is begun without waiting for its layout. */
 const HURRY = 9;
-const RUSH = 4;
 /** And this near, s, it's finished at once: a moment's pause, rather than driving off the edge of what's there (or seeing it). */
 const NOW = 2.5;
+/**
+ * Making the next one: a share of each frame enough to have it ready MARGIN s before you'd reach the edge (at the speed you're
+ * going), from how long the last ones took in all (EXPECT ms, till one's been made; and, past that, a quarter as much again),
+ * with SAFETY to spare; at least what the scene says it can spare, and no more than MOST ms (more a frame's a stutter: better
+ * spread over more frames).
+ */
+const MARGIN = 3;
+const EXPECT = 2000;
+const SAFETY = 1.25;
+const MOST = 10;
 
 type Painter = (world: World, bounds: Region['map']['region']) => Work<SurfaceGrid>;
 
@@ -43,7 +52,12 @@ export class Streamer {
    * The next, being made ready: where, its tiles (once they're here), its layout from the worker (null: none to be had;
    * undefined: still coming), and the work (once it's begun: when they're both here, or time's short).
    */
-  private next: { x: number; y: number; prepared?: number; keys: string[]; bounds: Region['map']['region']; tiles: Tile[] | null; layout: Layout | null | undefined; work: Work<Region> | null } | null = null;
+  private next: { x: number; y: number; prepared?: number; keys: string[]; bounds: Region['map']['region']; tiles: Tile[] | null; layout: Layout | null | undefined; work: Work<Region> | null; spent: number } | null = null;
+  /** A frame's length, s (smoothed): when it was last called, ms. */
+  private frame = 1 / 60;
+  /** How long one takes to make, ms (the last few, smoothed). */
+  private takes = EXPECT;
+  private last = 0;
   /** The layout worker (see layoutWorker.ts), if there's one; what's been asked of it, by request. */
   private layouts: Worker | null = null;
   private readonly asked = new Map<number, (layout: Layout | null) => void>();
@@ -160,6 +174,9 @@ export class Streamer {
    */
   update(x: number, y: number, ms: number, vx = 0, vy = 0): Region | null {
     if (!this.centre) return null;
+    const now = performance.now();
+    if (this.last) this.frame = this.frame * 0.9 + Math.min(0.1, (now - this.last) / 1000) * 0.1;
+    this.last = now;
     if (!this.next) {
       // Where you'll be in a few seconds (no more than a tile on).
       const speed = Math.hypot(vx, vy);
@@ -170,7 +187,7 @@ export class Streamer {
       if (c.x === this.centre.x && c.y === this.centre.y) return null;
       const b = this.bounds(c);
       const keys = tilesFor(this.index, b.x0, b.y0, b.x1, b.y1);
-      const next: NonNullable<Streamer['next']> = { ...c, keys, bounds: b, tiles: null, layout: undefined, work: null };
+      const next: NonNullable<Streamer['next']> = { ...c, keys, bounds: b, tiles: null, layout: undefined, work: null, spent: 0 };
       this.next = next;
       next.prepared = this.prepare?.(keys, b);
       // Laid out in the worker meanwhile.
@@ -190,7 +207,8 @@ export class Streamer {
       );
       return null;
     }
-    // Nearing the edge of the region in use (at the speed you're going): more of each frame; about to go off it, all of it.
+    // Nearing the edge of the region in use (at the speed you're going): as much of each frame as it takes to be ready in time;
+    // about to go off it, all of it.
     const half = (REGION_TILES / 2) * TILE;
     const left = (v: number, at: number, mid: number) => (v > 0 ? (mid + half - at) / v : v < 0 ? (at - (mid - half)) / -v : Infinity);
     const time = Math.min(left(vx, x, this.centre.x), left(vy, y, this.centre.y));
@@ -198,9 +216,13 @@ export class Streamer {
     // Begun once its tiles are here and its layout (or that there's none to be had); or now, without it, if time's short.
     if (!n.work && n.tiles && (n.layout !== undefined || time < HURRY)) n.work = this.make(n.tiles, n.bounds, this.making, 0, n.layout);
     if (!n.work) return null;
-    const budget = time < NOW ? Infinity : time < RUSH ? Math.max(ms, 5) * 4 : time < HURRY ? Math.max(ms, 5) * 1.5 : ms;
+    const rest = Math.max(this.takes - n.spent, this.takes / 4);
+    const frames = Math.max(1, (time - MARGIN) / this.frame);
+    const budget = time < NOW ? Infinity : Math.min(MOST, Math.max(ms, (SAFETY * rest) / frames));
     const r = runFor(n.work, budget);
+    n.spent += performance.now() - now;
     if (!r.done) return null;
+    this.takes = this.takes * 0.5 + n.spent * 0.5;
     this.centre = { x: this.next.x, y: this.next.y };
     r.value.prepared = this.next.prepared;
     // Only the tiles of the region in use are kept.
