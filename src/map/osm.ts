@@ -1444,6 +1444,40 @@ function hemmed(pts: Pts, built: (x: number, y: number) => boolean): number | nu
   rooms.sort((a, b) => a - b);
   return Math.max(BACKSTREET * M, rooms[Math.floor(rooms.length / 2)] - 0.3 * M);
 }
+/**
+ * A one-way carriageway's room beside the other half of its dual carriageway: OSM draws each half's middle line, and where the
+ * two are closer together than the widths they'd be given (guessed from their kind and lanes), they'd overlap, their traffic
+ * running into each other's. Along the road (every 3 m, not its ends), the way nearest across (a one-way road the other way,
+ * about parallel: `across(x, y, ux, uy)`, the distance to it, or Infinity) is looked for; found along most of it, the room's
+ * the typical distance (each half comes to the middle between them). Null if it's not one half of a pair.
+ */
+export function pairedRoom(pts: Pts, across: (x: number, y: number, ux: number, uy: number) => number): number | null {
+  const M = PX_PER_METRE;
+  let total = 0;
+  for (let k = 0; k + 3 < pts.length; k += 2) total += Math.hypot(pts[k + 2] - pts[k], pts[k + 3] - pts[k + 1]);
+  let looked = 0;
+  const rooms: number[] = [];
+  let run = 0;
+  for (let k = 0; k + 3 < pts.length; k += 2) {
+    const len = Math.hypot(pts[k + 2] - pts[k], pts[k + 3] - pts[k + 1]);
+    if (!len) continue;
+    const [ux, uy] = [(pts[k + 2] - pts[k]) / len, (pts[k + 3] - pts[k + 1]) / len];
+    for (let s = 0; s < len; s += 3 * M) {
+      if (run + s < 10 * M || run + s > total - 10 * M) continue;
+      looked++;
+      const d = across(pts[k] + ux * s, pts[k + 1] + uy * s, ux, uy);
+      if (d < Infinity) rooms.push(d);
+    }
+    run += len;
+  }
+  if (rooms.length < 3 || rooms.length < looked * 0.5) return null;
+  rooms.sort((a, b) => a - b);
+  return rooms[Math.floor(rooms.length / 2)];
+}
+/** How far apart the two halves of a dual carriageway are looked for, m; the narrowest a half's made, m. */
+const PAIRED_NEAR = 12;
+const PAIRED_LEAST = 3.5;
+
 /** A street's room (from its line out, to the nearer side) under which it's hemmed in, m; a backstreet's narrowest, m; how far
  * out its far side's looked for, m. */
 const HEMMED = 2.5;
@@ -2250,8 +2284,46 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     const pts = pointsOf(way.nodes);
     if (pts) sidewalks.push(pts);
   }
+  // The one-way carriageways (on the ground: not bridges or tunnels), their pieces in cells, for finding a dual carriageway's other half.
+  const PAIR_CELL = 40 * PX_PER_METRE;
+  const pairCells = new Map<number, [number, number, number, number, number][]>();
+  for (const [i, { way, kind }] of roadWays.entries()) {
+    const t = way.tags;
+    if (!VEHICLE_ROADS.has(kind) || kind === 'service' || kind === 'track' || !(t.oneway === 'yes' || t.oneway === '1') || (t.bridge && t.bridge !== 'no') || t.tunnel) continue;
+    const pts = pointsOf(way.nodes);
+    if (!pts) continue;
+    for (let k = 0; k + 3 < pts.length; k += 2) {
+      const [ax, ay, bx, by] = [pts[k], pts[k + 1], pts[k + 2], pts[k + 3]];
+      for (let cx = Math.floor(Math.min(ax, bx) / PAIR_CELL); cx <= Math.floor(Math.max(ax, bx) / PAIR_CELL); cx++)
+        for (let cy = Math.floor(Math.min(ay, by) / PAIR_CELL); cy <= Math.floor(Math.max(ay, by) / PAIR_CELL); cy++) {
+          const key = cx * 100003 + cy;
+          if (!pairCells.has(key)) pairCells.set(key, []);
+          pairCells.get(key)!.push([ax, ay, bx, by, i]);
+        }
+    }
+  }
+  /** Across from (x, y), heading (ux, uy), on road `own`: how far it is to a one-way road going about the other way alongside, px. */
+  const acrossFrom = (own: number) => (x: number, y: number, ux: number, uy: number): number => {
+    let best = Infinity;
+    const [nx, ny] = [-uy, ux];
+    for (let i = -1; i <= 1; i++)
+      for (let j = -1; j <= 1; j++)
+        for (const [ax, ay, bx, by, r] of pairCells.get((Math.floor(x / PAIR_CELL) + i) * 100003 + Math.floor(y / PAIR_CELL) + j) ?? []) {
+          if (r === own) continue;
+          const len = Math.hypot(bx - ax, by - ay);
+          if (!len || ((bx - ax) * ux + (by - ay) * uy) / len > -0.94) continue;
+          // Where the line straight across meets it.
+          const den = (bx - ax) * ny - (by - ay) * nx;
+          if (Math.abs(den) < 1e-9) continue;
+          const u = ((x - ax) * ny - (y - ay) * nx) / den;
+          if (u < 0 || u > 1) continue;
+          const d = Math.abs((ax + (bx - ax) * u - x) * nx + (ay + (by - ay) * u - y) * ny);
+          if (d < PAIRED_NEAR * PX_PER_METRE) best = Math.min(best, d);
+        }
+    return best;
+  };
   // Roads, with their junctions found so the lane markings stop short of them.
-  for (const { way, kind } of roadWays) {
+  for (const [roadWay, { way, kind }] of roadWays.entries()) {
     const t = way.tags;
     const pts = pointsOf(way.nodes);
     if (!pts) continue;
@@ -2263,6 +2335,11 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     const narrow = kind === 'street' && !t.width && !t.lanes && !t['width:carriageway'] && !bridge && !t.tunnel ? hemmed(pts, hems) : null;
     const backstreet = narrow !== null;
     if (narrow !== null) width = Math.min(width, narrow);
+    // One half of a dual carriageway, mapped closer to the other than their widths: each only as wide as to the middle between them.
+    if (oneway && t.junction !== 'roundabout' && VEHICLE_ROADS.has(kind) && kind !== 'service' && kind !== 'track' && !t.width && !t['width:carriageway'] && !bridge && !t.tunnel) {
+      const room = pairedRoom(pts, acrossFrom(roadWay));
+      if (room !== null && room < width) width = Math.max(PAIRED_LEAST * PX_PER_METRE, room);
+    }
     const arcade = t.covered === 'arcade' || t.covered === 'colonnade';
     const passage = t.tunnel === 'building_passage' || arcade;
     const tunnel = kind === 'rail' && inTunnel(t);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PX_PER_METRE, Projection, buildMap, gateways, pointInRing, clipLine, clipRing, joinRings, joinLines, seaRings, areaKind, cutSpans, roadKind, laneArrows, lanesAcross, metres, parseOsm, pavementSides, ringArea, roadLanes, roadWidth, sidewalkAlong } from './osm';
+import { PX_PER_METRE, Projection, buildMap, gateways, pointInRing, clipLine, clipRing, joinRings, joinLines, seaRings, pairedRoom, areaKind, cutSpans, roadKind, laneArrows, lanesAcross, metres, parseOsm, pavementSides, ringArea, roadLanes, roadWidth, sidewalkAlong } from './osm';
 import type { Building, Road } from './osm';
 
 /** A tiny map: a street with a junction, a building with a part on it, a pond, a park inside a multipolygon, a tree and a bench. */
@@ -375,5 +375,16 @@ describe('seaRings', () => {
   });
   it('joins the coastline from its pieces, each way round as drawn', () => {
     expect(joinLines([[3, 4, 5], [1, 2, 3], [7, 8]])).toEqual([[1, 2, 3, 4, 5], [7, 8]]);
+  });
+});
+
+describe('pairedRoom', () => {
+  const M = PX_PER_METRE;
+  const road = [0, 0, 200 * M, 0];
+  it("is how far it is across to the other half of a dual carriageway, found along most of it", () => {
+    expect(pairedRoom(road, () => 9 * M)).toBe(9 * M);
+  });
+  it('is nothing where the other half is only alongside for a bit of it', () => {
+    expect(pairedRoom(road, (x) => (x < 40 * M ? 9 * M : Infinity))).toBeNull();
   });
 });

@@ -69,9 +69,13 @@ describe('emergency services', () => {
     for (let t = 0; t < 300; t += 1 / 30) {
       traffic.update(1 / 30, player, view, () => 'green');
       for (const v of traffic.vehicles) {
+        // (One that was parked there, out on the road: it's left; it's counted again if it comes back and goes again.)
+        if (v.kind === 'fire' && there.has(v.id)) {
+          there.delete(v.id);
+          left++;
+        }
         if (v.kind === 'fire' && !seen.has(v.id)) {
           seen.add(v.id);
-          if (there.has(v.id)) left++;
           if (v.siren) sirens++;
         }
         // Not held up behind one parked there for long (they're gone round).

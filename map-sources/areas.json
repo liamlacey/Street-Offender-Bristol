@@ -2117,6 +2117,806 @@
         1.5,
         1.5
       ]
+    },
+    {
+      "name": "oilterminal",
+      "about": "About 970 m by 945 m (fifth ring, north: row -2, column -1), named after Oil Terminal.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.6915,
+        "maxlat": 51.524,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-09-29T20:40:47Z",
+      "lidarShift": [
+        1,
+        0
+      ]
+    },
+    {
+      "name": "cabotbusinesspark",
+      "about": "About 970 m by 945 m (fifth ring, north: row -2, column 0), named after Cabot Business Park.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.6775,
+        "maxlat": 51.524,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-23T17:12:10Z",
+      "lidarShift": [
+        -0.5,
+        0
+      ]
+    },
+    {
+      "name": "hallenfarm",
+      "about": "About 970 m by 945 m (fifth ring, north: row -2, column 1), named after Hallen Farm.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.6635,
+        "maxlat": 51.524,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-30T11:55:14Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "berwickwood",
+      "about": "About 970 m by 945 m (fifth ring, north: row -2, column 2), named after CLH-PS Berwick Wood.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.6495,
+        "maxlat": 51.524,
+        "maxlon": -2.6355
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-25T19:20:26Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "berwickgreen",
+      "about": "About 970 m by 945 m (fifth ring, north: row -2, column 3), named after Berwick Green.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.6355,
+        "maxlat": 51.524,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-30T17:50:50Z",
+      "lidarShift": [
+        1,
+        1.5
+      ]
+    },
+    {
+      "name": "beaufortpark",
+      "about": "About 970 m by 945 m (fifth ring, north: row -2, column 4), named after Beaufort Park.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.6215,
+        "maxlat": 51.524,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-31T00:30:34Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "elmfarm",
+      "about": "About 970 m by 945 m (fifth ring, north: row -2, column 5), named after Elm Farm.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.6075,
+        "maxlat": 51.524,
+        "maxlon": -2.5935
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-31T00:30:34Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "brabazon",
+      "about": "About 970 m by 945 m (fifth ring, north: row -2, column 6), named after Brabazon.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.5935,
+        "maxlat": 51.524,
+        "maxlon": -2.5795
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-31T00:30:37Z",
+      "lidarShift": [
+        -0.5,
+        0
+      ]
+    },
+    {
+      "name": "rollsroyce",
+      "about": "About 970 m by 945 m (fifth ring, north: row -2, column 7), named after Rolls-Royce Bristol.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.5795,
+        "maxlat": 51.524,
+        "maxlon": -2.5655
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-31T00:30:34Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "littlestoke",
+      "about": "About 970 m by 945 m (fifth ring, north: row -2, column 8), named after Little Stoke.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.5655,
+        "maxlat": 51.524,
+        "maxlon": -2.5515
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-29T01:55:50Z",
+      "lidarShift": [
+        -1,
+        1
+      ]
+    },
+    {
+      "name": "meadepark",
+      "about": "About 970 m by 945 m (fifth ring, north: row -2, column 9), named after Meade Park.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.5515,
+        "maxlat": 51.524,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-29T01:55:50Z",
+      "lidarShift": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "chittening",
+      "about": "About 970 m by 945 m (fifth ring, north: row -3, column -1), named after Chittening Industrial Estate.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.6915,
+        "maxlat": 51.5325,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-21T16:04:33Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "sevalcoplant",
+      "about": "About 970 m by 945 m (fifth ring, north: row -3, column 0), named after Sevalco Plant.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.6775,
+        "maxlat": 51.5325,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-04T14:18:39Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "lpgstorage",
+      "about": "About 970 m by 945 m (fifth ring, north: row -3, column 1), named after Avonmouth LPG Storage Facility.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.6635,
+        "maxlat": 51.5325,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-30T11:55:14Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "elmington",
+      "about": "About 970 m by 945 m (fifth ring, north: row -3, column 2), named after Elmington Manor Farm.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.6495,
+        "maxlat": 51.5325,
+        "maxlon": -2.6355
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-30T11:55:14Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "berwicklodge",
+      "about": "About 970 m by 945 m (fifth ring, north: row -3, column 3), named after Berwick Lodge.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.6355,
+        "maxlat": 51.5325,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-26T15:29:37Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "hollywoodestate",
+      "about": "About 970 m by 945 m (fifth ring, north: row -3, column 4), named after Hollywood Estate.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.6215,
+        "maxlat": 51.5325,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-31T00:30:34Z",
+      "lidarShift": [
+        0.5,
+        1.5
+      ]
+    },
+    {
+      "name": "cribbscauseway",
+      "about": "About 970 m by 945 m (fifth ring, north: row -3, column 5), named after Cribbs Causeway.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.6075,
+        "maxlat": 51.5325,
+        "maxlon": -2.5935
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-31T00:30:34Z",
+      "lidarShift": [
+        0,
+        2
+      ]
+    },
+    {
+      "name": "patchwayestate",
+      "about": "About 970 m by 945 m (fifth ring, north: row -3, column 6), named after Patchway Trading Estate.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.5935,
+        "maxlat": 51.5325,
+        "maxlon": -2.5795
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-29T01:55:50Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "patchway",
+      "about": "About 970 m by 945 m (fifth ring, north: row -3, column 7), named after Patchway.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.5795,
+        "maxlat": 51.5325,
+        "maxlon": -2.5655
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-31T00:30:37Z",
+      "lidarShift": [
+        1,
+        0.5
+      ]
+    },
+    {
+      "name": "stagecoachdepot",
+      "about": "About 970 m by 945 m (fifth ring, north: row -3, column 8), named after Stagecoach West Bristol Depot.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.5655,
+        "maxlat": 51.5325,
+        "maxlon": -2.5515
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-29T01:55:50Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "sherbournesbrake",
+      "about": "About 970 m by 945 m (fifth ring, north: row -3, column 9), named after Sherbourne's Brake.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.5515,
+        "maxlat": 51.5325,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-29T01:55:50Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "severnshore",
+      "about": "About 970 m by 945 m (fifth ring, west: row -3, column -2), named after the Severn shore.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.7055,
+        "maxlat": 51.5325,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-21T16:04:33Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "coalyard",
+      "about": "About 970 m by 945 m (fifth ring, west: row -2, column -2), named after Coal Yard.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.7055,
+        "maxlat": 51.524,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-21T16:04:33Z",
+      "lidarShift": [
+        0.5,
+        -1
+      ]
+    },
+    {
+      "name": "containerport",
+      "about": "About 970 m by 945 m (fifth ring, west: row -1, column -2), named after Avonmouth Container Port.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.7055,
+        "maxlat": 51.5155,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-21T16:04:33Z",
+      "lidarShift": [
+        1,
+        0
+      ]
+    },
+    {
+      "name": "avonmouth",
+      "about": "About 970 m by 945 m (fifth ring, west: row 0, column -2), named after Avonmouth.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.7055,
+        "maxlat": 51.507,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-31T00:30:31Z",
+      "lidarShift": [
+        0.5,
+        0
+      ]
+    },
+    {
+      "name": "avongorgeindustrial",
+      "about": "About 970 m by 945 m (fifth ring, west: row 1, column -2), named after Avon Gorge Industrial Estate.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.7055,
+        "maxlat": 51.4985,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-28T16:55:43Z",
+      "lidarShift": [
+        1,
+        0
+      ]
+    },
+    {
+      "name": "coalstockyard",
+      "about": "About 970 m by 945 m (fifth ring, west: row 2, column -2), named after Portbury Coal Stockyard.",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.7055,
+        "maxlat": 51.49,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-28T16:55:43Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "eastoningordano",
+      "about": "About 970 m by 945 m (fifth ring, west: row 3, column -2), named after Easton-In-Gordano and Pill Allotments.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.7055,
+        "maxlat": 51.4815,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-25T19:20:26Z",
+      "lidarShift": [
+        -0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "thewalnuts",
+      "about": "About 970 m by 945 m (fifth ring, west: row 4, column -2), named after The Walnuts.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.7055,
+        "maxlat": 51.473,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-28T16:55:43Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "lowerfailand",
+      "about": "About 970 m by 945 m (fifth ring, west: row 5, column -2), named after Lower Failand.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.7055,
+        "maxlat": 51.4645,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-03T07:29:55Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "alderbedwood",
+      "about": "About 970 m by 945 m (fifth ring, west: row 6, column -2), named after Alder Bed Wood.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.7055,
+        "maxlat": 51.456,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-08-01T08:19:11Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "failandlodgefarm",
+      "about": "About 970 m by 945 m (fifth ring, west: row 7, column -2), named after Failand Lodge Farm.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.7055,
+        "maxlat": 51.4475,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-22T23:01:16Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "failandvets",
+      "about": "About 970 m by 945 m (fifth ring, west: row 8, column -2), named after B&W Equine Vets Failand Clinic.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.7055,
+        "maxlat": 51.439,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-07-30T09:23:00Z",
+      "lidarShift": [
+        1,
+        0.5
+      ]
+    },
+    {
+      "name": "cambridgebatch",
+      "about": "About 970 m by 945 m (fifth ring, west: row 9, column -2), named after Cambridge Batch.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.7055,
+        "maxlat": 51.4305,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-05T17:55:21Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "homefarm",
+      "about": "About 970 m by 945 m (fifth ring, west: row 10, column -2), named after Home Farm.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.7055,
+        "maxlat": 51.422,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-29T01:09:46Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "severnestuary",
+      "about": "About 970 m by 945 m (fifth ring, west: row -3, column -3), named after the Severn estuary.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.7195,
+        "maxlat": 51.5325,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "bristolchannel",
+      "about": "About 970 m by 945 m (fifth ring, west: row -2, column -3), named after Bristol Channel.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.7195,
+        "maxlat": 51.524,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-21T16:04:33Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "juiceterminal",
+      "about": "About 970 m by 945 m (fifth ring, west: row -1, column -3), named after Continental Fruit Juice Terminal.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.7195,
+        "maxlat": 51.5155,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-21T16:04:33Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "remixworks",
+      "about": "About 970 m by 945 m (fifth ring, west: row 0, column -3), named after Remix Dry Mortar Works.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.7195,
+        "maxlat": 51.507,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-28T16:55:43Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "royalportburydock",
+      "about": "About 970 m by 945 m (fifth ring, west: row 1, column -3), named after Royal Portbury Dock.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.7195,
+        "maxlat": 51.4985,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-28T16:55:43Z",
+      "lidarShift": [
+        0,
+        -0.5
+      ]
+    },
+    {
+      "name": "autologicyard",
+      "about": "About 970 m by 945 m (fifth ring, west: row 2, column -3), named after Vehicle Storage Yard (Autologic).",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.7195,
+        "maxlat": 51.49,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-28T16:55:43Z",
+      "lidarShift": [
+        -0.5,
+        0
+      ]
+    },
+    {
+      "name": "courthousefarm",
+      "about": "About 970 m by 945 m (fifth ring, west: row 3, column -3), named after Court House Farm.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.7195,
+        "maxlat": 51.4815,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-31T00:30:29Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "longlandswood",
+      "about": "About 970 m by 945 m (fifth ring, west: row 4, column -3), named after Longlands Wood.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.7195,
+        "maxlat": 51.473,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-28T16:55:43Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "newholmfarm",
+      "about": "About 970 m by 945 m (fifth ring, west: row 5, column -3), named after New Holm Farm.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.7195,
+        "maxlat": 51.4645,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-03T07:29:55Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "stonecraft",
+      "about": "About 970 m by 945 m (fifth ring, west: row 6, column -3), named after Stonecraft Paving Centre.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.7195,
+        "maxlat": 51.456,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-22T23:01:16Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "limekilnplantation",
+      "about": "About 970 m by 945 m (fifth ring, west: row 7, column -3), named after Limekiln Plantation.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.7195,
+        "maxlat": 51.4475,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-22T23:01:16Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "showground",
+      "about": "About 970 m by 945 m (fifth ring, west: row 8, column -3), named after North Somerset Showground.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.7195,
+        "maxlat": 51.439,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-09-16T13:17:56Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "flaxbourton",
+      "about": "About 970 m by 945 m (fifth ring, west: row 9, column -3), named after Backwell Flax Bourton Cricket Club.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.7195,
+        "maxlat": 51.4305,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-05T17:55:21Z",
+      "lidarShift": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "theconygar",
+      "about": "About 970 m by 945 m (fifth ring, west: row 10, column -3), named after The Conygar.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.7195,
+        "maxlat": 51.422,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-29T01:09:46Z",
+      "lidarShift": [
+        -1,
+        1
+      ]
     }
   ]
 }

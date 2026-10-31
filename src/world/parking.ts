@@ -288,15 +288,6 @@ export function* parkingWork(map: GameMap): Work<Space[]> {
   // (None where a market's stalls are, nor a food cart, a performer and their crowd, the pigeons, an A-board: see streetLife.ts.)
   const taken = footprints(yield* streetLifeWork(map));
   const free = (s: Space) => !onFootprints(taken, s.x, s.y, s.angle, s.length / 2, s.endOn ? BAY_WIDTH / 2 : 1 * 8);
-  for (const a of map.areas) {
-    if (a.kind !== 'parking') continue;
-    const { spaces } = carParkBays(map, a);
-    // (Not the trolley shelters.)
-    const store = storeOf(map, a);
-    const shelters = store < 0 ? [] : shelterSpaces(map, store, spaces);
-    out.push(...spaces.filter((s) => !shelters.includes(s) && free(s)));
-    yield;
-  }
   // (Not along the kerb where a car park's bays come right up to it; nor one over another, round a tight bend or a corner.)
   const lots = new Map<number, Space[]>();
   const cell = (x: number, y: number) => Math.floor(x / LOT_CELL) * 100003 + Math.floor(y / LOT_CELL);
@@ -305,12 +296,23 @@ export function* parkingWork(map: GameMap): Work<Space[]> {
     if (!lots.has(k)) lots.set(k, []);
     lots.get(k)!.push(s);
   };
-  for (const s of out) keep(s);
   const box = (s: Space): [number, number, number, number, number] => [s.x, s.y, s.angle, s.length / 2 - 1, (s.endOn ? BAY_WIDTH : 2 * 8) / 2 - 1];
   const clearOfLots = (b: Space) => {
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const s of lots.get(cell(b.x + i * LOT_CELL, b.y + j * LOT_CELL)) ?? []) if (Math.hypot(s.x - b.x, s.y - b.y) < BAY_DEPTH && rectsOverlap(box(s), box(b))) return false;
     return true;
   };
+  // (Not over another car park's bays, either: two car parks mapped over each other, or one inside another.)
+  for (const a of map.areas) {
+    if (a.kind !== 'parking') continue;
+    const { spaces } = carParkBays(map, a);
+    // (Not the trolley shelters.)
+    const store = storeOf(map, a);
+    const shelters = store < 0 ? [] : shelterSpaces(map, store, spaces);
+    const kept = spaces.filter((s) => !shelters.includes(s) && free(s) && clearOfLots(s));
+    for (const s of kept) keep(s);
+    out.push(...kept);
+    yield;
+  }
   // The drives in front of people's houses (see homes.ts); at the places (see places.ts), a lorry backed up to a loading bay, a car
   // at a lock-up garage. (Not over a car park's bays, nor each other.)
   const pause = every(100);

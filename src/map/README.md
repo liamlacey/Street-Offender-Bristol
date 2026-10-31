@@ -34,16 +34,21 @@ downloaded again unless asked for (`npm run map -- --refresh <area>`).
 
 Each area's LIDAR alignment (`lidarShift`, metres east and south) is worked out
 the first time it's built (see "Lining up" below) and then kept in `areas.json`.
-The areas make a grid 11 wide and 12 deep, each about 970 m by 945 m (about 10.7 km by
-11.3 km in all; rows counted from the north, columns from the west, from the first
-nine columns and ten rows: the two rows added to the north are rows 0 and −1, the two
-columns added to the west columns 0 and −1): `cathedral` and the first 3 by 3 round
+The areas make a grid 13 wide and 14 deep, each about 970 m by 945 m (about 12.6 km by
+13.2 km in all; rows counted from the north, columns from the west, from the first
+nine columns and ten rows: the rows added to the north are rows 0, −1, −2 and −3, the
+columns added to the west columns 0, −1, −2 and −3): `cathedral` and the first 3 by 3 round
 it, then a ring of 16 round those, then a ring of 24 round those (the "second ring"),
 then a third ring of 41: a row and a column more to the west, east and south, and two
 rows more to the north; then a fourth of 42: two rows more to the north (all eleven
 columns: Avonmouth's edge, Lawrence Weston, Henbury, Southmead, Filton, UWE) and two
 columns more to the west (Shirehampton and Pill, down past Abbots Leigh and Failand
-to Long Ashton). Their shifts (east, south):
+to Long Ashton); then a fifth of 50: two rows more to the north (Avonmouth's docks
+and Severnside, Hallen, Cribbs Causeway, Patchway, the Brabazon on Filton airfield,
+Little Stoke) and two columns more to the west (the Severn's shore, Royal Portbury
+Dock, Easton-in-Gordano, Failand, down to Flax Bourton), named after a place or a
+landmark in each, from OSM (most of those in the country lined up as the others are:
+see "Lining up"). Their shifts (east, south):
 
 | Area | Where | Row, column | Shift |
 | --- | --- | --- | --- |
@@ -179,6 +184,56 @@ to Long Ashton). Their shifts (east, south):
 | `ashtonhill` | fourth ring, west | 9, −1 | 1 m, 1.5 m |
 | `barrowwood` | fourth ring, west | 10, 0 | 1 m, 0.5 m |
 | `crossgrove` | fourth ring, west | 10, −1 | 1.5 m, 1.5 m |
+| `oilterminal` | fifth ring, north | −2, −1 | 1 m, 0 m |
+| `cabotbusinesspark` | fifth ring, north | −2, 0 | −0.5 m, 0 m |
+| `hallenfarm` | fifth ring, north | −2, 1 | 0 m, 0 m |
+| `berwickwood` | fifth ring, north | −2, 2 | 0 m, 0 m |
+| `berwickgreen` | fifth ring, north | −2, 3 | 1 m, 1.5 m |
+| `beaufortpark` | fifth ring, north | −2, 4 | 0 m, 0 m |
+| `elmfarm` | fifth ring, north | −2, 5 | 0.5 m, 0.5 m |
+| `brabazon` | fifth ring, north | −2, 6 | −0.5 m, 0 m |
+| `rollsroyce` | fifth ring, north | −2, 7 | 0.5 m, 0.5 m |
+| `littlestoke` | fifth ring, north | −2, 8 | −1 m, 1 m |
+| `meadepark` | fifth ring, north | −2, 9 | 0 m, 1 m |
+| `chittening` | fifth ring, north | −3, −1 | 0 m, 0 m |
+| `sevalcoplant` | fifth ring, north | −3, 0 | 0 m, 0 m |
+| `lpgstorage` | fifth ring, north | −3, 1 | 0 m, 0 m |
+| `elmington` | fifth ring, north | −3, 2 | 0 m, 0 m |
+| `berwicklodge` | fifth ring, north | −3, 3 | 0 m, 0 m |
+| `hollywoodestate` | fifth ring, north | −3, 4 | 0.5 m, 1.5 m |
+| `cribbscauseway` | fifth ring, north | −3, 5 | 0 m, 2 m |
+| `patchwayestate` | fifth ring, north | −3, 6 | 0.5 m, 0.5 m |
+| `patchway` | fifth ring, north | −3, 7 | 1 m, 0.5 m |
+| `stagecoachdepot` | fifth ring, north | −3, 8 | 0 m, 0 m |
+| `sherbournesbrake` | fifth ring, north | −3, 9 | 0 m, 0 m |
+| `severnshore` | fifth ring, north-west corner | −3, −2 | 0 m, 0 m |
+| `coalyard` | fifth ring, north-west corner | −2, −2 | 0.5 m, −1 m |
+| `containerport` | fifth ring, west | −1, −2 | 1 m, 0 m |
+| `avonmouth` | fifth ring, west | 0, −2 | 0.5 m, 0 m |
+| `avongorgeindustrial` | fifth ring, west | 1, −2 | 1 m, 0 m |
+| `coalstockyard` | fifth ring, west | 2, −2 | 0 m, 0 m |
+| `eastoningordano` | fifth ring, west | 3, −2 | −0.5 m, 0.5 m |
+| `thewalnuts` | fifth ring, west | 4, −2 | 0 m, 0 m |
+| `lowerfailand` | fifth ring, west | 5, −2 | 0 m, 0 m |
+| `alderbedwood` | fifth ring, west | 6, −2 | 0 m, 0 m |
+| `failandlodgefarm` | fifth ring, west | 7, −2 | 0.5 m, 0.5 m |
+| `failandvets` | fifth ring, west | 8, −2 | 1 m, 0.5 m |
+| `cambridgebatch` | fifth ring, west | 9, −2 | 0.5 m, 0.5 m |
+| `homefarm` | fifth ring, west | 10, −2 | 0 m, 0 m |
+| `severnestuary` | fifth ring, north-west corner | −3, −3 | 0 m, 0 m |
+| `bristolchannel` | fifth ring, north-west corner | −2, −3 | 0 m, 0 m |
+| `juiceterminal` | fifth ring, west | −1, −3 | 0 m, 0 m |
+| `remixworks` | fifth ring, west | 0, −3 | 0 m, 0 m |
+| `royalportburydock` | fifth ring, west | 1, −3 | 0 m, −0.5 m |
+| `autologicyard` | fifth ring, west | 2, −3 | −0.5 m, 0 m |
+| `courthousefarm` | fifth ring, west | 3, −3 | 0 m, 0 m |
+| `longlandswood` | fifth ring, west | 4, −3 | 0 m, 0 m |
+| `newholmfarm` | fifth ring, west | 5, −3 | 0 m, 0 m |
+| `stonecraft` | fifth ring, west | 6, −3 | 0 m, 0 m |
+| `limekilnplantation` | fifth ring, west | 7, −3 | 0 m, 0 m |
+| `showground` | fifth ring, west | 8, −3 | 0 m, 0 m |
+| `flaxbourton` | fifth ring, west | 9, −3 | 0 m, 1 m |
+| `theconygar` | fifth ring, west | 10, −3 | −1 m, 1 m |
 
 ## Other maps
 
@@ -255,6 +310,15 @@ only 11 m across the 9 m road, with no room for the road through it. Each is mad
 4.5 m piers 26 m tall, and a span from 12 m to 17 m. They're coloured as weathered
 Pennant stone (`LANDMARKS`).
 
+**The sea** (`seaRings`, `joinLines`): OSM has no area for the sea, only the
+coastline (`natural=coastline`), drawn with the land on its left and the sea on its
+right. Its ways are joined end to end, and each coast crossing the map (with a
+little margin round it) is followed, then the map's edge clockwise to where the next
+coast comes in, till back at the start: each ring made is water, as a river's is
+(the Severn's estuary at Avonmouth and Portbury, and the Avon's mouth as far as the
+coastline runs up it). A coast that's a closed ring (an island) is land; one that
+stops short inside the map is left out.
+
 **Corrections** (`CORRECTIONS` in `landmarks.ts`): where the street isn't (yet) as
 OSM has it, from the owner's own knowledge (never from Google Maps), tags put on an
 OSM element over its own before anything's made of it, each with a note of why.
@@ -295,7 +359,16 @@ it has there (the middle of them, less 0.3 m; 3.5 m at least), from one side to 
 other; or, where its far side's open (gardens, a yard: nothing within 8 m), twice its
 nearer side. So Pitch Lane is one lane (3.7 m: no centre line, no cars parked), the
 traffic squeezing by each other along it; Picton Lane, built up both sides, keeps its
-7 m, its cars parked along one side and a lane to drive (no centre line). **Pavements**, 2.4 m wide, along every
+7 m, its cars parked along one side and a lane to drive (no centre line). **Dual
+carriageways** (`pairedRoom`): a one-way road (not a roundabout, service road or track,
+bridge or tunnel) that doesn't say how wide it is, with another one-way road going the
+other way alongside it (within 20° of parallel, under 12 m away straight across, at half
+or more of the points every 3 m along it, not within 10 m of its ends): the two halves of
+a dual carriageway, as OSM draws them, a line down the middle of each. Where they're
+nearer each other than the width it'd have, it's made only as wide as the middle of
+those distances (each half to the line between them; 3.5 m at least), so the two halves'
+traffic doesn't run into each other (the Haymarket's halves, 9.25 m apart, were each
+10 m wide). **Pavements**, 2.4 m wide, along every
 road but service roads, tracks and backstreets: on both sides unless `sidewalk`,
 `sidewalk:both`, `sidewalk:left` or `sidewalk:right` say otherwise (left and right
 as the way runs); none on a side where it's `no` or `separate` (mapped as a footpath
@@ -591,7 +664,7 @@ They're now all within 1.5 m but Fifty Acre Wood's (woods and a golf course, nex
 nothing to line up by).
 An area being lined up for the first time with fewer than 25 buildings of 150 m² or
 more in it (in the country: fields and woods give it nothing sure to go by) is given
-the median shift of the others lined up instead (Bristol's areas were all lined up
+the median shift of the others lined up instead (Bristol's first 132 areas were lined up
 before this rule, and keep their shifts).
 
 **Measured by the LIDAR** (height above ground = first-return surface − bare

@@ -1659,12 +1659,20 @@ export class Traffic {
         if (this.inZone(r, o)) return;
       }
     } else {
-      // (And stopping, if anything's got behind it: not what's waiting for it, stopped.)
+      // (And stopping, if anything's got in its way: not what's waiting for it, stopped. All along it, where it'll be in a
+      // moment: swinging round, its side sweeps over more than its tail does.)
       const [x, y, ux, uy] = pathAt(r.path, Math.min(r.path.length, r.s + 1.5 * M));
       const [bx, by] = [x + (ux * v.length) / 2, y + (uy * v.length) / 2];
-      for (const o of this.obstaclesNear(obstacles, bx, by, v.length + 4 * M, this.nearFor.back)) {
+      for (const o of this.obstaclesNear(obstacles, x, y, v.length + 4 * M, this.nearFor.back)) {
         if (o.id === v.id || (o.id >= 0 && (this.inBay(o as Vehicle) || (o as Vehicle).behind === v.id))) continue;
-        if (Math.abs(o.x - bx) < o.length && Math.abs(o.y - by) < o.length && distToBody(o, bx, by) < v.r + 0.3 * M) return;
+        if (Math.abs(o.x - x) > o.length + v.length || Math.abs(o.y - y) > o.length + v.length) continue;
+        if (distToBody(o, bx, by) < v.r + 0.3 * M) return;
+        // (Its side: only what it's coming nearer to, so it's not held by what it's already brushing past and leaving.)
+        for (let k = -v.length / 2 + v.r; k < v.length / 2; k += M) {
+          const [px, py] = [x + ux * k, y + uy * k];
+          const d = distToBody(o, px, py);
+          if (d < v.r + 0.1 * M && d < distToBody(o, v.x + ux * k, v.y + uy * k) - 0.01) return;
+        }
       }
     }
     const left = r.path.length - r.s;
