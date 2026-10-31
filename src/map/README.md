@@ -1591,7 +1591,10 @@ tough it is; fly-tipped rubbish and the bits of what's broken, nothing). A vehic
 hard it was (as its dents count it: pressed against something, it's not hit over
 and over), and for what comes off it (a bumper £450, a mirror £180, a light £220,
 a hubcap £40); no more in all than it's worth, written off (a hatchback £14,000, a
-bus £220,000, a tank £4m).
+bus £220,000, a tank £4m). Someone you knock down: their claim, by how fast you were
+going (£1,000 and £400 × speed in m/s to the power 1.5: a bump at walking pace about
+£2,000, 20 mph about £12,000, 45 mph about £37,000), twice that for driving over
+them; no more than £250,000 for anyone, all told.
 
 Whatever stands (a tree, a lamp post, a traffic light, a Belisha beacon, a
 bollard, a post box, a phone box) doesn't just appear fallen: it topples over

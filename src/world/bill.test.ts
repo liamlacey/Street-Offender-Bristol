@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BREAKUP, THINGS } from './damage';
-import { HUT_PRICE, THING_PRICE, VEHICLE_PRICE, dentPrice, loosePrice, partPrice, pounds, treePrice } from './bill';
+import { HUT_PRICE, PERSON_MOST, THING_PRICE, VEHICLE_PRICE, dentPrice, loosePrice, partPrice, personPrice, pounds, treePrice } from './bill';
 
 describe('the damage bill', () => {
   it('prices everything that can be knocked down, and every loose thing that can be smashed', () => {
@@ -24,6 +24,15 @@ describe('the damage bill', () => {
     expect(dentPrice('hatch', 10_000)).toBe(VEHICLE_PRICE.hatch);
     expect(dentPrice('bus', 60)).toBeGreaterThan(dentPrice('hatch', 60));
     expect(partPrice('bumperFront')).toBeGreaterThan(partPrice('hubcap'));
+  });
+
+  it('someone knocked down costs more the faster you were going, and more again driven over', () => {
+    expect(personPrice('hit', 1.5)).toBeGreaterThanOrEqual(1_000);
+    expect(personPrice('hit', 1.5)).toBeLessThan(3_000);
+    expect(personPrice('hit', 9)).toBeGreaterThan(10_000);
+    expect(personPrice('hit', 25)).toBeGreaterThan(personPrice('hit', 9) * 3);
+    expect(personPrice('over', 9)).toBeGreaterThan(personPrice('hit', 9));
+    expect(personPrice('hit', 45)).toBeLessThan(PERSON_MOST);
   });
 
   it('reads as pounds', () => {
