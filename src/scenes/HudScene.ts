@@ -55,6 +55,8 @@ export class HudScene extends Phaser.Scene {
   /** The damage done (see GameScene's `charge`): the count, as it's shown (counting up to the total), and what's just been added. */
   private bill!: Phaser.GameObjects.Text;
   private added!: Phaser.GameObjects.Text;
+  /** How many you've run down. */
+  private killCount!: Phaser.GameObjects.Text;
   private total = 0;
   private shown = 0;
   private recent = 0;
@@ -103,10 +105,13 @@ export class HudScene extends Phaser.Scene {
     // (On a touch screen, it's a button by the others; with a keyboard, F or E.)
     if (!this.touch) this.action.setOrigin(1, 0);
     this.bill = this.add
-      .text(0, 0, `DAMAGE ${pounds(0)}`, { fontFamily: 'monospace', fontSize: '16px', color: '#ff7a59', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 })
-      .setOrigin(0, 0.5);
+      .text(0, 0, `DAMAGE ${pounds(0)}`, { fontFamily: 'monospace', fontSize: '14px', color: '#ff7a59', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 })
+      .setOrigin(0, 0);
+    this.killCount = this.add
+      .text(0, 0, 'KILLS 0', { fontFamily: 'monospace', fontSize: '14px', color: '#e8e8e8', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 })
+      .setOrigin(0, 0);
     this.added = this.add
-      .text(0, 0, '', { fontFamily: 'monospace', fontSize: '13px', color: '#ffd2c2', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 })
+      .text(0, 0, '', { fontFamily: 'monospace', fontSize: '12px', color: '#ffd2c2', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 })
       .setOrigin(0, 0)
       .setAlpha(0);
     this.credit = this.add
@@ -144,10 +149,11 @@ export class HudScene extends Phaser.Scene {
     this.street.setPosition(width / 2, 10);
     this.resetButton.setPosition(width - 10, 10);
     this.pauseButton.setPosition(10, 10);
-    // The damage bill beside it.
+    // Under it (clear of the street's name, along the top): the damage bill, the kills, and what's just been added to the bill.
     const bounds = this.pauseButton.getBounds();
-    this.bill.setPosition(bounds.right + 10, bounds.centerY);
-    this.added.setPosition(bounds.right + 10, bounds.bottom + 2);
+    this.bill.setPosition(bounds.left, bounds.bottom + 6);
+    this.killCount.setPosition(bounds.left, bounds.bottom + 26);
+    this.added.setPosition(bounds.left, bounds.bottom + 46);
     if (!this.touch) this.action.setPosition(width - 10, 46);
     this.credit.setPosition(width / 2, height - 3);
     this.hint?.setPosition(width / 2, height - 18);
@@ -248,6 +254,14 @@ export class HudScene extends Phaser.Scene {
       this.bill.setScale(1);
       this.tweens.add({ targets: this.bill, scale: 1.25, duration: 90, yoyo: true, ease: 'Quad.easeOut' });
     }
+  }
+
+  /** One more run down: how many now. */
+  kills(count: number): void {
+    this.killCount.setText(`KILLS ${count}`);
+    this.tweens.killTweensOf(this.killCount);
+    this.killCount.setScale(1);
+    this.tweens.add({ targets: this.killCount, scale: 1.25, duration: 90, yoyo: true, ease: 'Quad.easeOut' });
   }
 
   /** The count rolling up to the total (quickly: within about half a second, however much), and what was added fading. */

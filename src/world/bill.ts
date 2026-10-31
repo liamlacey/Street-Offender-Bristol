@@ -189,18 +189,6 @@ export function partPrice(part: string): number {
   return 220;
 }
 
-/**
- * Someone knocked down (`over`: driven over, lying there), at this speed, m/s: the claim for it, £. A bump at walking pace,
- * about £2,000; at 20 mph, about £12,000; at 45 mph, about £37,000; and twice that for going over them.
- */
-export function personPrice(how: 'hit' | 'over', speed: number): number {
-  const claim = 1_000 + 400 * Math.max(0, speed) ** 1.5;
-  return Math.round(((how === 'over' ? 2 : 1) * claim) / 50) * 50;
-}
-
-/** The most anyone's claim comes to, all told (however many times they're hit). */
-export const PERSON_MOST = 250_000;
-
 /** £1,234,567 (to the pound). */
 export function pounds(n: number): string {
   return `£${Math.round(n).toLocaleString('en-GB')}`;

@@ -36,7 +36,7 @@ import { SURFACE_KIND, Surface, type SurfaceGrid } from '../world/surface';
 import { type Light, lightAt } from '../world/lights';
 import { CHUNK, type LooseProp, type Post, type World, beacons, atHome, chunkKey, ruin, shadowOffset } from '../world/world';
 import { type Work, drain, every, runFor } from '../world/work.ts';
-import { PERSON_MOST, VEHICLE_PRICE, dentPrice, partPrice, personPrice } from '../world/bill';
+import { VEHICLE_PRICE, dentPrice, partPrice } from '../world/bill';
 import { Changes } from '../world/changes';
 import type { FirstIds, Progress, Region } from '../world/region';
 import { type Obstacle, Trains } from '../world/trains';
@@ -270,9 +270,11 @@ export class GameScene extends Phaser.Scene {
   private skids!: SkidMarks;
   private audio: CarAudio | null = null;
   private hud!: HudScene;
-  /** The damage done this session, £: everything broken and dented, and everyone knocked down (see bill.ts); and, for each vehicle and person, how much of it's been charged so far. */
+  /** The damage done this session, £: everything broken and dented (see bill.ts); and, for each vehicle, how much of it's been charged so far. */
   private damage = 0;
   private readonly charged = new WeakMap<object, number>();
+  /** Everyone you've run down this session. */
+  private readonly killed = new Set<object>();
   /** Set up, and going (see `build`). */
   private ready = false;
   private keys!: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'space' | 'r' | 'f' | 'e' | 'p' | 'esc', Phaser.Input.Keyboard.Key>;
@@ -1577,12 +1579,10 @@ export class GameScene extends Phaser.Scene {
     for (const h of this.people.hits) {
       // What hit them (or went over them) loses some speed to it: you feel it.
       if (h.by === -1) {
-        // And their claim's on the bill (no more than PERSON_MOST, all told, however many times).
-        const had = this.charged.get(h.person) ?? 0;
-        const claim = Math.min(PERSON_MOST - had, personPrice(h.how, h.speed / 8));
-        if (claim > 0) {
-          this.charged.set(h.person, had + claim);
-          this.charge(claim);
+        // One more on the count of those you've run down (each once, however many times).
+        if (!this.killed.has(h.person)) {
+          this.killed.add(h.person);
+          this.hud?.kills(this.killed.size);
         }
         const [bvx, bvy] = [car.vx, car.vy];
         // (Less, the heavier it is; and in your armoured truck, hardly at all.)
