@@ -1,3 +1,4 @@
+import { HUT_PRICE, REMAINS_PRICE, THING_PRICE, WALL_PRICE, loosePrice, treePrice } from '../world/bill';
 import * as Phaser from 'phaser';
 import { CAR_LENGTH, type CarState } from '../car/CarPhysics';
 import type { CarAudio } from '../audio/CarAudio';
@@ -92,6 +93,8 @@ export interface WreckageHooks {
   wallBroken?(kind: WallKind, from: [number, number], to: [number, number], level: number): void;
   /** A hut's been knocked down (see world.ts's `isHut`): its id in the whole map, where, and how far its walls reach from there. */
   hutGone?(id: number, x: number, y: number, reach: number): void;
+  /** Something's been broken: what it'll cost to put right, £ (see bill.ts), and where. */
+  charge?(pounds: number, x: number, y: number): void;
 }
 
 /**
@@ -198,6 +201,8 @@ export class Wreckage {
     // (A wreck's only just been made: not broken again by the same hit.)
     if (wreck) Object.assign(body, { wrecked: true, born: this.scene.time.now / 1000 });
     else body.gone = true;
+    // (Paid for once: when it's wrecked. Its pieces, and the wreck broken up again, cost nothing more.)
+    if (wreck) this.hooks.charge?.(loosePrice(body.kind), body.x, body.y);
     const rand = this.rand.frac.bind(this.rand);
     const size = body.r + (body.length ?? 0) / 2;
     // (Its wreck's left: and more of its bits strewn round it, and rubble.)
@@ -247,6 +252,7 @@ export class Wreckage {
     if (post.broken) {
       // What was left of a statue's plinth or a fountain's basin, hit again: smashed to rubble.
       post.gone = true;
+      this.hooks.charge?.(REMAINS_PRICE, post.x, post.y);
       this.hooks.knockedDown(post, level);
       for (const [kind, count] of [['rubble', 6], ['brick', 4]] as [Parameters<typeof debris>[0], number][]) {
         for (const d of debris(kind, count, post.x, post.y, car.vx * 0.6, car.vy * 0.6, rand, post.r)) this.hooks.addDebris(d, level);
@@ -259,6 +265,7 @@ export class Wreckage {
     // (A statue's plinth and a fountain's basin are left, broken, still in the way: see REMAINS.)
     if (REMAINS.has(post.thing)) Object.assign(post, { broken: true, brokenAt: this.scene.time.now / 1000 });
     else post.gone = true;
+    this.hooks.charge?.(post.thing === 'tree' ? treePrice(this.hooks.treeHeight(post.index) / 8) : THING_PRICE[post.thing], post.x, post.y);
     this.hooks.knockedDown(post, level);
     const z = this.hooks.groundAt(post.x, post.y);
     if (post.thing === 'fountain') {
@@ -336,6 +343,7 @@ export class Wreckage {
     const [mx, my] = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
     const gap = Math.hypot(to[0] - from[0], to[1] - from[1]);
     const material: Material = WALLS[kind].material;
+    this.hooks.charge?.(Math.round(WALL_PRICE[kind] * Math.max(1, gap / 8)), mx, my);
     // What it breaks into: a stone wall into rubble and bricks, a hedge into clumps of leaves and twigs, a fence into planks,
     // a railing or a gate into bent bars, a car park's barrier into bits of its arm.
     const pieces: [Parameters<typeof debris>[0], number][] =
@@ -371,6 +379,7 @@ export class Wreckage {
     const reach = Math.hypot(x1 - x0, y1 - y0) / 2 + 8;
     for (const grid of this.walls) for (const w of grid.near(x, y, reach) as Wall[]) if (w.hut === id) w.gone = true;
     this.hooks.hutGone?.(id, x, y, reach);
+    this.hooks.charge?.(HUT_PRICE, x, y);
     // Rubble and bricks (more, the bigger it was), its roof's timbers, its windows.
     const size = Math.min(1, (x1 - x0) * (y1 - y0) / (30 * 64));
     const rand = this.rand.frac.bind(this.rand);

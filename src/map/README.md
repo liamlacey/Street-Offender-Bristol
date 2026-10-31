@@ -1579,6 +1579,20 @@ buildings (and a bridge's deck itself), and what's broken stays
 broken, where it fell, in the way, until the game is restarted. The rules are
 in `src/world/damage.ts` (pure, tested); `src/scenes/Wreckage.ts` applies them.
 
+**The damage bill** (`src/world/bill.ts`, tested): everything you break or dent is
+added up in £, shown by the pause button (counting up to it, with what's just been
+added under it); back to £0 when the game's started again (the page loaded). A
+thing knocked down costs what it'd take to put back (a lamp post £3,500, a traffic
+light £12,000, a statue £80,000; a tree £900 and £350 a metre of it); a wall,
+fence or hedge so much a metre of it knocked through; a hut £15,000; a loose thing
+smashed, once, when it's wrecked (a bench £1,200; one not priced, £8 a point of how
+tough it is; fly-tipped rubbish and the bits of what's broken, nothing). A vehicle
+(yours too: it's someone's) costs its share of its worth for each knock, by how
+hard it was (as its dents count it: pressed against something, it's not hit over
+and over), and for what comes off it (a bumper £450, a mirror £180, a light £220,
+a hubcap £40); no more in all than it's worth, written off (a hatchback £14,000, a
+bus £220,000, a tank £4m).
+
 Whatever stands (a tree, a lamp post, a traffic light, a Belisha beacon, a
 bollard, a post box, a phone box) doesn't just appear fallen: it topples over
 from its foot the way it was hit, slowly at first and then faster and faster,

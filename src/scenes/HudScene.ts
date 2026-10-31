@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser';
+import { pounds } from '../world/bill';
 
 /** What the thumbs are asking of the car. */
 export interface TouchDrive {
@@ -51,6 +52,13 @@ export class HudScene extends Phaser.Scene {
   private resetButton!: Phaser.GameObjects.Text;
   private pauseButton!: Phaser.GameObjects.Text;
   private credit!: Phaser.GameObjects.Text;
+  /** The damage done (see GameScene's `charge`): the count, as it's shown (counting up to the total), and what's just been added. */
+  private bill!: Phaser.GameObjects.Text;
+  private added!: Phaser.GameObjects.Text;
+  private total = 0;
+  private shown = 0;
+  private recent = 0;
+  private recentFor = 0;
   private hint: Phaser.GameObjects.Text | null = null;
   /** Getting out (or in): the button, and whether it's lit (something to get into within reach). */
   private action!: Phaser.GameObjects.Text;
@@ -94,6 +102,13 @@ export class HudScene extends Phaser.Scene {
       .setOrigin(0.5);
     // (On a touch screen, it's a button by the others; with a keyboard, F or E.)
     if (!this.touch) this.action.setOrigin(1, 0);
+    this.bill = this.add
+      .text(0, 0, `DAMAGE ${pounds(0)}`, { fontFamily: 'monospace', fontSize: '16px', color: '#ff7a59', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 })
+      .setOrigin(0, 0.5);
+    this.added = this.add
+      .text(0, 0, '', { fontFamily: 'monospace', fontSize: '13px', color: '#ffd2c2', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 })
+      .setOrigin(0, 0)
+      .setAlpha(0);
     this.credit = this.add
       .text(0, 0, '© OpenStreetMap contributors · LIDAR © Environment Agency (OGL)', { fontFamily: 'sans-serif', fontSize: '10px', color: '#ffffff' })
       .setAlpha(0.6)
@@ -129,6 +144,10 @@ export class HudScene extends Phaser.Scene {
     this.street.setPosition(width / 2, 10);
     this.resetButton.setPosition(width - 10, 10);
     this.pauseButton.setPosition(10, 10);
+    // The damage bill beside it.
+    const bounds = this.pauseButton.getBounds();
+    this.bill.setPosition(bounds.right + 10, bounds.centerY);
+    this.added.setPosition(bounds.right + 10, bounds.bottom + 2);
     if (!this.touch) this.action.setPosition(width - 10, 46);
     this.credit.setPosition(width / 2, height - 3);
     this.hint?.setPosition(width / 2, height - 18);
@@ -152,6 +171,7 @@ export class HudScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    this.countUp(delta / 1000);
     if (this.streetTimer > 0) {
       this.streetTimer -= delta / 1000;
       this.street.setAlpha(Phaser.Math.Clamp(this.streetTimer / 0.6, 0, 1));
@@ -214,6 +234,32 @@ export class HudScene extends Phaser.Scene {
     if (this.action.text !== label) this.action.setText(label);
     this.actionLit = lit;
     this.action.setAlpha(lit ? 0.9 : 0.4);
+  }
+
+  /** More damage done: the total now, and how much that was (added to what's just been, while it's still showing). */
+  billed(total: number, amount: number): void {
+    this.total = total;
+    this.recent = this.recentFor > 0 ? this.recent + amount : amount;
+    this.recentFor = 1.6;
+    this.added.setText(`+${pounds(this.recent)}`).setAlpha(1);
+    // (A big one: the count jumps out at you.)
+    if (amount >= 1000) {
+      this.tweens.killTweensOf(this.bill);
+      this.bill.setScale(1);
+      this.tweens.add({ targets: this.bill, scale: 1.25, duration: 90, yoyo: true, ease: 'Quad.easeOut' });
+    }
+  }
+
+  /** The count rolling up to the total (quickly: within about half a second, however much), and what was added fading. */
+  private countUp(dt: number): void {
+    if (this.shown < this.total) {
+      this.shown = Math.min(this.total, this.shown + Math.max(1, (this.total - this.shown) * Math.min(1, dt * 8)));
+      this.bill.setText(`DAMAGE ${pounds(this.shown)}`);
+    }
+    if (this.recentFor > 0) {
+      this.recentFor -= dt;
+      this.added.setAlpha(Phaser.Math.Clamp(this.recentFor / 0.5, 0, 1));
+    }
   }
 
   private showStreet(name: string): void {

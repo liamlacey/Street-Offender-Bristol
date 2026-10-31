@@ -36,6 +36,7 @@ import { SURFACE_KIND, Surface, type SurfaceGrid } from '../world/surface';
 import { type Light, lightAt } from '../world/lights';
 import { CHUNK, type LooseProp, type Post, type World, beacons, atHome, chunkKey, ruin, shadowOffset } from '../world/world';
 import { type Work, drain, every, runFor } from '../world/work.ts';
+import { VEHICLE_PRICE, dentPrice, partPrice } from '../world/bill';
 import { Changes } from '../world/changes';
 import type { FirstIds, Progress, Region } from '../world/region';
 import { type Obstacle, Trains } from '../world/trains';
@@ -269,6 +270,9 @@ export class GameScene extends Phaser.Scene {
   private skids!: SkidMarks;
   private audio: CarAudio | null = null;
   private hud!: HudScene;
+  /** The damage done this session, £: everything broken and dented (see bill.ts); and, for each vehicle, how much of it's been charged so far. */
+  private damage = 0;
+  private readonly charged = new WeakMap<object, number>();
   /** Set up, and going (see `build`). */
   private ready = false;
   private keys!: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'space' | 'r' | 'f' | 'e' | 'p' | 'esc', Phaser.Input.Keyboard.Key>;
@@ -410,6 +414,7 @@ export class GameScene extends Phaser.Scene {
         ruin(b);
         this.ground.ruined(k, x, y, reach + Math.hypot(sx, sy));
       },
+      charge: (pounds) => this.charge(pounds),
     }, DEPTH.props - 0.1, DEPTH.trees);
     this.peopleLayer = new PeopleLayer(this, this.people, (x, y, level) => this.surfaceHeight(x, y, level), {
       ground: DEPTH.props + 0.05,
@@ -1436,7 +1441,18 @@ export class GameScene extends Phaser.Scene {
     const shape = v ? vehicleShape(v) : this.rideShape();
     const wreck = v ? (v.wreck ??= newWreck()) : this.wreck;
     const [u, w] = toBody(x, y, body.x, body.y, body.angle);
+    const before = wreck.taken.front + wreck.taken.rear + wreck.taken.left + wreck.taken.right;
     const out = dentAt(wreck, shape, u, w, impulse, this.time.now / 1000, Math.random);
+    // The bill for it: the damage it's taken (as it's counted: pressed against something, it's not hit over and over), and
+    // anything knocked off; no more in all than the vehicle's worth (written off).
+    const kind = v ? v.kind : this.ride.kind;
+    const taken = wreck.taken.front + wreck.taken.rear + wreck.taken.left + wreck.taken.right - before;
+    const had = this.charged.get(wreck) ?? 0;
+    const cost = Math.min(VEHICLE_PRICE[kind] - had, dentPrice(kind, taken) + out.lost.reduce((n, l) => n + partPrice(l.part), 0));
+    if (cost > 0) {
+      this.charged.set(wreck, had + cost);
+      this.charge(cost);
+    }
     if (v) {
       this.traffic.hurt(v);
       // A parked car knocked hard enough sets its alarm off.
@@ -1470,6 +1486,13 @@ export class GameScene extends Phaser.Scene {
           this.audio?.shatter('glass', impulse);
       }
     }
+  }
+
+  /** Something's been broken or dented: on the bill, and the count of it on the screen. */
+  private charge(pounds: number): void {
+    if (pounds <= 0) return;
+    this.damage += pounds;
+    this.hud?.billed(this.damage, pounds);
   }
 
   /** The people walk, wait, cross, get on and off the buses; get out of the way, run, and are knocked down. */
