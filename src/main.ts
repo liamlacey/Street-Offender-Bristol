@@ -5,6 +5,7 @@ import { LoadingScene } from './scenes/LoadingScene';
 import { MenuScene } from './scenes/MenuScene';
 import { TitleScene } from './scenes/TitleScene';
 import { PERF, watch } from './scenes/perfMeter';
+import { guard } from './scenes/recovery';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -26,6 +27,9 @@ const game = new Phaser.Game({
 
 // (`?perf` on the address: how smoothly it's running, over the game.)
 watch(game);
+
+// Kept going when something goes wrong: an error in a frame, the picture lost (see recovery.ts).
+guard(game, () => (game.scene.getScene('game') as GameScene).snapshot());
 
 // For poking at the game from the browser's console (and the screenshot scripts) while developing; and, with `?perf`, timing it
 // as it's played (the built game, as the phone has it).

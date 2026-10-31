@@ -1579,6 +1579,11 @@ buildings (and a bridge's deck itself), and what's broken stays
 broken, where it fell, in the way, until the game is restarted. The rules are
 in `src/world/damage.ts` (pure, tested); `src/scenes/Wreckage.ts` applies them.
 
+**When something goes wrong** (`src/scenes/recovery.ts`): an error in a frame is caught
+(and shown at the bottom of the screen a while), so the game carries on; the picture lost
+(the phone short of memory takes the WebGL context away) says so, and a tap loads it
+again, carrying on where you were, with the damage and the kills as they were.
+
 **The damage bill** (`src/world/bill.ts`, tested): everything you break or dent is
 added up in £, shown under the pause button (counting up to it, with what's just been
 added under that); back to £0 when the game's started again (the page loaded). A
@@ -1762,7 +1767,7 @@ and loose things are got ready to take over, a few frames more
   walls knocked through, posts knocked down, trees felled, parapets. Loose
   things moved or smashed, and vehicles left standing (dented, shoved, got
   out of), are put by outside the region and put back when it's back.
-  Tyre marks are kept in 64 textures, made at the start (making one as you
+  Tyre marks are kept in 32 textures, made at the start (making one as you
   drive holds the frame up while the GPU catches up): past that, the one
   longest out of sight is wiped and used again.
 

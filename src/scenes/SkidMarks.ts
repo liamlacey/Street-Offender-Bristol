@@ -11,7 +11,7 @@ const RESOLUTION = 0.5;
  * The most chunks of marks kept (a quarter of a MB each): past this, the one longest out of sight is wiped and used again.
  * (Their textures are all made at the start: making one as you drive holds the frame up, while the GPU catches up.)
  */
-const MOST = 64;
+const MOST = 32;
 
 interface Segment {
   x1: number;

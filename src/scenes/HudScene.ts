@@ -114,6 +114,13 @@ export class HudScene extends Phaser.Scene {
       .text(0, 0, '', { fontFamily: 'monospace', fontSize: '12px', color: '#ffd2c2', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 })
       .setOrigin(0, 0)
       .setAlpha(0);
+    // Carrying on (after the picture was lost: see recovery.ts): the counts as they were.
+    const counts = this.registry.get('counts') as { damage: number; kills: number } | undefined;
+    if (counts) {
+      this.total = this.shown = counts.damage;
+      this.bill.setText(`DAMAGE ${pounds(counts.damage)}`);
+      this.killCount.setText(`KILLS ${counts.kills}`);
+    }
     this.credit = this.add
       .text(0, 0, '© OpenStreetMap contributors · LIDAR © Environment Agency (OGL)', { fontFamily: 'sans-serif', fontSize: '10px', color: '#ffffff' })
       .setAlpha(0.6)

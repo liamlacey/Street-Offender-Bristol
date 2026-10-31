@@ -68,6 +68,7 @@ import { PLAY_KINDS, PLAY_SCALE } from '../world/playgrounds';
 import { CRANE_JIB, MACHINES, SiteMachines, siteLife } from '../world/sites';
 import { type Pose, PeopleLayer, SIZE as PERSON_SIZE, personTexture } from './PeopleLayer';
 import { type Shape, STIFFNESS, type Wreck, hit as dentAt, newWreck, toBody, toWorld } from '../car/dents';
+import { type Carried, carried } from './recovery';
 import { paintWreck } from './dentArt';
 import { bodyLayout, busTexture, vehicleShadow, vehicleTexture } from './vehicleArt';
 import * as perf from './perfMeter';
@@ -273,8 +274,9 @@ export class GameScene extends Phaser.Scene {
   /** The damage done this session, £: everything broken and dented (see bill.ts); and, for each vehicle, how much of it's been charged so far. */
   private damage = 0;
   private readonly charged = new WeakMap<object, number>();
-  /** Everyone you've run down this session. */
-  private readonly killed = new Set<object>();
+  /** Everyone you've run down this session (each once), and how many. */
+  private readonly killed = new WeakSet<object>();
+  private kills = 0;
   /** Set up, and going (see `build`). */
   private ready = false;
   private keys!: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'space' | 'r' | 'f' | 'e' | 'p' | 'esc', Phaser.Input.Keyboard.Key>;
@@ -336,7 +338,11 @@ export class GameScene extends Phaser.Scene {
     loading.show(0, 'Reading the map');
     await frames(2);
     this.streamer = await Streamer.open((world, bounds) => surfacesWork(world, bounds), () => this.firstIds());
-    const { spawn, width, height } = this.streamer.index;
+    const { width, height } = this.streamer.index;
+    // (Carrying on where you were, after the picture was lost: see recovery.ts. Otherwise, where the map says to start.)
+    const back = carried();
+    const spawn = back ? { x: back.x, y: back.y, heading: back.heading } : this.streamer.index.spawn;
+    if (back) [this.damage, this.kills] = [back.damage, back.kills];
     const progress: Progress = { done: 0, label: 'Reading the map' };
     const region = await this.streamer.load(spawn.x, spawn.y, progress, async () => {
       loading.show(progress.done * 0.95, progress.label);
@@ -488,6 +494,8 @@ export class GameScene extends Phaser.Scene {
 
     loading.show(1, 'Ready');
     this.scene.stop('loading');
+    // (The counts carried on, if they were: see recovery.ts.)
+    this.registry.set('counts', { damage: this.damage, kills: this.kills });
     this.scene.launch('hud');
     this.hud = this.scene.get('hud') as HudScene;
     this.ready = true;
@@ -1490,6 +1498,12 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Where you are, which way, and the counts: to carry on after the picture's been lost (see recovery.ts). */
+  snapshot(): Carried | null {
+    if (!this.ready) return null;
+    return { x: this.car.x, y: this.car.y, heading: this.car.heading, damage: this.damage, kills: this.kills };
+  }
+
   /** Something's been broken or dented: on the bill, and the count of it on the screen. */
   private charge(pounds: number): void {
     if (pounds <= 0) return;
@@ -1582,7 +1596,7 @@ export class GameScene extends Phaser.Scene {
         // One more on the count of those you've run down (each once, however many times).
         if (!this.killed.has(h.person)) {
           this.killed.add(h.person);
-          this.hud?.kills(this.killed.size);
+          this.hud?.kills(++this.kills);
         }
         const [bvx, bvy] = [car.vx, car.vy];
         // (Less, the heavier it is; and in your armoured truck, hardly at all.)

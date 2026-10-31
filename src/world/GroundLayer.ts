@@ -13,7 +13,7 @@ import { type Work, drain } from './work.ts';
 import { softTexture } from './canvas';
 
 /** How many pieces of ground are kept drawn at once (each is 1 MB of texture). */
-const KEEP = 48;
+const KEEP = 32;
 /** Draw pieces this far beyond the view, px, so they're ready before they come into it. */
 const MARGIN = 320;
 /** Pieces drawn per frame once the game's running, when they're drawn here (with no worker to draw them), so drawing never holds a frame up for long. */
