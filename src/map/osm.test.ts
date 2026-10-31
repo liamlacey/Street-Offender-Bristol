@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PX_PER_METRE, Projection, buildMap, gateways, pointInRing, clipLine, clipRing, joinRings, areaKind, cutSpans, roadKind, laneArrows, lanesAcross, metres, parseOsm, pavementSides, ringArea, roadLanes, roadWidth, sidewalkAlong } from './osm';
+import { PX_PER_METRE, Projection, buildMap, gateways, pointInRing, clipLine, clipRing, joinRings, joinLines, seaRings, areaKind, cutSpans, roadKind, laneArrows, lanesAcross, metres, parseOsm, pavementSides, ringArea, roadLanes, roadWidth, sidewalkAlong } from './osm';
 import type { Building, Road } from './osm';
 
 /** A tiny map: a street with a junction, a building with a part on it, a pond, a park inside a multipolygon, a tree and a bench. */
@@ -351,5 +351,29 @@ describe('gateways', () => {
     expect(span.bottom).toBe(12 * M);
     expect(span.top).toBe(17 * M);
     for (const p of piers) expect(p.top).toBe(26 * M);
+  });
+});
+
+describe('seaRings', () => {
+  const area = (r: number[]) => Math.abs(ringArea(r));
+  it('fills the sea side (the right, going along the coast) of a coast crossing the map, round the corners', () => {
+    // Heading south (down the screen): land on the left (east), sea on the right (west).
+    const [sea] = seaRings([[50, -10, 50, 110]], 0, 0, 100, 100);
+    expect(area(sea)).toBeCloseTo(5000);
+    expect(pointInRing(25, 50, sea)).toBe(true);
+    expect(pointInRing(75, 50, sea)).toBe(false);
+  });
+  it('makes one ring of the coasts that go in and out of the map, and leaves islands and lines stopping short out', () => {
+    // An inlet: the coast comes in from the west and goes back out to the west, land on its left (north, then south).
+    const bay = [-10, 20, 60, 50, -10, 80];
+    const rings = seaRings([bay, [40, 40, 45, 40, 45, 45, 40, 40], [90, 10, 95, 95]], 0, 0, 100, 100);
+    expect(rings.length).toBe(1);
+    // The sea's in the inlet; the land all round it.
+    expect(pointInRing(10, 50, rings[0])).toBe(true);
+    expect(pointInRing(80, 50, rings[0])).toBe(false);
+    expect(pointInRing(10, 10, rings[0])).toBe(false);
+  });
+  it('joins the coastline from its pieces, each way round as drawn', () => {
+    expect(joinLines([[3, 4, 5], [1, 2, 3], [7, 8]])).toEqual([[1, 2, 3, 4, 5], [7, 8]]);
   });
 });

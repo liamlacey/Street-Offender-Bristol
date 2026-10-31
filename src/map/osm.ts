@@ -1253,6 +1253,97 @@ function clipSegment(ax: number, ay: number, bx: number, by: number, x0: number,
   return [t0 === 0 ? ax : ax + t0 * dx, t0 === 0 ? ay : ay + t0 * dy, t1 === 1 ? bx : ax + t1 * dx, t1 === 1 ? by : ay + t1 * dy];
 }
 
+/**
+ * The sea inside a rectangle, from the coastline: OSM draws the coast as lines with the land on their left and the sea on
+ * their right (no area for the sea itself). `coasts` are the coastline's lines (joined end to end: see `joinLines`), in map
+ * px. Each piece of coast crossing the rectangle is followed, then the rectangle's edge clockwise (as seen, north up: the sea
+ * kept on the right) to where the next piece comes in, till it's back where it started: a ring of sea. Lines that end inside
+ * the rectangle (the data stopping short) are left out; a coast that's a closed ring (an island) is land, and isn't sea.
+ */
+export function seaRings(coasts: Pts[], x0: number, y0: number, x1: number, y1: number): Pts[] {
+  const [w, h] = [x1 - x0, y1 - y0];
+  const perimeter = 2 * (w + h);
+  /** How far round the edge, clockwise from the top-left corner. */
+  const along = (x: number, y: number): number => {
+    const e = 1e-6 * (w + h);
+    if (Math.abs(y - y0) <= e) return x - x0;
+    if (Math.abs(x - x1) <= e) return w + (y - y0);
+    if (Math.abs(y - y1) <= e) return w + h + (x1 - x);
+    return 2 * w + h + (y1 - y);
+  };
+  const corners: [number, number, number][] = [
+    [0, x0, y0],
+    [w, x1, y0],
+    [w + h, x1, y1],
+    [2 * w + h, x0, y1],
+  ];
+  const isIn = (x: number, y: number) => x > x0 && x < x1 && y > y0 && y < y1;
+  const pieces: { pts: Pts; enter: number; leave: number }[] = [];
+  for (const c of coasts) {
+    const n = c.length;
+    if (n < 4 || (c[0] === c[n - 2] && c[1] === c[n - 1])) continue;
+    if (isIn(c[0], c[1]) || isIn(c[n - 2], c[n - 1])) continue;
+    for (const piece of clipLine(c, x0, y0, x1, y1)) {
+      const m = piece.length;
+      // (Only those that cross: in at one edge, out at another.)
+      if (isIn(piece[0], piece[1]) || isIn(piece[m - 2], piece[m - 1])) continue;
+      pieces.push({ pts: piece, enter: along(piece[0], piece[1]), leave: along(piece[m - 2], piece[m - 1]) });
+    }
+  }
+  const rings: Pts[] = [];
+  const used = new Set<number>();
+  for (let start = 0; start < pieces.length; start++) {
+    if (used.has(start)) continue;
+    const ring: Pts = [];
+    let at = start;
+    for (let guard = 0; guard <= pieces.length; guard++) {
+      used.add(at);
+      ring.push(...pieces[at].pts);
+      const from = pieces[at].leave;
+      // The next piece in, clockwise round the edge from here.
+      let next = -1;
+      let gap = Infinity;
+      pieces.forEach((p, i) => {
+        if (i !== start && used.has(i)) return;
+        const d = (p.enter - from + perimeter) % perimeter;
+        if (d < gap) [next, gap] = [i, d];
+      });
+      if (next < 0) break;
+      for (const [t, cx, cy] of [...corners, ...corners.map(([t, cx, cy]) => [t + perimeter, cx, cy] as [number, number, number])]) {
+        const d = t - from;
+        if (d > 0 && d < gap) ring.push(cx, cy);
+      }
+      if (next === start) break;
+      at = next;
+    }
+    if (ring.length >= 6) rings.push(ring);
+  }
+  return rings;
+}
+
+/** Joins lines (lists of node ids) end to end, each way round as it's drawn: the coastline's pieces into whole coasts. */
+export function joinLines(ways: number[][]): number[][] {
+  const pending = ways.filter((w) => w.length >= 2).map((w) => [...w]);
+  const lines: number[][] = [];
+  while (pending.length > 0) {
+    const line = pending.shift()!;
+    for (let grown = true; grown && line[0] !== line[line.length - 1]; ) {
+      grown = false;
+      for (let i = 0; i < pending.length; i++) {
+        const w = pending[i];
+        if (w[0] === line[line.length - 1]) line.push(...w.slice(1));
+        else if (w[w.length - 1] === line[0]) line.unshift(...w.slice(0, -1));
+        else continue;
+        pending.splice(i, 1);
+        grown = true;
+        break;
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
 /** Joins ways (lists of node ids) end to end into closed rings, as for a multipolygon's members. */
 export function joinRings(ways: number[][]): number[][] {
   const pending = ways.filter((w) => w.length >= 2).map((w) => [...w]);
@@ -1940,6 +2031,15 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       if (isBuilding) addBuilding('relation', rel.id, t, [outer, ...holes], false);
       else addArea(kind!, [outer, ...holes], t);
     }
+  }
+
+  // The sea, from the coastline (it has no area of its own in OSM).
+  {
+    const coastWays = [...data.ways.values()].filter((w) => w.tags.natural === 'coastline').map((w) => w.nodes);
+    const coasts = joinLines(coastWays)
+      .map(pointsOf)
+      .filter((p): p is Pts => !!p);
+    for (const ring of seaRings(coasts, cx0, cy0, cx1, cy1)) addArea('water', [ring], { natural: 'water', water: 'sea' });
   }
 
   const roadNodes = new Map<number, number>();

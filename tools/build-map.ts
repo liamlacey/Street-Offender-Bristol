@@ -79,11 +79,17 @@ const LIDAR_MARGIN = 40;
 const sources: Sources = JSON.parse(readFileSync(`${SOURCES}/areas.json`, 'utf8'));
 const refresh = arg('--refresh');
 
-/** Text from the web. */
+/** Text from the web; asked again, waiting longer each time, if the server's busy or limiting how much it gives (OSM's API: 429, 509). */
 async function download(url: string): Promise<string> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${url}: ${res.status}`);
-  return res.text();
+  for (let tries = 0; ; tries++) {
+    const res = await fetch(url).catch(() => null);
+    if (res?.ok) return res.text();
+    const busy = !res || res.status === 429 || res.status === 509 || res.status >= 500;
+    if (!busy || tries >= 6) throw new Error(`${url}: ${res?.status ?? 'no answer'}`);
+    const wait = 15_000 * 2 ** tries;
+    console.log(`  (${res?.status ?? 'no answer'}: trying again in ${wait / 1000} s)`);
+    await new Promise((done) => setTimeout(done, wait));
+  }
 }
 
 /** A source file, gzipped in the area's folder: read if it's there, otherwise downloaded (from `url`, or made by `make`) and kept. */
