@@ -1,3 +1,4 @@
+import { MAPS, chooseMap, currentMap } from '../map/maps';
 import * as Phaser from 'phaser';
 import { type Going, OVERVIEW_SCALE, type Overview, type OverviewRoad, type Spot, drawOverview, jumpSpot } from '../world/overview';
 import { softTexture } from '../world/canvas';
@@ -26,13 +27,14 @@ const TAP = 10;
 const FONT = { fontFamily: 'monospace', color: '#ffffff', fontStyle: 'bold' };
 
 /**
- * Paused: RESUME, or MAP, a map of the whole of Bristol to drag about (and
- * pinch, or scroll, to zoom), showing where you are. Tap a place on it and
- * GO to be put down on the road there.
+ * Paused: RESUME; MAP, a map of the whole of the place you're in to drag about
+ * (and pinch, or scroll, to zoom), showing where you are (tap a place on it and
+ * GO to be put down on the road there); or PLACES, the maps there are to play
+ * (Bristol, Llanidloes: see src/map/maps.ts), to go to another.
  */
 export class MenuScene extends Phaser.Scene {
   private data_!: MenuData;
-  private mode: 'menu' | 'map' = 'menu';
+  private mode: 'menu' | 'map' | 'places' = 'menu';
   private items: Phaser.GameObjects.GameObject[] = [];
   private image: Phaser.GameObjects.Image | null = null;
   private marks!: Phaser.GameObjects.Graphics;
@@ -69,7 +71,7 @@ export class MenuScene extends Phaser.Scene {
       this.roads = null;
     });
     const kb = this.input.keyboard;
-    kb?.on('keydown-ESC', () => (this.mode === 'map' ? this.showMenu() : this.close(null)));
+    kb?.on('keydown-ESC', () => (this.mode === 'menu' ? this.close(null) : this.showMenu()));
     kb?.on('keydown-P', () => this.close(null));
     kb?.on('keydown-M', () => this.mode === 'menu' && this.showMap());
     this.input.on('pointerdown', this.down, this);
@@ -84,6 +86,7 @@ export class MenuScene extends Phaser.Scene {
   /** Lays it out again (at the start, and when the screen turns or changes size). */
   private build(): void {
     if (this.mode === 'map') this.showMap(false);
+    else if (this.mode === 'places') this.showPlaces();
     else this.showMenu();
   }
 
@@ -113,9 +116,34 @@ export class MenuScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const shade = this.add.rectangle(0, 0, width, height, 0x000000, 0.55).setOrigin(0).setInteractive();
     this.items.push(shade);
-    this.items.push(this.add.text(width / 2, height * 0.22, 'PAUSED', { ...FONT, fontSize: '34px', color: '#f2c94c' }).setOrigin(0.5).setShadow(2, 2, '#000', 4));
-    this.button(width / 2, height * 0.47, 'RESUME', () => this.close(null), 22);
-    this.button(width / 2, height * 0.7, 'MAP', () => this.showMap(), 22);
+    this.items.push(this.add.text(width / 2, height * 0.17, 'PAUSED', { ...FONT, fontSize: '34px', color: '#f2c94c' }).setOrigin(0.5).setShadow(2, 2, '#000', 4));
+    this.button(width / 2, height * 0.4, 'RESUME', () => this.close(null), 22);
+    this.button(width / 2, height * 0.6, 'MAP', () => this.showMap(), 22);
+    this.button(width / 2, height * 0.8, 'PLACES', () => this.showPlaces(), 22);
+  }
+
+  /** The maps there are to play: the one you're in marked; another tapped, and the game's loaded again there (starting afresh). */
+  private showPlaces(): void {
+    this.mode = 'places';
+    this.clear();
+    const { width, height } = this.scale;
+    this.items.push(this.add.rectangle(0, 0, width, height, 0x000000, 0.7).setOrigin(0).setInteractive());
+    this.button(70, 30, 'BACK', () => this.showMenu(), 15);
+    this.items.push(this.add.text(width / 2, height * 0.17, 'PLACES', { ...FONT, fontSize: '28px', color: '#f2c94c' }).setOrigin(0.5).setShadow(2, 2, '#000', 4));
+    const here = currentMap();
+    const gap = Math.min(80, (height * 0.7) / MAPS.length);
+    MAPS.forEach((m, i) => {
+      const y = height * 0.38 + i * gap;
+      if (m.id === here.id) {
+        this.items.push(
+          this.add
+            .text(width / 2, y, `${m.name.toUpperCase()}  ✓`, { ...FONT, fontSize: '20px', color: '#f2c94c', backgroundColor: '#000000b3', padding: { x: 18, y: 12 } })
+            .setOrigin(0.5),
+        );
+      } else {
+        this.button(width / 2, y, m.name.toUpperCase(), () => chooseMap(m.id), 20, '#2f8f4ee6');
+      }
+    });
   }
 
   /** The map; `fresh` centres it on you, close enough to see the streets round you. */
@@ -165,7 +193,7 @@ export class MenuScene extends Phaser.Scene {
     this.button(width - 34, height / 2 + 34, '−', () => this.zoomAt(width / 2, height / 2, 1 / 1.6), 22);
     this.button(width - 70, 30, 'ME', () => this.centreOn(you.x, you.y), 15);
     this.items.push(
-      this.add.text(width / 2, height - 3, '© OpenStreetMap contributors · LIDAR © Environment Agency (OGL)', { fontFamily: 'sans-serif', fontSize: '10px', color: '#ffffff' }).setOrigin(0.5, 1).setAlpha(0.7),
+      this.add.text(width / 2, height - 3, currentMap().credit, { fontFamily: 'sans-serif', fontSize: '10px', color: '#ffffff' }).setOrigin(0.5, 1).setAlpha(0.7),
     );
     if (this.target) this.pick(this.target);
     this.place();

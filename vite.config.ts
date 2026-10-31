@@ -1,27 +1,31 @@
-import { readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
+import { MAPS, type MapInfo } from './src/map/maps';
 import type { GameMap } from './src/map/osm';
 import { splitMap } from './src/map/regions';
 import { overviewOf } from './src/world/overview';
 
-const MAP = 'src/map/bristol.json';
-
 /**
- * The map, in tiles (see src/map/regions.ts), for the game to fetch as it
- * needs them (it never holds the whole map): `map/index.json`, and a file a
- * tile, `map/t/<i>_<j>.json`; and what the pause menu's map is drawn from,
- * `map/overview.json` (see src/world/overview.ts). Cut from bristol.json when
- * the game's built, and as asked for while developing (again whenever
- * bristol.json changes).
+ * Each map (see src/map/maps.ts), in tiles (see src/map/regions.ts), for the
+ * game to fetch as it needs them (it never holds the whole map): under the
+ * map's `base` (Bristol's `map/`, the others' `map/<id>/`), `index.json`, and a
+ * file a tile, `t/<i>_<j>.json`; and what the pause menu's map is drawn from,
+ * `overview.json` (see src/world/overview.ts). Cut from the map's made file
+ * (bristol.json, ...) when the game's built, and as asked for while
+ * developing (again whenever it changes). A map not made yet is left out.
  */
 function mapTiles(): Plugin {
-  let cut: { at: number; split: ReturnType<typeof splitMap> & { overview: ReturnType<typeof overviewOf> } } | null = null;
-  const split = () => {
-    const at = statSync(MAP).mtimeMs;
+  type Cut = ReturnType<typeof splitMap> & { overview: ReturnType<typeof overviewOf> };
+  const cuts = new Map<string, { at: number; split: Cut }>();
+  const made = () => MAPS.filter((m) => existsSync(m.file));
+  const split = (m: MapInfo): Cut => {
+    const at = statSync(m.file).mtimeMs;
+    let cut = cuts.get(m.id);
     if (!cut || cut.at !== at) {
-      const map = JSON.parse(readFileSync(MAP, 'utf8')) as GameMap;
+      const map = JSON.parse(readFileSync(m.file, 'utf8')) as GameMap;
       cut = { at, split: { ...splitMap(map), overview: overviewOf(map) } };
+      cuts.set(m.id, cut);
     }
     return cut.split;
   };
@@ -29,10 +33,11 @@ function mapTiles(): Plugin {
     name: 'map-tiles',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        const m = req.url?.match(/\/map\/(?:(index|overview)|t\/(\d+)_(\d+))\.json(?:\?.*)?$/);
-        if (!m) return next();
-        const { index, tiles, overview } = split();
-        const body = m[1] === 'index' ? index : m[1] === 'overview' ? overview : tiles.get(`${m[2]},${m[3]}`);
+        const m = req.url?.match(/\/(map\/(?:[a-z-]+\/)?)(?:(index|overview)|t\/(\d+)_(\d+))\.json(?:\?.*)?$/);
+        const info = m && made().find((i) => i.base === m[1]);
+        if (!m || !info) return next();
+        const { index, tiles, overview } = split(info);
+        const body = m[2] === 'index' ? index : m[2] === 'overview' ? overview : tiles.get(`${m[3]},${m[4]}`);
         if (!body) {
           res.statusCode = 404;
           return res.end();
@@ -42,10 +47,12 @@ function mapTiles(): Plugin {
       });
     },
     generateBundle() {
-      const { index, tiles, overview } = split();
-      this.emitFile({ type: 'asset', fileName: 'map/index.json', source: JSON.stringify(index) });
-      this.emitFile({ type: 'asset', fileName: 'map/overview.json', source: JSON.stringify(overview) });
-      for (const t of tiles.values()) this.emitFile({ type: 'asset', fileName: `map/t/${t.i}_${t.j}.json`, source: JSON.stringify(t) });
+      for (const info of made()) {
+        const { index, tiles, overview } = split(info);
+        this.emitFile({ type: 'asset', fileName: `${info.base}index.json`, source: JSON.stringify(index) });
+        this.emitFile({ type: 'asset', fileName: `${info.base}overview.json`, source: JSON.stringify(overview) });
+        for (const t of tiles.values()) this.emitFile({ type: 'asset', fileName: `${info.base}t/${t.i}_${t.j}.json`, source: JSON.stringify(t) });
+      }
     },
   };
 }

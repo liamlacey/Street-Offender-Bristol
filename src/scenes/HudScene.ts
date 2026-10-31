@@ -1,3 +1,4 @@
+import { currentMap } from '../map/maps';
 import * as Phaser from 'phaser';
 import { pounds } from '../world/bill';
 
@@ -122,7 +123,7 @@ export class HudScene extends Phaser.Scene {
       this.killCount.setText(`KILLS ${counts.kills}`);
     }
     this.credit = this.add
-      .text(0, 0, '© OpenStreetMap contributors · LIDAR © Environment Agency (OGL)', { fontFamily: 'sans-serif', fontSize: '10px', color: '#ffffff' })
+      .text(0, 0, currentMap().credit, { fontFamily: 'sans-serif', fontSize: '10px', color: '#ffffff' })
       .setAlpha(0.6)
       .setOrigin(0.5, 1);
     if (!this.touch) {

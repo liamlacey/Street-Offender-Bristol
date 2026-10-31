@@ -11,11 +11,13 @@ as the old. If the method changes, change this file in the same commit.
 | Streets, paths, ground, water, buildings, trees, street furniture | [OpenStreetMap](https://www.openstreetmap.org), the API's `map` call (`api.openstreetmap.org/api/0.6/map?bbox=…`), plus `relation/<id>/full` for multipolygons only partly in the area | ODbL: credit "© OpenStreetMap contributors" | Everything that's on the map |
 | Heights of roofs and treetops | Environment Agency, **LIDAR Composite First Return DSM, 1 m** (WCS, coverage `…__Lidar_Composite_Elevation_FZ_DSM_1m`) | Open Government Licence v3.0 | Building heights, roof shapes, trees' heights, finding trees, walls' and hedges' heights, finding bus shelters |
 | Height of the bare ground | Environment Agency, **LIDAR Composite DTM, 1 m** (WCS, coverage `…__Lidar_Composite_Elevation_DTM_1m`) | Open Government Licence v3.0 | Heights above ground (with the DSM), the hills, retaining walls' heights, counting steps, steep banks, ledges (sharp drops) |
+| Heights in Wales (other maps only: see "Other maps") | Welsh Government, **LIDAR 2020-2023, DSM and DTM, 1 m**: its tile catalogue on DataMapWales (WFS, `geonode:welsh_government_lidar_tile_catalogue_2020_2023`), and each tile's GeoTIFFs from the links in it | Open Government Licence v3.0: credit "LIDAR © Welsh Government (OGL)" | As the Environment Agency's, for maps in Wales |
 | Landmarks' and streets' colours | Written by hand in `landmarks.ts` | Ours | What OSM doesn't say about how places look |
 | Corrections | The owner's own knowledge of the streets, written by hand in `landmarks.ts` (`CORRECTIONS`) | Ours | What's different on the ground from OSM (yet): King Street and King William Avenue pedestrianised |
 
 The full URLs are in `tools/build-map.ts`. The game credits both at the bottom of
-the screen ("© OpenStreetMap contributors · LIDAR © Environment Agency (OGL)"), and
+the screen ("© OpenStreetMap contributors · LIDAR © Environment Agency (OGL)", or
+for a map in Wales "… · LIDAR © Welsh Government (OGL)"), and
 the README does too: keep both. **Google Maps (2D, satellite or 3D) must not be
 used**: its terms forbid taking data from it, even with an API key. Aerial
 imagery is only ever looked at, never traced, unless its licence allows (Bing and
@@ -177,6 +179,36 @@ to Long Ashton). Their shifts (east, south):
 | `ashtonhill` | fourth ring, west | 9, −1 | 1 m, 1.5 m |
 | `barrowwood` | fourth ring, west | 10, 0 | 1 m, 0.5 m |
 | `crossgrove` | fourth ring, west | 10, −1 | 1.5 m, 1.5 m |
+
+## Other maps
+
+Besides Bristol there are other, smaller maps, made exactly the same way, by the same
+rules, and played instead of it: the pause menu's **PLACES** lists them, and going to
+one loads the game again there (starting afresh: the damage and kills start again).
+They're listed in `src/map/maps.ts`, each with:
+
+- its sources: `map-sources/maps/<id>/`, with its own `areas.json` (areas, start, as
+  Bristol's) and a folder an area, kept as Bristol's are;
+- its map: `src/map/<id>.json`, made by `npm run map -- --map <id>` (and `--refresh
+  <area>` as for Bristol);
+- its tiles: served from `map/<id>/` (Bristol's from `map/`), cut by `vite.config.ts`
+  from every map that's been made;
+- its credit, kept on the screen in its place.
+
+| Map | Where | Areas | LIDAR |
+| --- | --- | --- | --- |
+| `llanidloes` | Llanidloes, Powys, and the village of Y Fan (Van) to its north-west: 3 km by 5 km | 15 one-kilometre squares, 3 across, 5 up, named `row<1-5 from the south>-<west, middle, east>` | Welsh Government's |
+
+`"lidar": "wales"` in an `areas.json` takes the heights from the Welsh Government's
+LIDAR instead of the Environment Agency's (which stops at the border). It isn't a
+coverage service: its catalogue's asked which kilometre tiles cover the area (and its
+margin), each tile's surface and ground GeoTIFFs (32-bit floats, deflated, British
+National Grid, a metre a cell) are downloaded (to the system's temporary folder: they're
+shared between areas, and not kept), read (`src/map/geotiff.ts`, tested in
+`geotiff.test.ts`), put together over the area (the newest survey winning where they
+overlap), and kept as `lidar-dsm.txt.gz` and `lidar-dtm.txt.gz`, written as the
+Environment Agency's coverages are, so from then on they're read, lined up and used the
+same. Its credit's "© OpenStreetMap contributors · LIDAR © Welsh Government (OGL)".
 
 ## Growing the map
 
@@ -557,6 +589,10 @@ is added to the north or west. (Until the third ring it was fitted from three co
 and the shifts took up that error; all 90 were worked out again when it changed.)
 They're now all within 1.5 m but Fifty Acre Wood's (woods and a golf course, next to
 nothing to line up by).
+An area being lined up for the first time with fewer than 25 buildings of 150 m² or
+more in it (in the country: fields and woods give it nothing sure to go by) is given
+the median shift of the others lined up instead (Bristol's areas were all lined up
+before this rule, and keep their shifts).
 
 **Measured by the LIDAR** (height above ground = first-return surface − bare
 ground):
@@ -1789,7 +1825,9 @@ first, with the loading screen up.
 - `landmarks.ts`: landmarks' colours (and heights, roof shapes), and streets' looks;
   and the corrections (`CORRECTIONS`: King Street pedestrianised).
 - `enrich.ts`, `lidar.ts`, `osgb.ts`: the LIDAR and the terrain. Tested in `lidar.test.ts`.
-- `bristol.json`: the whole map, cut into tiles for the game (see "In tiles").
+- `bristol.json`: the whole map, cut into tiles for the game (see "In tiles"); and the
+  other maps' (`llanidloes.json`), with `maps.ts` listing them (see "Other maps").
+- `geotiff.ts`: reading Wales's LIDAR tiles. Tested in `geotiff.test.ts`.
 - `regions.ts`, `tileStore.ts`: the tiles, regions put together from them, and fetching them.
 - `../../tools/build-map.ts`: downloads, keeps and puts it all together.
 - `../../map-sources/`: the kept downloads, and the list of areas.

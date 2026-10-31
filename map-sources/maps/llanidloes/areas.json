@@ -1,0 +1,250 @@
+{
+  "start": {
+    "about": "In the middle of Llanidloes, by the Market Hall, where Great Oak Street, Long Bridge Street, China Street and Short Bridge Street meet.",
+    "lat": 52.4482,
+    "lon": -3.5411
+  },
+  "lidar": "wales",
+  "areas": [
+    {
+      "name": "row1-middle",
+      "about": "About 1 km by 1 km: the south-west of Llanidloes (the middle of the town, by the Market Hall, is at its north-east corner).",
+      "bounds": {
+        "minlat": 52.4392,
+        "minlon": -3.5558,
+        "maxlat": 52.4482,
+        "maxlon": -3.5411
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-29T18:45:01Z",
+      "lidarShift": [
+        0,
+        2.5
+      ]
+    },
+    {
+      "name": "row1-east",
+      "about": "About 1 km by 1 km: the south-east of Llanidloes (the middle of the town, by the Market Hall, is at its north-west corner).",
+      "bounds": {
+        "minlat": 52.4392,
+        "minlon": -3.5411,
+        "maxlat": 52.4482,
+        "maxlon": -3.5264
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-29T18:45:01Z",
+      "lidarShift": [
+        0.5,
+        1.5
+      ]
+    },
+    {
+      "name": "row2-middle",
+      "about": "About 1 km by 1 km: the north-west of Llanidloes (the middle of the town, by the Market Hall, is at its south-east corner).",
+      "bounds": {
+        "minlat": 52.4482,
+        "minlon": -3.5558,
+        "maxlat": 52.4572,
+        "maxlon": -3.5411
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-19T11:18:23Z",
+      "lidarShift": [
+        0,
+        1.5
+      ]
+    },
+    {
+      "name": "row2-east",
+      "about": "About 1 km by 1 km: the north-east of Llanidloes (the middle of the town, by the Market Hall, is at its south-west corner).",
+      "bounds": {
+        "minlat": 52.4482,
+        "minlon": -3.5411,
+        "maxlat": 52.4572,
+        "maxlon": -3.5264
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-29T18:45:01Z",
+      "lidarShift": [
+        1,
+        2
+      ]
+    },
+    {
+      "name": "row1-west",
+      "about": "About 1 km by 1 km: the countryside round Llanidloes, row 1 of 5 (from the south), the west column of 3.",
+      "bounds": {
+        "minlat": 52.4392,
+        "minlon": -3.5705,
+        "maxlat": 52.4482,
+        "maxlon": -3.5558
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-19T11:18:23Z",
+      "lidarShift": [
+        0.5,
+        2
+      ]
+    },
+    {
+      "name": "row2-west",
+      "about": "About 1 km by 1 km: the countryside round Llanidloes, row 2 of 5 (from the south), the west column of 3.",
+      "bounds": {
+        "minlat": 52.4482,
+        "minlon": -3.5705,
+        "maxlat": 52.4572,
+        "maxlon": -3.5558
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-01T14:53:05Z",
+      "lidarShift": [
+        0.5,
+        2
+      ]
+    },
+    {
+      "name": "row3-middle",
+      "about": "About 1 km by 1 km: the countryside round Llanidloes, row 3 of 5 (from the south), the middle column of 3.",
+      "bounds": {
+        "minlat": 52.4572,
+        "minlon": -3.5558,
+        "maxlat": 52.4662,
+        "maxlon": -3.5411
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-09-11T08:55:01Z",
+      "lidarShift": [
+        0.5,
+        2
+      ]
+    },
+    {
+      "name": "row3-east",
+      "about": "About 1 km by 1 km: the countryside round Llanidloes, row 3 of 5 (from the south), the east column of 3.",
+      "bounds": {
+        "minlat": 52.4572,
+        "minlon": -3.5411,
+        "maxlat": 52.4662,
+        "maxlon": -3.5264
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-10-19T11:18:23Z",
+      "lidarShift": [
+        0.5,
+        2
+      ]
+    },
+    {
+      "name": "row3-west",
+      "about": "About 1 km by 1 km: the countryside round Llanidloes, row 3 of 5 (from the south), the west column of 3.",
+      "bounds": {
+        "minlat": 52.4572,
+        "minlon": -3.5705,
+        "maxlat": 52.4662,
+        "maxlon": -3.5558
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-01-14T11:56:15Z",
+      "lidarShift": [
+        0.5,
+        2
+      ]
+    },
+    {
+      "name": "row4-middle",
+      "about": "About 1 km by 1 km: the countryside round Llanidloes, row 4 of 5 (from the south), the middle column of 3.",
+      "bounds": {
+        "minlat": 52.4662,
+        "minlon": -3.5558,
+        "maxlat": 52.4752,
+        "maxlon": -3.5411
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-09-11T08:55:01Z",
+      "lidarShift": [
+        0.5,
+        2
+      ]
+    },
+    {
+      "name": "row4-east",
+      "about": "About 1 km by 1 km: the countryside round Llanidloes, row 4 of 5 (from the south), the east column of 3.",
+      "bounds": {
+        "minlat": 52.4662,
+        "minlon": -3.5411,
+        "maxlat": 52.4752,
+        "maxlon": -3.5264
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-09-11T08:55:01Z",
+      "lidarShift": [
+        0.5,
+        2
+      ]
+    },
+    {
+      "name": "row4-west",
+      "about": "About 1 km by 1 km: the countryside round Llanidloes, row 4 of 5 (from the south), the west column of 3.",
+      "bounds": {
+        "minlat": 52.4662,
+        "minlon": -3.5705,
+        "maxlat": 52.4752,
+        "maxlon": -3.5558
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-09-11T08:55:01Z",
+      "lidarShift": [
+        0.5,
+        2
+      ]
+    },
+    {
+      "name": "row5-middle",
+      "about": "About 1 km by 1 km: the countryside round Llanidloes, row 5 of 5 (from the south), the middle column of 3.",
+      "bounds": {
+        "minlat": 52.4752,
+        "minlon": -3.5558,
+        "maxlat": 52.4842,
+        "maxlon": -3.5411
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2025-05-16T17:32:05Z",
+      "lidarShift": [
+        0.5,
+        2
+      ]
+    },
+    {
+      "name": "row5-east",
+      "about": "About 1 km by 1 km: the countryside round Llanidloes, row 5 of 5 (from the south), the east column of 3.",
+      "bounds": {
+        "minlat": 52.4752,
+        "minlon": -3.5411,
+        "maxlat": 52.4842,
+        "maxlon": -3.5264
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2025-05-16T17:32:05Z",
+      "lidarShift": [
+        0.5,
+        2
+      ]
+    },
+    {
+      "name": "row5-west",
+      "about": "About 1 km by 1 km: Y Fan (Van), the old lead-mining village, north-west of Llanidloes.",
+      "bounds": {
+        "minlat": 52.4752,
+        "minlon": -3.5705,
+        "maxlat": 52.4842,
+        "maxlon": -3.5558
+      },
+      "fetched": "2026-10-31",
+      "osmNewestEdit": "2026-08-28T23:36:27Z",
+      "lidarShift": [
+        0.5,
+        2
+      ]
+    }
+  ]
+}

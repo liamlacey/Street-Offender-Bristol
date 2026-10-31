@@ -1,3 +1,4 @@
+import { currentMap } from '../map/maps';
 import * as Phaser from 'phaser';
 
 /**
@@ -48,10 +49,10 @@ export class LoadingScene extends Phaser.Scene {
     this.add.graphics().fillGradientStyle(0x1d2b53, 0x1d2b53, 0xe07a5f, 0xe07a5f, 1).fillRect(0, 0, width, height);
     const title = { fontFamily: 'monospace', color: '#ffffff', fontStyle: 'bold' };
     this.add.text(width / 2, height * 0.3, 'STREET OFFENDER', { ...title, fontSize: `${Math.min(40, width / 14)}px` }).setOrigin(0.5).setShadow(3, 3, '#000', 6);
-    this.add.text(width / 2, height * 0.3 + Math.min(40, width / 15), 'BRISTOL', { ...title, fontSize: `${Math.min(26, width / 20)}px`, color: '#f2c94c' }).setOrigin(0.5).setShadow(2, 2, '#000', 4);
+    this.add.text(width / 2, height * 0.3 + Math.min(40, width / 15), currentMap().name.toUpperCase(), { ...title, fontSize: `${Math.min(26, width / 20)}px`, color: '#f2c94c' }).setOrigin(0.5).setShadow(2, 2, '#000', 4);
     this.bar = this.add.graphics();
     this.text = this.add.text(width / 2, height * 0.62, '', { ...title, fontSize: '15px', fontStyle: 'normal' }).setOrigin(0.5).setShadow(1, 1, '#000', 3);
-    this.add.text(width / 2, height - 14, '© OpenStreetMap contributors · LIDAR © Environment Agency (OGL)', { fontFamily: 'sans-serif', fontSize: '11px', color: '#ffffff' }).setOrigin(0.5, 1).setAlpha(0.8);
+    this.add.text(width / 2, height - 14, currentMap().credit, { fontFamily: 'sans-serif', fontSize: '11px', color: '#ffffff' }).setOrigin(0.5, 1).setAlpha(0.8);
     this.fill();
   }
 

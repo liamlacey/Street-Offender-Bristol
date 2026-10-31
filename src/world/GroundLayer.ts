@@ -1,3 +1,4 @@
+import { currentMap } from '../map/maps';
 import * as Phaser from 'phaser';
 import type { Palette } from './ground';
 import { artPalette } from './groundArt';
@@ -104,7 +105,7 @@ export class GroundLayer {
   prepare(keys: string[], bounds: { x0: number; y0: number; x1: number; y1: number }): number | undefined {
     if (!this.worker) return undefined;
     const id = ++this.requests;
-    this.tell({ type: 'prepare', id, base: new URL('map/', location.href).href, keys, bounds });
+    this.tell({ type: 'prepare', id, base: new URL(currentMap().base, location.href).href, keys, bounds });
     return id;
   }
 

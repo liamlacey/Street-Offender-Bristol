@@ -1,3 +1,4 @@
+import { currentMap } from '../map/maps';
 import * as Phaser from 'phaser';
 import { CarAudio } from '../audio/CarAudio';
 import {
@@ -337,7 +338,7 @@ export class GameScene extends Phaser.Scene {
     const loading = this.scene.get('loading') as LoadingScene;
     loading.show(0, 'Reading the map');
     await frames(2);
-    this.streamer = await Streamer.open((world, bounds) => surfacesWork(world, bounds), () => this.firstIds());
+    this.streamer = await Streamer.open((world, bounds) => surfacesWork(world, bounds), () => this.firstIds(), currentMap().base);
     const { width, height } = this.streamer.index;
     // (Carrying on where you were, after the picture was lost: see recovery.ts. Otherwise, where the map says to start.)
     const back = carried();

@@ -1,3 +1,4 @@
+import { currentMap } from '../map/maps';
 import * as Phaser from 'phaser';
 import { bridge, terrace } from './skyline';
 
@@ -47,7 +48,7 @@ export class TitleScene extends Phaser.Scene {
     }
     const title = { fontFamily: 'monospace', color: '#ffffff', fontStyle: 'bold' };
     this.add.text(width / 2, height * 0.16, 'STREET OFFENDER', { ...title, fontSize: `${Math.min(56, width / 11)}px` }).setOrigin(0.5).setShadow(3, 3, '#000', 6);
-    this.add.text(width / 2, height * 0.16 + Math.min(52, width / 12), 'BRISTOL', { ...title, fontSize: `${Math.min(34, width / 16)}px`, color: '#f2c94c' }).setOrigin(0.5).setShadow(2, 2, '#000', 4);
+    this.add.text(width / 2, height * 0.16 + Math.min(52, width / 12), currentMap().name.toUpperCase(), { ...title, fontSize: `${Math.min(34, width / 16)}px`, color: '#f2c94c' }).setOrigin(0.5).setShadow(2, 2, '#000', 4);
     const go = this.add.text(width / 2, height * 0.62, 'TAP TO DRIVE', { ...title, fontSize: '18px' }).setOrigin(0.5).setShadow(1, 1, '#000', 3);
     this.tweens.add({ targets: go, alpha: 0.35, duration: 700, yoyo: true, repeat: -1 });
   }

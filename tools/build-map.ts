@@ -5,6 +5,11 @@
  *
  *   npm run map
  *
+ * Or another map (see src/map/maps.ts, and the README's "Other maps"), made
+ * the same way from its own sources folder, into its own file:
+ *
+ *   npm run map -- --map llanidloes
+ *
  * The map is made of the areas listed in map-sources/areas.json. Each area's
  * data is downloaded once, the first time the map's made with it, and kept
  * (gzipped) in map-sources/<area>/, so the map comes out the same every
@@ -14,10 +19,13 @@
  *   npm run map -- --refresh <area>   fetches that area's data afresh (and re-aligns it)
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { gunzipSync, gzipSync } from 'node:zlib';
+import { tmpdir } from 'node:os';
+import { gunzipSync, gzipSync, inflateSync } from 'node:zlib';
+import { type Tile, mosaic, rasterText, readTiff } from '../src/map/geotiff.ts';
+import { MAPS } from '../src/map/maps.ts';
 import { addLidar, alignLidar, mergeRasters, shiftRaster } from '../src/map/enrich.ts';
 import { type Raster, parseWcsText } from '../src/map/lidar.ts';
-import { Projection, buildMap, parseOsm, type OsmData } from '../src/map/osm.ts';
+import { Projection, buildMap, parseOsm, ringArea, type OsmData } from '../src/map/osm.ts';
 import { toNationalGrid } from '../src/map/osgb.ts';
 import { Terrain } from '../src/world/terrain.ts';
 
@@ -46,29 +54,44 @@ interface Sources {
   start: { about?: string; lat: number; lon: number; facing?: 'downhill' | 'uphill' };
   /** Oldest first. Where areas overlap, the older's data wins, so adding an area never changes what's there. */
   areas: Area[];
+  /** Whose LIDAR: the Environment Agency's (England: the default), or the Welsh Government's (Wales). */
+  lidar?: 'england' | 'wales';
 }
 
-const SOURCES = 'map-sources';
+const arg = (name: string) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : null);
+const MAP_INFO = MAPS.find((m) => m.id === (arg('--map') ?? 'bristol'));
+if (!MAP_INFO) throw new Error(`No map called ${arg('--map')}: see src/map/maps.ts`);
+const SOURCES = MAP_INFO.sources;
 const API = 'https://api.openstreetmap.org/api/0.6';
 /** The Environment Agency's LIDAR composites, 1 m: first return (roofs, treetops) and the bare ground. */
 const LIDAR = {
   dsm: 'https://environment.data.gov.uk/spatialdata/lidar-composite-digital-surface-model-first-return-dsm-1m/wcs?coverageId=df4e3ec3-315e-48aa-aaaf-b5ae74d7b2bb__Lidar_Composite_Elevation_FZ_DSM_1m',
   dtm: 'https://environment.data.gov.uk/spatialdata/lidar-composite-digital-terrain-model-dtm-1m/wcs?coverageId=13787b9a-26a4-4775-8523-806d13af58fc__Lidar_Composite_Elevation_DTM_1m',
 };
+/**
+ * The Welsh Government's LIDAR (2020-23, 1 m, Open Government Licence): its catalogue of tiles (a kilometre square each),
+ * which says where each one's surface (DSM) and ground (DTM) GeoTIFF is to be downloaded from.
+ */
+const WALES_CATALOGUE = 'https://datamap.gov.wales/geoserver/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=geonode:welsh_government_lidar_tile_catalogue_2020_2023&outputFormat=application/json&srsName=EPSG:27700';
 /** LIDAR is fetched this far beyond each area, metres, so it can be lined up. */
 const LIDAR_MARGIN = 40;
 
 const sources: Sources = JSON.parse(readFileSync(`${SOURCES}/areas.json`, 'utf8'));
-const refresh = process.argv.includes('--refresh') ? process.argv[process.argv.indexOf('--refresh') + 1] : null;
+const refresh = arg('--refresh');
 
-/** A source file, gzipped in the area's folder: read if it's there, otherwise downloaded and kept. */
-async function source(area: Area, file: string, url: string): Promise<string> {
+/** Text from the web. */
+async function download(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: ${res.status}`);
+  return res.text();
+}
+
+/** A source file, gzipped in the area's folder: read if it's there, otherwise downloaded (from `url`, or made by `make`) and kept. */
+async function source(area: Area, file: string, url: string | (() => Promise<string>)): Promise<string> {
   const path = `${SOURCES}/${area.name}/${file}.gz`;
   if (existsSync(path)) return gunzipSync(readFileSync(path)).toString('utf8');
   console.log(`Downloading ${area.name}/${file}`);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${url}: ${res.status}`);
-  const text = await res.text();
+  const text = typeof url === 'string' ? await download(url) : await url();
   mkdirSync(`${SOURCES}/${area.name}`, { recursive: true });
   writeFileSync(path, gzipSync(text, { level: 9 }));
   area.fetched = new Date().toISOString().slice(0, 10);
@@ -97,11 +120,48 @@ async function lidarOf(area: Area): Promise<{ dsm: Raster; dtm: Raster }> {
   const corners = [toNationalGrid(minlat, minlon), toNationalGrid(maxlat, maxlon), toNationalGrid(minlat, maxlon), toNationalGrid(maxlat, minlon)];
   const [e0, e1] = [Math.floor(Math.min(...corners.map((c) => c[0]))) - LIDAR_MARGIN, Math.ceil(Math.max(...corners.map((c) => c[0]))) + LIDAR_MARGIN];
   const [n0, n1] = [Math.floor(Math.min(...corners.map((c) => c[1]))) - LIDAR_MARGIN, Math.ceil(Math.max(...corners.map((c) => c[1]))) + LIDAR_MARGIN];
+  if (sources.lidar === 'wales') {
+    return {
+      dsm: parseWcsText(await source(area, 'lidar-dsm.txt', () => walesLidar('dsm', e0, n0, e1, n1))),
+      dtm: parseWcsText(await source(area, 'lidar-dtm.txt', () => walesLidar('dtm', e0, n0, e1, n1))),
+    };
+  }
   const coverage = (base: string) => `${base}&service=WCS&version=2.0.1&request=GetCoverage&subset=E(${e0},${e1})&subset=N(${n0},${n1})&format=text/plain`;
   return {
     dsm: parseWcsText(await source(area, 'lidar-dsm.txt', coverage(LIDAR.dsm))),
     dtm: parseWcsText(await source(area, 'lidar-dtm.txt', coverage(LIDAR.dtm))),
   };
+}
+
+/** The Welsh tiles' downloads, kept a while (a tile's shared by the areas round it): they're big, and only what's cut from them is kept. */
+const WALES_TILES = `${tmpdir()}/street-offender-wales-lidar`;
+
+/**
+ * Wales's LIDAR over (e0, n0) to (e1, n1): the catalogue's tiles there downloaded, read, and put together, and written out as
+ * the Environment Agency's coverages are, so it's kept and read the same way (the newest tile winning where they overlap).
+ */
+async function walesLidar(kind: 'dsm' | 'dtm', e0: number, n0: number, e1: number, n1: number): Promise<string> {
+  const catalogue = JSON.parse(await download(`${WALES_CATALOGUE}&bbox=${e0},${n0},${e1},${n1},EPSG:27700`)) as {
+    features: { properties: Record<string, string> }[];
+  };
+  const found = catalogue.features.map((f) => f.properties).filter((p) => p[`${kind}_link`]);
+  found.sort((a, b) => String(a.date ?? '').localeCompare(String(b.date ?? '')));
+  const tiles: Tile[] = [];
+  mkdirSync(WALES_TILES, { recursive: true });
+  for (const p of found) {
+    const link = p[`${kind}_link`];
+    const url = link.startsWith('http') ? link : `https://${link}`;
+    const kept = `${WALES_TILES}/${url.split('/').pop()}`;
+    if (!existsSync(kept)) {
+      console.log(`  ${p.british_gr} ${kind}`);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`${url}: ${res.status}`);
+      writeFileSync(kept, new Uint8Array(await res.arrayBuffer()));
+    }
+    tiles.push(readTiff(new Uint8Array(readFileSync(kept)), (b) => new Uint8Array(inflateSync(b))));
+  }
+  if (!tiles.length) throw new Error(`No Welsh LIDAR (${kind}) at ${e0},${n0} to ${e1},${n1}`);
+  return rasterText(mosaic(tiles, e0, n0, e1, n1));
 }
 
 if (refresh) {
@@ -132,15 +192,39 @@ const map = buildMap(data, { bounds, start: sources.start });
 const proj = new Projection(map.origin.lat, map.origin.lon, map.pxPerMetre);
 const dsms: Raster[] = [];
 const dtms: Raster[] = [];
+/** Too few buildings to line an area's LIDAR up by (big ones, as `alignLidar` uses): it's lined up as the others are, instead. */
+const FEW_BUILDINGS = 25;
+const lidars: { dsm: Raster; dtm: Raster }[] = [];
+const unsure: Area[] = [];
 for (const area of sources.areas) {
   const { dsm, dtm } = await lidarOf(area);
+  lidars.push({ dsm, dtm });
   if (!area.lidarShift) {
     const { minlat, minlon, maxlat, maxlon } = area.bounds;
-    area.lidarShift = alignLidar(map, dsm, dtm, [proj.x(minlon), proj.y(maxlat), proj.x(maxlon), proj.y(minlat)]);
+    const within: [number, number, number, number] = [proj.x(minlon), proj.y(maxlat), proj.x(maxlon), proj.y(minlat)];
+    area.lidarShift = alignLidar(map, dsm, dtm, within);
+    const big = map.buildings.filter((b) => {
+      const [x, y] = [b.rings[0][0], b.rings[0][1]];
+      return b.solid && x >= within[0] && y >= within[1] && x <= within[2] && y <= within[3] && Math.abs(ringArea(b.rings[0])) >= 150 * map.pxPerMetre ** 2;
+    });
+    if (big.length < FEW_BUILDINGS) unsure.push(area);
   }
-  dsms.push(shiftRaster(dsm, area.lidarShift));
-  dtms.push(shiftRaster(dtm, area.lidarShift));
 }
+const sure = sources.areas.filter((a) => !unsure.includes(a));
+if (unsure.length && sure.length) {
+  const median = (k: 0 | 1) => {
+    const v = sure.map((a) => a.lidarShift![k]).sort((a, b) => a - b);
+    return v[Math.floor(v.length / 2)];
+  };
+  for (const area of unsure) {
+    console.log(`${area.name}: too few buildings to line its LIDAR up by (it gave ${area.lidarShift!.join(', ')} m): lined up as the others are`);
+    area.lidarShift = [median(0), median(1)];
+  }
+}
+sources.areas.forEach((area, i) => {
+  dsms.push(shiftRaster(lidars[i].dsm, area.lidarShift!));
+  dtms.push(shiftRaster(lidars[i].dtm, area.lidarShift!));
+});
 const lidar = addLidar(map, mergeRasters(dsms), mergeRasters(dtms));
 
 // Turn the car round if it's facing the wrong way up the hill.
@@ -181,11 +265,11 @@ function nearestRoad(m: typeof map, x: number, y: number) {
 }
 
 const json = JSON.stringify(map);
-writeFileSync('src/map/bristol.json', json);
+writeFileSync(MAP_INFO.file, json);
 console.log(`Areas: ${sources.areas.map((a) => `${a.name} (fetched ${a.fetched}, LIDAR shift ${a.lidarShift?.join(', ')} m)`).join('; ')}`);
 console.log('LIDAR:', JSON.stringify(lidar));
 console.log(
-  `src/map/bristol.json: ${(json.length / 1024).toFixed(0)} kB, ${map.width}x${map.height} px, ` +
+  `${MAP_INFO.file}: ${(json.length / 1024).toFixed(0)} kB, ${map.width}x${map.height} px, ` +
     `${map.roads.length} roads, ${map.areas.length} areas, ${map.buildings.length} buildings, ` +
     `${map.trees.length / 4} trees, ${map.props.length} props, ${map.lines.length} lines, ${map.crossings.length} crossings`,
 );
