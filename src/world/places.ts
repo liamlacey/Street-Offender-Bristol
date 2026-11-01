@@ -20,7 +20,12 @@
  * - Industrial estates: the yards concreted; at the big sheds, a lorry backed
  *   up to the loading door, a forklift, pallets, a container or two, a skip,
  *   big bins; the workers in hi-vis. Shops' and offices' land: bins and
- *   pallets out the back.
+ *   pallets out the back. The open ground in the yards: lorries parked up,
+ *   containers, pallets and materials, skips. The docks and the big works,
+ *   by what they are (see `docks`): a container terminal's stacks, a car
+ *   terminal's rows of new cars, a bulk yard's heaps of coal or stone and
+ *   its loaders, a tank farm's bund walls and pipes; the gatehouses at the
+ *   barriers.
  * - A university's buildings, students about them and their bikes; a
  *   hospital's entrance, people outside it; a stadium, a crowd (and the
  *   burger vans, the stewards); a library, a sports centre or a community
@@ -48,7 +53,7 @@ export interface PlaceThing {
 
 /** A fence (or a wall) put up round a place. */
 export interface PlaceLine {
-  kind: 'mesh' | 'wall' | 'fence' | 'railing' | 'hedge' | 'prison' | 'net';
+  kind: 'mesh' | 'wall' | 'fence' | 'railing' | 'hedge' | 'prison' | 'net' | 'pipe';
   pts: Pts;
   height: number;
 }
@@ -168,6 +173,7 @@ export function* placesWork(map: GameMap): Work<PlaceLife> {
         // (A car dealer's lot: its aisles lined with the cars for sale instead.)
         if (place.rings[0] && lotRings.has(place.rings[0])) break;
         works(place, ground, out);
+        if (place.kind === 'industrial') docks(place, ground, out);
         break;
       case 'university':
       case 'college':
@@ -1777,6 +1783,325 @@ function swim(place: Place, ground: Ground, out: PlaceLife): void {
 }
 
 /** The middle of a ring (its points', on average). */
+/**
+ * Ground in a place's yard, a metre a cell, taken as things are put down: what's put down's kept on open ground (in the place,
+ * not in a building or on a road, a car park or anything else that's mapped, nor under a tree), and off what's there already.
+ */
+class Plot {
+  private readonly used = new Set<number>();
+  private readonly box: [number, number, number, number];
+
+  constructor(
+    private readonly ring: Pts,
+    private readonly ground: Ground,
+    out: PlaceLife,
+  ) {
+    this.box = bounds(ring);
+    const [x0, y0, x1, y1] = this.box;
+    const near = (x: number, y: number) => x > x0 - 10 * M && x < x1 + 10 * M && y > y0 - 10 * M && y < y1 + 10 * M;
+    for (const t of out.things) if (near(t.x, t.y)) this.take(t.x, t.y, t.angle, 2 * M, 2 * M);
+    for (const sp of out.spaces) if (near(sp.x, sp.y)) this.take(sp.x, sp.y, sp.angle, sp.length / 2, 1.3 * M);
+  }
+
+  /** The points over a rectangle (its middle, which way, half its length and width), a metre and a half apart. */
+  private points(x: number, y: number, angle: number, hl: number, hw: number): [number, number][] {
+    const [c, s] = [Math.cos(angle), Math.sin(angle)];
+    const pts: [number, number][] = [];
+    const [na, nb] = [Math.max(1, Math.ceil((2 * hl) / (1.5 * M))), Math.max(1, Math.ceil((2 * hw) / (1.5 * M)))];
+    for (let i = 0; i <= na; i++) {
+      for (let j = 0; j <= nb; j++) {
+        const [a, b] = [-hl + (2 * hl * i) / na, -hw + (2 * hw * j) / nb];
+        pts.push([x + c * a - s * b, y + s * a + c * b]);
+      }
+    }
+    return pts;
+  }
+
+  /** Whether a rectangle's all on open ground, and none of it taken. */
+  fits(x: number, y: number, angle: number, hl: number, hw: number, pad = 0.6 * M): boolean {
+    for (const [px, py] of this.points(x, y, angle, hl + pad, hw + pad)) {
+      if (!pointInRing(px, py, this.ring) || this.used.has(Math.floor(px / M) * 100003 + Math.floor(py / M))) return false;
+      if (this.ground.inBuilding(px, py) || this.ground.onRoad(px, py, 0.8 * M) || this.ground.inMapped(px, py) || this.ground.byTree(px, py, 2 * M)) return false;
+    }
+    return true;
+  }
+
+  take(x: number, y: number, angle: number, hl: number, hw: number): void {
+    for (const [px, py] of this.points(x, y, angle, hl, hw)) this.used.add(Math.floor(px / M) * 100003 + Math.floor(py / M));
+  }
+
+  /** Puts it down if it fits (and takes its ground): whether it did. */
+  put(x: number, y: number, angle: number, hl: number, hw: number, pad?: number): boolean {
+    if (!this.fits(x, y, angle, hl, hw, pad)) return false;
+    this.take(x, y, angle, hl, hw);
+    return true;
+  }
+}
+
+/** A place's land in its own frame (along its long axis, and across): a point in it, as map px. */
+function frame(ring: Pts): { at: (a: number, b: number) => [number, number]; angle: number; a0: number; a1: number; b0: number; b1: number } {
+  const { cx, cy, ux, uy, a0, a1, b0, b1 } = shape(ring);
+  return { at: (a, b) => [cx + ux * a - uy * b, cy + uy * a + ux * b], angle: Math.atan2(uy, ux), a0, a1, b0, b1 };
+}
+
+/** The least an industrial place has to be for its open ground to be filled, px²; how far apart the yard's lots of things are,
+ * px, and how likely each is there; how many lots, at most. */
+const YARD_LEAST = 2500 * M * M;
+const YARD_STEP = 22 * M;
+const YARD_FILL = 0.4;
+const YARD_MOST = 45;
+/** A container terminal's containers, a car terminal's cars, at most (each place); a bulk yard's heaps, a tank farm's tanks. */
+const CONTAINERS_MOST = 480;
+const NEW_CARS_MOST = 360;
+const HEAPS_MOST = 6;
+const TANKS_MOST = 30;
+/** The kinds of new car waiting at a car terminal. */
+const NEW_CARS = ['hatch', 'hatch', 'saloon', 'estate', 'suv', 'suv', 'small'];
+
+/**
+ * An industrial place's open ground, and the docks and the big works by what they are (see osm.ts's `industrySub`):
+ * - a container terminal: stacks of containers in blocks (in rows, end to end), aisles between them with reach stackers working
+ *   them and lorries waiting to be loaded;
+ * - a car terminal (the new cars coming off the ships, or going on): rows of them, nose to nose, as many as there's room for;
+ * - a bulk yard: heaps of coal (or stone, sand: aggregate), long, a loader and a dumper at each, a conveyor from it;
+ * - a tank farm (the storage tanks on it): a low bund wall round each tank, pipes on racks from one to the next, valves and drums;
+ * - anywhere else (and round all of those): lorries parked up, containers, pallets and materials, skips, in lots about the yard;
+ * and the gatehouses at the barriers on its roads, the workers in hi-vis about it all.
+ */
+function docks(place: Place, ground: Ground, out: PlaceLife): void {
+  const ring = place.rings[0];
+  if (!ring || ring.length < 6 || Math.abs(ringArea(ring)) < YARD_LEAST) return;
+  const rand = seeded(hash(ring[0] + 3, ring[1] + 5));
+  const plot = new Plot(ring, ground, out);
+  const f = frame(ring);
+  const sub = place.sub;
+  if (sub === 'container') containerStacks(f, plot, out, rand);
+  if (sub === 'cars') newCars(f, plot, out, rand);
+  if (sub === 'bulk') heaps(f, plot, out, rand, /coal/i.test(place.name ?? '') ? 'coal' : 'aggregate');
+  if (sub === 'fuel' || sub === 'port' || sub === undefined) tankFarm(ring, ground, plot, out, rand);
+  if (sub !== 'cars') yardLots(f, plot, out, rand, sub === 'port' || sub === 'container' ? 1.4 : 1);
+  gatehouses(ring, ground, plot, out);
+}
+
+/** A container terminal's stacks: blocks of rows of containers end to end, aisles between; reach stackers and lorries in the aisles. */
+function containerStacks(f: ReturnType<typeof frame>, plot: Plot, out: PlaceLife, rand: () => number): void {
+  const [cl, cw] = [6.4 * M, 2.8 * M];
+  const [blockA, blockB] = [8, 6];
+  const [aisleA, aisleB] = [14 * M, 12 * M];
+  let put = 0;
+  for (let a = f.a0 + 6 * M; a + blockA * cl < f.a1; a += blockA * cl + aisleA) {
+    for (let b = f.b0 + 6 * M; b + blockB * cw < f.b1; b += blockB * cw + aisleB) {
+      let inBlock = 0;
+      for (let i = 0; i < blockA; i++) {
+        for (let j = 0; j < blockB; j++) {
+          if (put >= CONTAINERS_MOST) return;
+          const [x, y] = f.at(a + (i + 0.5) * cl, b + (j + 0.5) * cw);
+          if (!plot.put(x, y, f.angle, 3 * M, 1.25 * M, 0.1 * M)) continue;
+          thing(out, 'container', x, y, f.angle, Math.floor(rand() * 4));
+          put++;
+          inBlock++;
+        }
+      }
+      if (inBlock < 8) continue;
+      // In the aisle beside it: a reach stacker at work, a lorry waiting for its box, a worker.
+      const [sx, sy] = f.at(a + rand() * blockA * cl, b - aisleB / 2);
+      if (plot.put(sx, sy, f.angle + Math.PI / 2, 2.8 * M, 1.6 * M)) thing(out, 'forklift', sx, sy, f.angle + Math.PI / 2 + (rand() - 0.5) * 0.4);
+      const [lx, ly] = f.at(a + rand() * blockA * cl, b + blockB * cw + aisleB / 2);
+      if (rand() < 0.7 && plot.put(lx, ly, f.angle, 5 * M, 1.5 * M)) out.spaces.push({ x: r1(lx), y: r1(ly), angle: +f.angle.toFixed(3), length: 10 * M, taken: 0.8, endOn: false, kind: 'lorry' });
+      if (rand() < 0.6) out.spots.push({ x: r1(sx + 3 * M), y: r1(sy), angle: 0, weight: 0.8, group: rand() < 0.4, hivis: true });
+    }
+  }
+}
+
+/** A car terminal: rows of new cars, side by side, two rows nose to nose, an aisle between each pair of rows. */
+function newCars(f: ReturnType<typeof frame>, plot: Plot, out: PlaceLife, rand: () => number): void {
+  const [wide, deep, aisle] = [2.5 * M, 4.8 * M, 6.5 * M];
+  let put = 0;
+  for (let b = f.b0 + 4 * M; b + 2 * deep < f.b1; b += 2 * deep + aisle) {
+    for (let a = f.a0 + 4 * M; a < f.a1 - 4 * M; a += wide) {
+      for (const [row, facing] of [[0.5, 1], [1.5, -1]] as [number, number][]) {
+        if (put >= NEW_CARS_MOST) return;
+        const [x, y] = f.at(a, b + row * deep);
+        const angle = f.angle + (Math.PI / 2) * facing;
+        if (!plot.put(x, y, angle, 2.4 * M, 1.05 * M, 0.1 * M)) continue;
+        out.spaces.push({ x: r1(x), y: r1(y), angle: +angle.toFixed(3), length: 5 * M, taken: 0.95, endOn: true, kind: NEW_CARS[Math.floor(rand() * NEW_CARS.length)] });
+        put++;
+      }
+    }
+  }
+  // A few drivers moving them, in hi-vis.
+  for (let k = 0; k < Math.min(6, put / 40); k++) {
+    const [x, y] = f.at(f.a0 + rand() * (f.a1 - f.a0), f.b0 + rand() * (f.b1 - f.b0));
+    if (plot.fits(x, y, 0, 0.5 * M, 0.5 * M, 0)) out.spots.push({ x: r1(x), y: r1(y), angle: 0, weight: 0.6, group: false, hivis: true });
+  }
+}
+
+/** A bulk yard's heaps: long, rounded (coal or aggregate), a loader and a dumper at each, and a conveyor running off one end. */
+function heaps(f: ReturnType<typeof frame>, plot: Plot, out: PlaceLife, rand: () => number, kind: 'coal' | 'aggregate'): void {
+  let made = 0;
+  for (let tries = 0; tries < 40 && made < HEAPS_MOST; tries++) {
+    const [hl, hw] = [(16 + rand() * 14) * M, (7 + rand() * 5) * M];
+    const [x, y] = f.at(f.a0 + hl + rand() * Math.max(0, f.a1 - f.a0 - 2 * hl), f.b0 + hw + rand() * Math.max(0, f.b1 - f.b0 - 2 * hw));
+    const angle = f.angle + (rand() < 0.5 ? 0 : Math.PI / 2) + (rand() - 0.5) * 0.3;
+    // (Room round it for the loader and the dumper; its end clear, for the conveyor.)
+    if (!plot.fits(x, y, angle, hl + 8 * M, hw + 6 * M, 0)) continue;
+    plot.take(x, y, angle, hl + 1 * M, hw + 14 * M);
+    made++;
+    const [c, s] = [Math.cos(angle), Math.sin(angle)];
+    const poly: Pts = [];
+    for (let k = 0; k < 18; k++) {
+      const t = (k / 18) * Math.PI * 2;
+      // (Squarer than an ellipse: a heap's sides are long.)
+      const [a, b] = [Math.sign(Math.cos(t)) * Math.abs(Math.cos(t)) ** 0.6 * hl, Math.sign(Math.sin(t)) * Math.abs(Math.sin(t)) ** 0.6 * hw];
+      poly.push(r1(x + c * a - s * b), r1(y + s * a + c * b));
+    }
+    out.areas.push({ kind, rings: [poly] });
+    // The loader at its side, the dumper beyond, the conveyor off its end.
+    const side = rand() < 0.5 ? 1 : -1;
+    const [lx, ly] = [x - s * (hw + 4 * M) * side, y + c * (hw + 4 * M) * side];
+    thing(out, 'digger', lx, ly, angle + (Math.PI / 2) * side + (rand() - 0.5) * 0.6);
+    const [dx, dy] = [lx + c * 9 * M, ly + s * 9 * M];
+    thing(out, 'dumper', dx, dy, angle + (rand() - 0.5) * 0.5);
+    const [ex, ey] = [x + c * (hl + 2 * M), y + s * (hl + 2 * M)];
+    const run = 26 * M;
+    if (plot.put(ex + c * run * 0.5, ey + s * run * 0.5, angle, run / 2, 1 * M, 0)) out.lines.push({ kind: 'pipe', pts: [r1(ex), r1(ey), r1(ex + c * run), r1(ey + s * run)], height: 4 * M });
+    out.spots.push({ x: r1(dx + 3 * M), y: r1(dy), angle: 0, weight: 0.7, group: false, hivis: true });
+  }
+}
+
+/** A tank farm: a low bund wall round each storage tank, pipes on racks from each to the next, valves and drums by them. */
+function tankFarm(ring: Pts, ground: Ground, plot: Plot, out: PlaceLife, rand: () => number): void {
+  const tanks: { x: number; y: number; r: number }[] = [];
+  for (const i of ground.buildingsIn(...bounds(ring))) {
+    const b = ground.map.buildings[i];
+    if (b.kind !== 'storage_tank' || tanks.length >= TANKS_MOST) continue;
+    const { cx, cy, a0, a1, b0, b1 } = shape(b.rings[0]);
+    if (!pointInRing(cx, cy, ring)) continue;
+    tanks.push({ x: cx, y: cy, r: Math.max(a1 - a0, b1 - b0) / 2 });
+  }
+  if (tanks.length < 2) return;
+  for (const t of tanks) {
+    // Its bund: a square round it, 3 m out (where that's clear of the roads).
+    const h = t.r + 3 * M;
+    const corners: Pts = [t.x - h, t.y - h, t.x + h, t.y - h, t.x + h, t.y + h, t.x - h, t.y + h, t.x - h, t.y - h];
+    if (corners.every((v, k) => k % 2 || (!ground.onRoad(v, corners[k + 1], 0.5 * M) && pointInRing(v, corners[k + 1], ring)))) {
+      out.lines.push({ kind: 'wall', pts: corners.map(r1), height: 1.2 * M });
+      plot.take(t.x, t.y, 0, h, h);
+    }
+    // A valve and a drum or two by the bund.
+    const [vx, vy] = [t.x + h + 2.5 * M, t.y + (rand() - 0.5) * h];
+    if (plot.put(vx, vy, Math.PI / 2, 1.2 * M, 1 * M)) thing(out, 'valve', vx, vy, Math.PI / 2);
+    for (let k = 0; k < 2; k++) {
+      const [dx, dy] = [t.x - h - 1.5 * M, t.y + (k - 0.5) * 1.6 * M];
+      if (rand() < 0.5 && plot.put(dx, dy, 0, 0.4 * M, 0.4 * M, 0.1 * M)) thing(out, 'drum', dx, dy, 0);
+    }
+  }
+  // Pipes from each tank to the nearest it isn't piped to yet (a chain through them all), on their racks, clear of the roads.
+  const joined = new Set<number>([0]);
+  while (joined.size < tanks.length) {
+    let best: [number, number, number] | null = null;
+    for (const i of joined) {
+      for (let j = 0; j < tanks.length; j++) {
+        if (joined.has(j)) continue;
+        const d = Math.hypot(tanks[i].x - tanks[j].x, tanks[i].y - tanks[j].y);
+        if (!best || d < best[2]) best = [i, j, d];
+      }
+    }
+    if (!best) break;
+    const [i, j, d] = best;
+    joined.add(j);
+    if (d > 120 * M) continue;
+    const [a, b] = [tanks[i], tanks[j]];
+    const [ux, uy] = [(b.x - a.x) / d, (b.y - a.y) / d];
+    const [x0, y0, x1, y1] = [a.x + ux * (a.r + 4 * M), a.y + uy * (a.r + 4 * M), b.x - ux * (b.r + 4 * M), b.y - uy * (b.r + 4 * M)];
+    let clear = true;
+    for (let k = 0; k <= 10 && clear; k++) {
+      const [px, py] = [x0 + ((x1 - x0) * k) / 10, y0 + ((y1 - y0) * k) / 10];
+      if (ground.onCarriageway(px, py, 1 * M) || ground.inBuilding(px, py)) clear = false;
+    }
+    if (clear && Math.hypot(x1 - x0, y1 - y0) > 3 * M) out.lines.push({ kind: 'pipe', pts: [r1(x0), r1(y0), r1(x1), r1(y1)], height: 2.5 * M });
+  }
+  out.spots.push({ x: r1(tanks[0].x + tanks[0].r + 5 * M), y: r1(tanks[0].y), angle: 0, weight: 0.6, group: false, hivis: true });
+}
+
+/** The yard's open ground, in lots: lorries parked up side by side, containers, pallets and materials, skips and bins; workers. */
+function yardLots(f: ReturnType<typeof frame>, plot: Plot, out: PlaceLife, rand: () => number, busy: number): void {
+  let lots = 0;
+  const along = f.angle;
+  const at = (x: number, y: number, a: number, b: number): [number, number] => [x + Math.cos(along) * a - Math.sin(along) * b, y + Math.sin(along) * a + Math.cos(along) * b];
+  for (let a = f.a0 + YARD_STEP / 2; a < f.a1; a += YARD_STEP) {
+    for (let b = f.b0 + YARD_STEP / 2; b < f.b1; b += YARD_STEP) {
+      if (lots >= YARD_MOST * busy || rand() > YARD_FILL * busy) continue;
+      const [x, y] = f.at(a + (rand() - 0.5) * 6 * M, b + (rand() - 0.5) * 6 * M);
+      const pick = rand();
+      let any = false;
+      if (pick < 0.3) {
+        // Lorries (their trailers) parked up side by side.
+        for (let k = 0; k < 2 + Math.floor(rand() * 3); k++) {
+          const [lx, ly] = at(x, y, 0, k * 3.6 * M);
+          if (!plot.put(lx, ly, along, 5 * M, 1.4 * M, 0.3 * M)) break;
+          out.spaces.push({ x: r1(lx), y: r1(ly), angle: +(along + (rand() < 0.5 ? 0 : Math.PI)).toFixed(3), length: 10 * M, taken: 0.85, endOn: false, kind: 'lorry' });
+          any = true;
+        }
+      } else if (pick < 0.55) {
+        // Containers, side by side.
+        for (let k = 0; k < 2 + Math.floor(rand() * 3); k++) {
+          const [cx, cy] = at(x, y, 0, k * 2.8 * M);
+          if (!plot.put(cx, cy, along, 3 * M, 1.25 * M, 0.2 * M)) break;
+          thing(out, 'container', cx, cy, along, Math.floor(rand() * 4));
+          any = true;
+        }
+      } else if (pick < 0.8) {
+        // Pallets and materials, in a little grid; a forklift by them.
+        const kinds = ['pallet', 'woodpallet', 'bags', 'pallet', 'pipes', 'woodpallet'];
+        for (let i = 0; i < 3; i++) {
+          for (let j = 0; j < 2; j++) {
+            const kind = kinds[Math.floor(rand() * kinds.length)];
+            const [px, py] = at(x, y, (i - 1) * 2.4 * M, j * 2.4 * M);
+            const half = kind === 'pipes' ? 1.6 * M : 0.6 * M;
+            if (rand() < 0.8 && plot.put(px, py, along, half, 0.6 * M, 0.2 * M)) (thing(out, kind, px, py, along), (any = true));
+          }
+        }
+        const [fx, fy] = at(x, y, 4.5 * M, 1.2 * M);
+        if (any && rand() < 0.5 && plot.put(fx, fy, along, 1.6 * M, 0.8 * M)) thing(out, 'forklift', fx, fy, along + Math.PI + (rand() - 0.5));
+      } else {
+        // A skip, big bins, a drum or two.
+        if (plot.put(x, y, along, 1.9 * M, 1 * M)) (thing(out, 'skip', x, y, along), (any = true));
+        const [bx, by] = at(x, y, 3.5 * M, 0);
+        if (plot.put(bx, by, along, 0.8 * M, 0.7 * M, 0.2 * M)) thing(out, 'bigbin', bx, by, along, Math.floor(rand() * 3));
+        const [dx, dy] = at(x, y, -3.2 * M, 0.5 * M);
+        if (rand() < 0.6 && plot.put(dx, dy, 0, 0.4 * M, 0.4 * M, 0.1 * M)) thing(out, 'drum', dx, dy, 0);
+      }
+      if (!any) continue;
+      lots++;
+      if (lots % 3 === 0) {
+        const [wx, wy] = at(x, y, 0, -3 * M);
+        if (plot.fits(wx, wy, 0, 0.4 * M, 0.4 * M, 0)) out.spots.push({ x: r1(wx), y: r1(wy), angle: 0, weight: 0.8, group: rand() < 0.5, hivis: true });
+      }
+    }
+  }
+}
+
+/** At the barriers across its roads: a gatehouse (a sentry box) beside each, and the guard. */
+function gatehouses(ring: Pts, ground: Ground, plot: Plot, out: PlaceLife): void {
+  let made = 0;
+  for (const l of ground.map.lines ?? []) {
+    if (l.kind !== 'liftgate' || made >= 4 || l.pts.length < 4) continue;
+    const [ax, ay, bx, by] = [l.pts[0], l.pts[1], l.pts[l.pts.length - 2], l.pts[l.pts.length - 1]];
+    if (!pointInRing((ax + bx) / 2, (ay + by) / 2, ring)) continue;
+    const len = Math.hypot(bx - ax, by - ay) || 1;
+    const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
+    for (const [ex, ey, dir] of [[ax, ay, -1], [bx, by, 1]] as [number, number, number][]) {
+      const [x, y] = [ex + ux * dir * 2.5 * M, ey + uy * dir * 2.5 * M];
+      if (!plot.put(x, y, Math.atan2(uy, ux), 1 * M, 1 * M, 0.2 * M)) continue;
+      thing(out, 'sentrybox', x, y, Math.atan2(uy, ux));
+      out.spots.push({ x: r1(x + ux * dir * 1.6 * M), y: r1(y + uy * dir * 1.6 * M), angle: 0, weight: 0.5, group: false, hivis: true });
+      made++;
+      break;
+    }
+  }
+}
+
 function centreOf(ring: Pts): [number, number] {
   let [sx, sy] = [0, 0];
   for (let k = 0; k + 1 < ring.length; k += 2) [sx, sy] = [sx + ring[k], sy + ring[k + 1]];

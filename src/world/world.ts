@@ -34,6 +34,7 @@ const LINE_THICKNESS: Partial<Record<LineKind, number>> = {
   liftgate: 0.8,
   chain: 0.5,
   shelter: 6,
+  pipe: 2,
 };
 
 /** How big each fixed post is, px radius; anything not listed here can be knocked about or is just painted on. */
@@ -57,6 +58,8 @@ const POST_RADIUS: Partial<Record<PropKind, number>> = {
   // An electricity pylon's feet, square, 8 m or so across.
   pylon: 26,
   flagpole: 1.6,
+  // A wind turbine's tower, 4 m across.
+  turbine: 16,
 };
 
 /** What's put round the places that stands there for good, not knocked about (see world's places' things). */

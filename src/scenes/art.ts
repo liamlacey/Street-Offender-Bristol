@@ -30,6 +30,9 @@ export const TEX = {
   /** A tower crane's: its jib (and counter-jib), and its mast. */
   towerJib: 'crane-towerjib',
   mast: 'crane-mast',
+  /** A wind turbine's: its tower (white, tapering), and its hub and three blades. */
+  tower: 'turbine-tower',
+  rotor: 'turbine-rotor',
 } as const;
 
 export const TREE_KINDS = 4;
@@ -1666,6 +1669,53 @@ export function createArt(scene: Phaser.Scene): void {
     roundRect(ctx, 0, 1, 6, 6, 0.5, '#7c7a74');
     roundRect(ctx, 14, 1.5, 4, 5, 0.6, '#2f3a40');
     roundRect(ctx, 52, 2.6, 3, 2.8, 0.4, '#3a3e43');
+  });
+  // A wind turbine: its foot (the tower's base on its concrete pad); its tower, drawn along x from the foot up, white, tapering,
+  // shaded down one side; its rotor (the hub, the nacelle behind it, three long white blades), turning about its middle.
+  canvasTexture(scene, TEX.prop('turbine'), 40, 40, (ctx) => {
+    circle(ctx, 20, 20, 19, '#a5a196');
+    circle(ctx, 20, 20, 17, '#bcb8ac');
+    circle(ctx, 20, 20, 9, '#e9eaea');
+    circle(ctx, 22, 22, 9, 'rgba(0,0,0,0.12)');
+    roundRect(ctx, 17, 31, 6, 4, 0.6, '#d8d8d4');
+  });
+  canvasTexture(scene, TEX.tower, 64, 8, (ctx) => {
+    ctx.fillStyle = '#eceeee';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(64, 2);
+    ctx.lineTo(64, 6);
+    ctx.lineTo(0, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.14)';
+    ctx.beginPath();
+    ctx.moveTo(0, 5);
+    ctx.lineTo(64, 4.6);
+    ctx.lineTo(64, 6);
+    ctx.lineTo(0, 8);
+    ctx.closePath();
+    ctx.fill();
+  });
+  canvasTexture(scene, TEX.rotor, 128, 128, (ctx) => {
+    for (let k = 0; k < 3; k++) {
+      ctx.save();
+      ctx.translate(64, 64);
+      ctx.rotate((k * Math.PI * 2) / 3);
+      ctx.fillStyle = '#f3f4f4';
+      ctx.beginPath();
+      ctx.moveTo(-2.4, 0);
+      ctx.quadraticCurveTo(-3.4, -30, -1, -62);
+      ctx.lineTo(1.2, -62);
+      ctx.quadraticCurveTo(2.6, -20, 2.4, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.12)';
+      ctx.fillRect(0.6, -58, 1, 56);
+      ctx.restore();
+    }
+    circle(ctx, 64, 64, 5, '#dcdddd');
+    circle(ctx, 64, 64, 2.2, '#b9bbbb');
   });
   canvasTexture(scene, TEX.mast, 64, 4, (ctx) => {
     ctx.strokeStyle = '#d9a41a';

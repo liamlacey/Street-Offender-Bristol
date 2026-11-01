@@ -18,10 +18,14 @@ const LIVERY: Record<UnitKind, { side: string; roof: string; band: string; kit: 
   turbo: { side: '#0b4a3e', roof: '#7a8083', band: '#0d1a1c', kit: '#2e3436' },
   // CrossCountry: silver, with the maroon swoosh at its ends; a silver-grey roof.
   voyager: { side: '#b7bbbf', roof: '#8c9195', band: '#1a1d22', kit: '#5b1530' },
+  // A freight train: its Class 66 in DB red (its wagons drawn as they are: see drawWagon).
+  freight: { side: '#a3141c', roof: '#5e6265', band: '#1a1d22', kit: '#2e3436' },
 };
 
 /** A carriage from above, facing along x: its body, its roof and the kit on it, its windows' band; a cab end yellow, with its windscreen. */
 function drawCarriage(ctx: Ctx, kind: UnitKind, cab: Carriage['cab'], dark: boolean): void {
+  // (A freight train's wagons: not carriages.)
+  if (kind === 'freight' && cab !== 'front') return drawWagon(ctx, cab === 'back');
   const u = UNITS[kind];
   const [L, W] = [u.length, u.width];
   const l = LIVERY[kind];
@@ -88,6 +92,31 @@ function drawCarriage(ctx: Ctx, kind: UnitKind, cab: Carriage['cab'], dark: bool
   if (!back) {
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(0, W / 2 - 3, 0.5, 6);
+  }
+}
+
+/**
+ * A freight train's wagon from above: a flat wagon with containers on it (its frame showing at the ends), or (the last of them)
+ * a coal hopper, open, heaped.
+ */
+function drawWagon(ctx: Ctx, hopper: boolean): void {
+  const u = UNITS.freight;
+  const [L, W] = [u.length, u.width];
+  ctx.fillStyle = '#2b2d30';
+  ctx.fillRect(0, W * 0.15, L, W * 0.7);
+  if (hopper) {
+    ctx.fillStyle = '#4d5156';
+    ctx.fillRect(0.8 * M, 0.2, L - 1.6 * M, W - 0.4);
+    ctx.fillStyle = '#1c1b18';
+    ctx.fillRect(1.3 * M, 2, L - 2.6 * M, W - 4);
+    return;
+  }
+  const colours = ['#a8442e', '#2f5e94', '#2f7a4a', '#c08a2a'];
+  for (const [k, x] of [[0, 1], [1, L / 2 + 0.3 * M]] as [number, number][]) {
+    ctx.fillStyle = colours[(k + Math.round(L)) % colours.length];
+    ctx.fillRect(x, 0.6, L / 2 - 1.3 * M, W - 1.2);
+    ctx.fillStyle = 'rgba(0,0,0,0.14)';
+    for (let r = x + 2; r < x + L / 2 - 1.5 * M; r += 2.4) ctx.fillRect(r, 0.9, 0.8, W - 1.8);
   }
 }
 

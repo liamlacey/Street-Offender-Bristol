@@ -60,7 +60,12 @@ export type AreaKind =
   | 'yard'
   | 'island'
   /** A railway station's platform (`railway=platform`): paved, raised, its edges along the tracks. */
-  | 'platform';
+  | 'platform'
+  /** A solar farm (`power=plant` or `generator`, from the sun): rows of panels. */
+  | 'solar'
+  /** A bulk yard's stockpiles (see src/world/places.ts): coal, black; aggregate (stone, sand), grey. */
+  | 'coal'
+  | 'aggregate';
 
 export interface Area {
   kind: AreaKind;
@@ -456,7 +461,7 @@ function alongPolyline(pts: Pts, along: number): [number, number, number, number
 /** How far apart a bridge deck's measured heights are, px (2 m). */
 export const DECK_STEP = 2 * PX_PER_METRE;
 
-export type LineKind = 'wall' | 'fence' | 'hedge' | 'rail' | 'quay' | 'railing' | 'kerb' | 'gate' | 'liftgate' | 'chain' | 'shelter';
+export type LineKind = 'wall' | 'fence' | 'hedge' | 'rail' | 'quay' | 'railing' | 'kerb' | 'gate' | 'liftgate' | 'chain' | 'shelter' | 'pipe';
 
 export interface Line {
   kind: LineKind;
@@ -610,6 +615,8 @@ export type PropKind =
   // An electricity pylon (`power=tower`), its wires to the next (see Prop's `to`); and round the works (see src/world/places.ts): bulk
   // bags of sand, a car crushed for scrap, a battery storage unit, a pumping station's pipework and valves, a heap of aggregate.
   | 'pylon'
+  // A wind turbine (`power=generator`, from the wind): its tower, and its blades turning at the top (see Prop's `height`).
+  | 'turbine'
   | 'bags'
   | 'crushed'
   | 'battery'
@@ -800,6 +807,22 @@ export type PlaceKind =
   // Somewhere to swim outdoors: a lido's pool, a paddling pool, a club's lake (a point by the water: see `swim` in places.ts).
   | 'swim';
 
+/**
+ * What an industrial site is, from its name (and its operator's) and tags, for how it's laid out (see src/world/places.ts): a
+ * container terminal; where new cars are stored, coming or going by ship; a bulk yard (coal, aggregates, cement, grain); an oil,
+ * fuel or gas terminal, a tank farm; the docks (a port, a wharf); or, none of those, an ordinary works or estate.
+ */
+export type IndustrySub = 'container' | 'cars' | 'bulk' | 'fuel' | 'port';
+export function industrySub(t: Tags): IndustrySub | undefined {
+  const name = `${t.name ?? ''} ${t.operator ?? ''}`;
+  if (/container/i.test(name)) return 'container';
+  if (/autologic|vehicle (storage|terminal|import|processing)|car (terminal|storage|import)|import centre/i.test(name)) return 'cars';
+  if (/coal|stockyard|aggregate|bulk|biomass|grain|animal feed|cement|mortar|quarry|sand and gravel|stone/i.test(name) || t.industrial === 'aggregate') return 'bulk';
+  if (/\boil\b|fuel|lpg|petroleum|petrochemical|\bgas\b|tank (farm|storage)|chemical/i.test(name) || ['oil', 'fuel', 'petroleum_terminal', 'gas', 'tank_farm'].includes(t.industrial)) return 'fuel';
+  if (t.industrial === 'port' || t.landuse === 'port' || t.landuse === 'harbour' || /\bdocks?\b|\bport\b|wharf|quay|terminal|berth/i.test(name)) return 'port';
+  return undefined;
+}
+
 /** The trade counters and builders' merchants (`shop=*`), and the trades with a yard (`craft=*`): see Place's 'trade'. */
 export const TRADE_SHOPS = new Set(['trade', 'doityourself', 'tool_hire', 'building_materials', 'plumbing', 'timber']);
 export const TRADE_CRAFTS = new Set(['roofer', 'stonemason', 'metal_construction', 'builder', 'scaffolder', 'carpenter', 'plumber', 'electrician', 'glaziery']);
@@ -864,7 +887,9 @@ export function placeKind(t: Tags): PlaceKind | null {
   if (t.landuse === 'allotments') return 'allotments';
   if (t.shop && SHOP_FRONTS.has(t.shop)) return 'shop';
   if (t.landuse === 'cemetery') return 'graveyard';
-  if (t.landuse === 'industrial') return 'industrial';
+  if (t.landuse === 'industrial' || t.landuse === 'port' || t.landuse === 'harbour') return 'industrial';
+  // (A car terminal's yards, mapped as car parks: the docks' land all the same, its new cars packed in.)
+  if (t.amenity === 'parking' && industrySub(t) === 'cars') return 'industrial';
   if (t.landuse === 'commercial' || t.landuse === 'retail') return 'commercial';
   if (t.leisure === 'stadium') return 'stadium';
   if (t.leisure === 'sports_centre') return 'sports';
@@ -933,6 +958,8 @@ export interface TrainRoute {
   operator?: string;
   legs: number[];
   stops: number[];
+  /** A goods line: freight trains on it (stopping nowhere). */
+  freight?: boolean;
 }
 
 /** A railway station (`railway=station`, not a heritage line's): its name, and where it is. */
@@ -1556,6 +1583,7 @@ export function areaKind(tags: Tags): AreaKind | null {
   if (tags['area:highway'] === 'traffic_island' || tags.footway === 'traffic_island') return 'island';
   if (tags.railway === 'platform' || (tags.public_transport === 'platform' && (tags.train === 'yes' || tags.railway === 'platform'))) return 'platform';
   if (tags.landuse === 'flowerbed') return 'flowerbed';
+  if (isSolarFarm(tags)) return 'solar';
   if (tags.natural === 'wood' || tags.landuse === 'forest' || tags.natural === 'scrub' || tags.natural === 'heath' || tags.natural === 'shrubbery') return 'wood';
   if (tags.landuse === 'farmland') return 'field';
   if (tags.landuse === 'allotments') return 'allotments';
@@ -1580,6 +1608,12 @@ export function areaKind(tags: Tags): AreaKind | null {
   if (tags['area:highway'] === 'service') return 'yard';
   if (tags.highway === 'pedestrian' || tags.place === 'square' || tags.amenity === 'marketplace' || tags['area:highway'] || (tags.highway === 'footway' && tags.area === 'yes')) return 'plaza';
   return null;
+}
+
+/** A solar farm on the ground (not panels on a roof). */
+function isSolarFarm(t: Tags): boolean {
+  if (t.building || t.location === 'roof' || t['generator:place'] === 'roof' || t['generator:location'] === 'roof') return false;
+  return (t.power === 'plant' && t['plant:source'] === 'solar') || (t.power === 'generator' && t['generator:source'] === 'solar');
 }
 
 /** Where an area sits in the drawing order (later on top). */
@@ -1612,6 +1646,9 @@ export const AREA_ORDER: Record<AreaKind, number> = {
   yard: 6,
   island: 12,
   platform: 7,
+  solar: 3,
+  coal: 4.5,
+  aggregate: 4.5,
 };
 
 const LINE_KINDS: Record<string, LineKind> = {
@@ -1695,6 +1732,80 @@ const FORECOURT_ROUND = 5 * PX_PER_METRE;
 
 /** A bunker silo's walls' height, m. */
 const BUNKER_WALL = 3;
+/** A dock's water: this big or more, m²; the port's land looked for this far back from its edge, m; a crane along its quay
+ * every this far, m (where cranes work: not at the car terminals, nor the tankers'), and how tall they are, m. */
+const DOCK_LEAST = 15_000;
+const QUAY_BACK = 12;
+const QUAY_CRANE_EVERY = 90;
+const QUAY_CRANE = 32;
+const CRANE_SUBS: ReadonlySet<IndustrySub> = new Set(['port', 'container', 'bulk']);
+
+/**
+ * The docks' quays (see buildMap): each big water's edge, where the port's land is behind it, in runs (for the ships to moor
+ * along); and cranes along them, a little back from the edge, facing out over the water.
+ */
+export function dockQuays(areas: Area[], water: Water, data: OsmData, ringOf: (ids: number[]) => Pts | null, px: number): { ships: Pts[]; cranes: { x: number; y: number; angle: number }[] } {
+  const ports: { ring: Pts; box: [number, number, number, number]; sub: IndustrySub }[] = [];
+  for (const way of data.ways.values()) {
+    if (placeKind(way.tags) !== 'industrial') continue;
+    const sub = industrySub(way.tags);
+    if (!sub) continue;
+    const ring = ringOf(way.nodes);
+    if (!ring) continue;
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let k = 0; k + 1 < ring.length; k += 2) [x0, y0, x1, y1] = [Math.min(x0, ring[k]), Math.min(y0, ring[k + 1]), Math.max(x1, ring[k]), Math.max(y1, ring[k + 1])];
+    ports.push({ ring, box: [x0, y0, x1, y1], sub });
+  }
+  const portAt = (x: number, y: number) => ports.find(({ ring, box }) => x >= box[0] && y >= box[1] && x <= box[2] && y <= box[3] && pointInRing(x, y, ring));
+  const ships: Pts[] = [];
+  const cranes: { x: number; y: number; angle: number }[] = [];
+  if (!ports.length) return { ships, cranes };
+  for (const a of areas) {
+    if (a.kind !== 'water' || Math.abs(ringArea(a.rings[0])) < DOCK_LEAST * px * px) continue;
+    for (const ring of a.rings) {
+      const n = ring.length / 2;
+      let run: Pts = [];
+      let along = QUAY_CRANE_EVERY * px * 0.5;
+      const flush = () => {
+        if (run.length >= 4) ships.push(run);
+        run = [];
+      };
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        const [ax, ay, bx, by] = [ring[i * 2], ring[i * 2 + 1], ring[j * 2], ring[j * 2 + 1]];
+        const len = Math.hypot(bx - ax, by - ay);
+        if (!len) continue;
+        const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
+        const [mx, my] = [(ax + bx) / 2, (ay + by) / 2];
+        // The land's side: the one that isn't water.
+        const side = water.at(mx - uy * 1.5 * px, my + ux * 1.5 * px) ? -1 : water.at(mx + uy * 1.5 * px, my - ux * 1.5 * px) ? 1 : 0;
+        const port = side ? portAt(mx - uy * side * QUAY_BACK * px, my + ux * side * QUAY_BACK * px) : undefined;
+        if (!port) {
+          flush();
+          continue;
+        }
+        if (!run.length) run.push(ax, ay);
+        run.push(bx, by);
+        if (!CRANE_SUBS.has(port.sub)) continue;
+        for (let d = along; d < len; d += QUAY_CRANE_EVERY * px) {
+          // Set back from the edge, its jib out across it, over the water.
+          const [x, y] = [ax + ux * d - uy * side * 7 * px, ay + uy * d + ux * side * 7 * px];
+          cranes.push({ x, y, angle: Math.atan2(-ux * side, uy * side) });
+          along = d + QUAY_CRANE_EVERY * px;
+        }
+        along -= len;
+        if (along < 0) along = 0;
+      }
+      flush();
+    }
+  }
+  return { ships, cranes };
+}
+
+/** A goods line this long or more, m, has freight trains on it. */
+const FREIGHT_LEAST = 600;
+/** A wind turbine's hub height, where it's not tagged, m. */
+const TURBINE_HEIGHT = 80;
 /** An electricity pylon's height, where it's not tagged, m (a 400 kV one's 50 m; Bristol's mostly 132 kV, 25 m or so). */
 const PYLON_HEIGHT = 26;
 
@@ -1882,6 +1993,7 @@ export function propKind(tags: Tags): PropKind | null {
   if (tags.railway === 'level_crossing') return 'levelcrossing';
   if (tags.waterway === 'lock_gate') return 'lockgate';
   if (tags.power === 'tower') return 'pylon';
+  if (tags.power === 'generator' && tags['generator:source'] === 'wind') return 'turbine';
   if (tags.amenity === 'bicycle_parking') return 'bikes';
   return null;
 }
@@ -2076,6 +2188,28 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     for (const ring of seaRings(coasts, cx0, cy0, cx1, cy1)) addArea('water', [ring], { natural: 'water', water: 'sea' });
   }
 
+  // The industrial land (its outlines, and boxes round them): a pipeline across it is on its racks, above ground, unless it's
+  // tagged otherwise (one across the country's buried, unless it's tagged above ground).
+  const industry: { ring: Pts; box: [number, number, number, number] }[] = [];
+  for (const way of data.ways.values()) {
+    if (way.tags.landuse !== 'industrial' && way.tags.landuse !== 'port' && way.tags.landuse !== 'harbour') continue;
+    const ring = ringOf(way.nodes);
+    if (!ring) continue;
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let k = 0; k + 1 < ring.length; k += 2) [x0, y0, x1, y1] = [Math.min(x0, ring[k]), Math.min(y0, ring[k + 1]), Math.max(x1, ring[k]), Math.max(y1, ring[k + 1])];
+    industry.push({ ring, box: [x0, y0, x1, y1] });
+  }
+  const inIndustry = (x: number, y: number) => industry.some(({ ring, box }) => x >= box[0] && y >= box[1] && x <= box[2] && y <= box[3] && pointInRing(x, y, ring));
+  const pipeShown = (way: OsmWay): boolean => {
+    const at = way.tags.location;
+    if (at === 'overground' || at === 'above_ground' || at === 'aboveground' || at === 'overhead') return true;
+    if (at) return false;
+    const pts = pointsOf(way.nodes);
+    if (!pts) return false;
+    const mid = Math.floor(pts.length / 4) * 2;
+    return inIndustry(pts[mid], pts[mid + 1]);
+  };
+
   const roadNodes = new Map<number, number>();
   /** Slipways mapped as ways (their outline, or a line down them), and quays where boats moor. */
   const slipwayWays: { pts: Pts; closed: boolean }[] = [];
@@ -2170,7 +2304,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       continue;
     }
 
-    const lineKind = t.barrier === 'kerb' && DROPPED_KERB.has(t.kerb) ? undefined : t.barrier ? LINE_KINDS[t.barrier] : t.railway === 'tram' ? 'rail' : t.man_made === 'quay' && !closed ? 'quay' : undefined;
+    const lineKind = t.barrier === 'kerb' && DROPPED_KERB.has(t.kerb) ? undefined : t.barrier ? LINE_KINDS[t.barrier] : t.railway === 'tram' ? 'rail' : t.man_made === 'quay' && !closed ? 'quay' : t.man_made === 'pipeline' && pipeShown(way) ? 'pipe' : undefined;
     if (lineKind) {
       const pts = pointsOf(way.nodes);
       const tagged = metres(t.height);
@@ -2614,6 +2748,11 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     if (ends[0] !== null && ends[1] !== null) addFerry(way.tags.name ?? 'Ferry', ends as number[]);
   }
   const stopBerths: Berth[] = ferries.flatMap((f) => f.stops.reduce<Berth[]>((out, v, i) => (i % 3 ? out : [...out, { x: v, y: f.stops[i + 1], angle: f.stops[i + 2], kind: 'ferry' }]), []));
+  // The docks' quays: where a dock (a big water) meets the port's land (industry of the docks' kinds: see industrySub), its edge,
+  // in runs, the ships moored along them (and tugs); and the cranes along the quays, their jibs out over the water.
+  const quays = dockQuays(areas, water, data, ringOf, PX_PER_METRE);
+  for (const pts of quays.ships) mooringEdges.push({ pts, closed: false, mooring: 'ship' });
+  for (const c of quays.cranes) if (inside(c.x, c.y)) props.push({ kind: 'crane', x: round(c.x), y: round(c.y), angle: +c.angle.toFixed(3), height: round(QUAY_CRANE * PX_PER_METRE) });
   const berths = findBerths(mooringEdges, water, PX_PER_METRE).filter((b) => inside(b.x, b.y) && !stopBerths.some((s) => overlap(s, b, PX_PER_METRE, 2 * PX_PER_METRE)));
   // Where the bus stops' signs and platforms are, beside the road.
   const stopsBeside: [number, number][] = [];
@@ -2959,6 +3098,12 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       props.push({ kind: prop, x: round(x), y: round(y), angle: +along.toFixed(3), height: round(tall * PX_PER_METRE), ...(to.length ? { to } : {}) });
       continue;
     }
+    if (prop === 'turbine') {
+      // As high as its hub (or most of how tall it's tagged: that's to its blades' tip), turned to the wind (the south-west's).
+      const hub = metres(t['height:hub']) ?? ((metres(t.height) ?? TURBINE_HEIGHT / 0.7) * 0.7);
+      props.push({ kind: prop, x: round(x), y: round(y), angle: +(Math.PI * 0.75).toFixed(3), height: round(Math.max(20, Math.min(140, hub)) * PX_PER_METRE) });
+      continue;
+    }
     if (prop === 'lockgate') {
       // Across the lock: the waterway it's on, as wide as it's tagged (or the lock's usual).
       const way = lockWays.get(node.id);
@@ -3112,8 +3257,10 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
   const trainRoutes: TrainRoute[] = [];
   for (const rel of data.relations.values()) {
     const t = rel.tags;
-    if ((t.route !== 'bus' && t.route !== 'train') || t.disused) continue;
-    const train = t.route === 'train';
+    // (A goods line's own route: the docks' railways, a freight line. Freight trains run along it, stopping nowhere.)
+    const freight = t.route === 'railway' && (/dock|freight|goods|\bport|terminal|sidings|coal|mineral/i.test(t.name ?? '') || t.usage === 'freight' || t.usage === 'industrial');
+    if ((t.route !== 'bus' && t.route !== 'train' && !freight) || t.disused) continue;
+    const train = t.route === 'train' || freight;
     const members = rel.members.filter((m) => m.type === 'way');
     // An old-style route mapped both ways at once (ways marked forward and backward) can't be followed in order.
     if (members.some((m) => m.role === 'backward')) continue;
@@ -3150,8 +3297,42 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
       const [x, y] = [proj.x(n.lon), proj.y(n.lat)];
       if (x >= 0 && y >= 0 && x <= width && y <= height) stops.push(round(x), round(y));
     }
-    if (train) trainRoutes.push({ name: t.name ?? '', ...(t.operator ? { operator: t.operator } : {}), legs, stops });
+    if (freight) trainRoutes.push({ name: t.name ?? '', legs, stops: [], freight: true });
+    else if (train) trainRoutes.push({ name: t.name ?? '', ...(t.operator ? { operator: t.operator } : {}), legs, stops });
     else busRoutes.push({ ref: t.ref ?? '', ...(t.colour ? { colour: t.colour } : {}), legs, stops });
+  }
+
+  // The goods lines (the docks' railways: tracks for industry, `usage=industrial` or `freight`, not a yard's sidings), joined end
+  // to end (either way round) into long runs, each a freight service (see trains.ts), stopping nowhere.
+  {
+    const goods = [...data.ways.values()].filter((w) => w.tags.railway === 'rail' && (w.tags.usage === 'industrial' || w.tags.usage === 'freight') && !w.tags.service && roadIndexOfWay.has(w.id) && roads[roadIndexOfWay.get(w.id)!].kind === 'rail');
+    const left = new Set(goods);
+    for (const start of goods) {
+      if (!left.has(start)) continue;
+      left.delete(start);
+      // Its ways in order, each with whether it's run backwards.
+      const chain: [OsmWay, boolean][] = [[start, false]];
+      for (const atEnd of [true, false]) {
+        for (let grown = true; grown; ) {
+          grown = false;
+          const [w, back] = atEnd ? chain[chain.length - 1] : chain[0];
+          const node = atEnd === !back ? w.nodes[w.nodes.length - 1] : w.nodes[0];
+          for (const o of left) {
+            const [first, last] = [o.nodes[0], o.nodes[o.nodes.length - 1]];
+            if (first !== node && last !== node) continue;
+            left.delete(o);
+            // On from the end: forwards if it starts there; back from the start: forwards if it ends there.
+            if (atEnd) chain.push([o, last === node]);
+            else chain.unshift([o, first === node]);
+            grown = true;
+            break;
+          }
+        }
+      }
+      const legs = chain.map(([w, back]) => roadIndexOfWay.get(w.id)! * 2 + (back ? 1 : 0));
+      const long = legs.reduce((n, l) => n + roads[l >> 1].pts.reduce((m, _, k, p) => (k >= 2 && k % 2 === 0 ? m + Math.hypot(p[k] - p[k - 2], p[k + 1] - p[k - 1]) : m), 0), 0);
+      if (long >= FREIGHT_LEAST * PX_PER_METRE) trainRoutes.push({ name: start.tags.name ?? 'Goods line', legs, stops: [], freight: true });
+    }
   }
 
   // The bus stations: each stop_area's bays (a stop at the dead end of a way only buses use), and their platforms.
@@ -3233,7 +3414,7 @@ export function buildMap(source: OsmData, { bounds, start }: BuildOptions): Game
     for (const r of rings) for (let k = 0; k + 1 < r.length; k += 2) [sx, sy, n] = [sx + r[k], sy + r[k + 1], n + 1];
     const [x, y] = [sx / n, sy / n];
     if (x < 0 || y < 0 || x > width || y > height) return;
-    const sub = kind === 'shop' ? t.shop : kind === 'food' ? t.amenity : kind === 'trade' ? (t.trade ?? t.shop ?? t.craft) : undefined;
+    const sub = kind === 'shop' ? t.shop : kind === 'food' ? t.amenity : kind === 'trade' ? (t.trade ?? t.shop ?? t.craft) : kind === 'industrial' ? industrySub(t) : undefined;
     places.push({ kind, ...(t.name ? { name: t.name } : {}), ...(sub ? { sub } : {}), x: round(x), y: round(y), rings: rings.map(roundPts) });
   };
   for (const way of data.ways.values()) {

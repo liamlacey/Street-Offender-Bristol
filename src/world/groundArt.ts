@@ -263,6 +263,43 @@ function soil(size: number): HTMLCanvasElement {
   }, 13);
 }
 
+/** A solar farm: rows of panels (dark blue glass, their frames' lines), the grass between them. */
+function solar(size: number): HTMLCanvasElement {
+  return tile(size, (ctx, rand) => {
+    ctx.fillStyle = '#5a8a40';
+    ctx.fillRect(0, 0, size, size);
+    speckle(ctx, rand, size, size * 2, ['#4c7a36', '#6f9c4e'], 1.2);
+    const row = 16;
+    for (let y = 2; y < size; y += row) {
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(0, y + 8, size, 2);
+      ctx.fillStyle = '#23324a';
+      ctx.fillRect(0, y, size, 8);
+      ctx.fillStyle = 'rgba(150,180,220,0.25)';
+      ctx.fillRect(0, y, size, 1.4);
+      ctx.fillStyle = 'rgba(200,210,220,0.35)';
+      for (let x = 0; x < size; x += 6) ctx.fillRect(x, y, 0.6, 8);
+      ctx.fillRect(0, y + 4, size, 0.4);
+    }
+  }, 67);
+}
+
+/** A stockpile, heaped up: coal (black, its lumps glinting) or aggregate (grey stone, sand). */
+function stockpile(size: number, base: string, lumps: string[]): HTMLCanvasElement {
+  return tile(size, (ctx, rand) => {
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, size, size);
+    // The ridges the loaders leave.
+    for (let i = 0; i < size / 6; i++) {
+      ctx.fillStyle = rand() < 0.5 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.12)';
+      ctx.beginPath();
+      ctx.ellipse(rand() * size, rand() * size, 6 + rand() * 12, 2 + rand() * 3, rand() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    speckle(ctx, rand, size, size * 6, lumps, 1.1);
+  }, 73);
+}
+
 /** Brownfield: rough ground, left: patchy, rank grass and weeds over bare earth, gravel and bits of rubble. */
 function wasteland(size: number): HTMLCanvasElement {
   return tile(size, (ctx, rand) => {
@@ -355,6 +392,9 @@ export function artPalette(ctx: Ctx): Palette {
     island: pavement,
     // A platform: long concrete slabs (its edges are drawn over: see ground.ts).
     platform: pattern(slabs([170, 166, 158], 32, 48, 'rgba(70,66,58,0.22)', 47)),
+    solar: pattern(solar(64)),
+    coal: pattern(stockpile(96, '#25231f', ['#3b3832', '#14130f', '#55524a'])),
+    aggregate: pattern(stockpile(96, '#8f8a80', ['#a7a196', '#6f6a62', '#b8b0a0', '#7d6f5a'])),
   };
   return {
     surface: false,

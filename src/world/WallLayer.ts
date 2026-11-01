@@ -26,6 +26,8 @@ const LOOK: Record<WallKind, { height: number; side: number; top: number; width:
   prison: { height: 5.5 * 8, side: 0x7d7a74, top: 0xa6a299, width: 6 },
   // A tennis net: dark mesh, its white tape along the top.
   net: { height: 1.07 * 8, side: 0x1e2224, top: 0xf2f0e6, width: 0.7, mesh: true },
+  // A pipeline on its rack: the trestles' grey steel, the pipes along the top, silver.
+  pipe: { height: 2.5 * 8, side: 0x6d7378, top: 0xc3c8cc, width: 4, mesh: true },
 };
 
 /**

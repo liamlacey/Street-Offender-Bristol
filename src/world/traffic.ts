@@ -291,6 +291,8 @@ export interface Lane extends Path {
   stops: { s: number; signal: number; box?: number }[];
   /** How busy the road is (see Road.activity). */
   activity: number;
+  /** Through industrial land (an estate, the docks: see the map's places): lorries and vans, more than anywhere. */
+  works?: boolean;
   /** How wide a bus lane there is on its left (buses drive in it), px; 0 for none. */
   busLane: number;
   /** At its end, it gives way to the traffic on the road it joins. */
@@ -323,6 +325,8 @@ const SPEED: Partial<Record<RoadKind, number>> = { trunk: 13.4 * M, primary: 12.
 const MAX_SPEED = 13.4 * M;
 /** Round a bus station's yard, px/s. */
 const YARD_SPEED = 5 * M;
+/** Through industrial land, how likely a vehicle's a lorry (against the others' shares: see VEHICLES' `traffic`). */
+const WORKS_LORRIES = 0.3;
 /** How many vehicles a lane carries, per 100 m, on a quiet stretch (the main roads busy wherever they go); more where there's more to go to (up to BUSIEST times as many, and no more than CROWDED). */
 const DENSITY: Partial<Record<RoadKind, number>> = { trunk: 7, primary: 6, secondary: 4, tertiary: 2.6, street: 1 };
 const BUSIEST = 3;
@@ -586,6 +590,18 @@ export function* lanesWork(map: GameMap, paths = false, joins: Join[] = []): Wor
     }
   }
 
+  // The industrial land (its outlines, boxes round them): the roads through it are the lorries'.
+  const works = (map.places ?? []).filter((p) => p.kind === 'industrial' && p.rings[0]?.length >= 6).map((p) => {
+    const ring = p.rings[0];
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let k = 0; k + 1 < ring.length; k += 2) [x0, y0, x1, y1] = [Math.min(x0, ring[k]), Math.min(y0, ring[k + 1]), Math.max(x1, ring[k]), Math.max(y1, ring[k + 1])];
+    return { ring, box: [x0, y0, x1, y1] };
+  });
+  const inWorks = (pts: Pts) => {
+    const mid = Math.floor(pts.length / 4) * 2;
+    const [x, y] = [pts[mid], pts[mid + 1]];
+    return works.some(({ ring, box }) => x >= box[0] && y >= box[1] && x <= box[2] && y <= box[3] && pointInRing(x, y, ring));
+  };
   const lanes: Lane[] = [];
   for (const [edge, e] of edges.entries()) {
     if (laning()) yield;
@@ -634,6 +650,7 @@ export function* lanesWork(map: GameMap, paths = false, joins: Join[] = []): Wor
           speed: !DRIVEN.has(r.kind) ? YARD_SPEED : (SPEED[r.kind] ?? 8 * M) * (1 - Math.min(0.15, (r.activity ?? 0) * 0.005)) * (each < 2.9 * M ? 0.88 : 1),
           rank: RANK[r.kind] ?? 1,
           activity: r.activity ?? 0,
+          ...(!paths && inWorks(e.pts) ? { works: true } : {}),
           busLane: index === 0 ? (r.lanes ?? []).filter((l) => l.kind === 'bus' && l.side === dir).reduce((w, l) => w + l.width, 0) : 0,
           ...cycling(r, dir, index, left, offset),
           density: paths ? PATH_BIKES / (100 * M) : r.bus ? 0 : Math.min(CROWDED, (DENSITY[r.kind] ?? 0.6) * Math.min(BUSIEST, 1 + (r.activity ?? 0) / 15)) / (100 * M),
@@ -1281,8 +1298,9 @@ export class Traffic {
   spawn(lane: Lane, s: number, kind?: VehicleKind, bus?: { route: number; leg: number }): Vehicle {
     const major = lane.rank >= 3;
     // (Bikes in the kerb lane only, more where there's a cycle lane, fewer on the main roads.)
+    // (Through industrial land, a lorry in every four or so, and vans; and none of those but on the main roads anywhere else.)
     const weight = (k: VehicleKind) =>
-      k === 'lorry' && !major ? 0 : k === 'bike' ? (lane.index > 0 ? 0 : VEHICLES.bike.traffic * (lane.cycleLane ? 3 : 1) * (lane.rank >= 4 ? 0.6 : 1)) : VEHICLES[k].traffic;
+      lane.works && k === 'lorry' ? WORKS_LORRIES : lane.works && k === 'van' ? VEHICLES.van.traffic * 2 : k === 'lorry' && !major ? 0 : k === 'bike' ? (lane.index > 0 ? 0 : VEHICLES.bike.traffic * (lane.cycleLane ? 3 : 1) * (lane.rank >= 4 ? 0.6 : 1)) : VEHICLES[k].traffic;
     if (lane.path) kind = 'bike';
     kind ??= bus ? (this.rand() < 0.55 ? 'double' : 'bus') : pick(this.rand, (Object.keys(VEHICLES) as VehicleKind[]).map((k) => [k, weight(k)]))!;
     const v = this.make(kind, 0, 0, 0, lane.level);

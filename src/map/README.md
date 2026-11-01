@@ -804,8 +804,16 @@ in order and which way, as a bus route's roads, and its stops, its `stop` nodes)
 carriages on a service, the unit its company runs on it: a GWR Class 800 to and from
 London (5 carriages, 26 m), Class 158s on the longer GWR routes (Cardiff, Portsmouth,
 Weymouth, Worcester, Exeter: 2 of 22.6 m), Class 166 Turbos on the locals (3 of 23 m);
-CrossCountry's Voyagers (4 of 23 m). Not on a service with no stops (the Portishead
-branch's goods trains, the Harbour Railway). Drawn from above in their livery: GWR's
+CrossCountry's Voyagers (4 of 23 m). Not on a service with no stops (the Harbour
+Railway). On the goods lines (`route=railway` relations named for a dock, freight,
+goods, port, terminal, sidings, coal or minerals, or `usage=freight` or `industrial`:
+the Portbury Dock Line, the docks' sidings), freight trains: a Class 66 in DB red and
+seven wagons (all 21 m), container flats with two boxes each, a coal hopper last, up
+to 16 m/s, stopping nowhere (but for what's on the line). Where there's no such
+relation, the goods lines are made from the tracks themselves: `railway=rail` ways
+for industry (`usage=industrial` or `freight`, not a yard's sidings: no `service`),
+joined end to end (either way round) into runs, each of 600 m or more a freight
+service (the Portbury Dock Line). Drawn from above in their livery: GWR's
 dark green, CrossCountry's silver with its maroon, grey roofs with their kit on them,
 their doors, and the cabs at each end yellow (as the law says) with their windscreens;
 each carriage lying between its bogies (cutting the corner on a curve), its roof 3.8 m
@@ -929,7 +937,9 @@ stop beyond that too (half their widths together ÷ the tangent of the angle, at
   loop: not just a queue), one edges past.
 
 **What drives:** small cars, hatchbacks, saloons, estates, SUVs, vans (18, 26, 14, 8,
-15, 14%) and, on secondary roads and bigger, lorries (5%); in the colours of Britain's
+15, 14%) and, on secondary roads and bigger, lorries (5%); through industrial land (a
+road whose middle is in it), lorries on any road (30 shares against the cars' 100 or
+so: a lorry in about every four) and twice the vans; in the colours of Britain's
 cars (grey, black, white, blue, silver, red the most), vans mostly white. Each lane
 carries trunk 7, primary 6, secondary 4, tertiary 2.6, streets 1 vehicles per
 100 m, times 1 + activity ÷ 15 (at most 3 times, and at most 9 per 100 m). Up to 70 at
@@ -1207,6 +1217,21 @@ but the water and the buildings.
 - **Storage tanks** (`man_made=storage_tank` or `silo`, mapped as only an outline, not
   underground): buildings all the same, pale steel, 10 m high where the LIDAR doesn't
   say otherwise.
+- **Wind turbines** (`power=generator` from the wind, a point): its tower (4 m
+  across, solid, nothing brings one down) up to its hub (`height:hub`, else 70% of its
+  `height`, else 80 m; 20–140 m), drawn rising from its foot, white, tapering; at the
+  top its three blades (each about 55% of the hub's height long), turning, each turbine
+  at its own speed (about a turn every 4 s), facing the south-west's wind.
+- **Solar farms** (`power=plant` or `generator`, from the sun, on the ground: not on a
+  roof): rows of dark blue panels, the grass between them.
+- **Pipelines** (`man_made=pipeline`): on their racks, 2.5 m up (knocked through a 6 m
+  length at a time), where they're above ground: tagged so (`location=overground`), or
+  untagged and across industrial land (one across the country's buried).
+- **The docks' quays** (`dockQuays`): along each big water (15,000 m² or more), where
+  the port's land (industrial land of one of the docks' kinds, as above) is 12 m back
+  from its edge, in runs: berths along them for cargo ships (92 × 15 m) and tugs (see
+  "Boats"); and (but at a car terminal or a fuel terminal) a crane every 90 m, 7 m back
+  from the edge, its jib (32 m) out over the water, as the harbour's are.
 - **Electricity pylons** (`power=tower`) and their lines (`power=line`): each pylon
   (its `height`, else 26 m, 10–60 m) is solid (its feet, 6.5 m across), and nothing
   brings one down; drawn rising from its feet, its four legs narrowing to a waist at
@@ -1345,6 +1370,42 @@ but the water and the buildings.
     `warehouse`, `manufacture`, `hangar`, `shed`): OSM tags most of Bristol's trading
     estates `landuse=commercial`. Otherwise, shops' and offices' land: big bins and a
     pallet out the back of each building of 500 m² or more.
+  - The docks and the big works (industrial land, `landuse=industrial` or `port`, of
+    2500 m² or more, and the docks' land, `landuse=harbour`: `docks` in `places.ts`), by what it is (`industrySub` in
+    `osm.ts`: from its name, and its operator's, and `industrial=*`): a container
+    terminal (`container`), a car terminal (`autologic`, vehicle storage, car terminal,
+    import centre), a bulk yard (coal, stockyard, aggregate, bulk, biomass, grain,
+    animal feed, cement, mortar, quarry, stone), a fuel terminal (oil, fuel, LPG,
+    petroleum, gas, tank farm, chemical) or the docks (`industrial=port`,
+    `landuse=port` or `harbour`, dock, port, wharf, quay, terminal, berth). A car
+    terminal's yards mapped as car parks (named for vehicle storage, Autologic...) are
+    its land too, and their bays nearly all (96%) taken by new cars. Everything's put down on
+    open ground only (in it, not in a building, on a road (and 0.8 m off it), in
+    anything mapped (a car park, grass, water...), or within 2 m of a tree), each
+    thing's ground taken so nothing's put over anything else.
+    - A container terminal: its land in its own frame (along its longest side, and
+      across), blocks of containers 8 long and 6 across (6.4 m by 2.8 m a box), 14 m
+      aisles along and 12 m across between them, up to 480; in an aisle by each block
+      (of 8 or more), a reach stacker (a forklift), a lorry waiting (70%), a worker.
+    - A car terminal: rows of new cars side by side (2.5 m apart), two rows nose to
+      nose, 6.5 m aisles between the pairs, up to 360, nearly all there (95%):
+      hatchbacks, saloons, estates, SUVs, small cars; a few drivers in hi-vis.
+    - A bulk yard: up to 6 heaps (16 to 30 m long, 7 to 12 m across, rounded),
+      coal (`coal` in its name) or aggregate, along its land or across it, each with
+      room round it; a loader (a digger) at its side, a dumper beyond, a conveyor (on its
+      rack, 4 m up, 26 m long) off its end where there's room, a worker.
+    - Storage tanks (two or more in it, up to 30; at a fuel terminal, the docks, or any
+      works not otherwise laid out): a bund wall 1.2 m high round each, a square 3 m
+      out from it (where that's clear of the roads); a valve by it, drums; pipes on
+      their racks (2.5 m up) from each tank to the nearest not yet joined (a chain
+      through them all, none over 120 m), where they're clear of roads and buildings.
+    - Anywhere but a car terminal: its open ground in lots 22 m apart (40% of them, up
+      to 45; at a container terminal or the docks, 1.4 times as many): 2 to 4 lorries
+      parked side by side (30%), 2 to 4 containers side by side (25%), pallets and
+      materials in a little grid (pallets, bags, pipes) with a forklift by them (25%), or
+      a skip, big bins and drums; a worker in hi-vis at every third.
+    - At the lift barriers across its roads (up to 4): a gatehouse (a sentry box) 2.5 m
+      beyond one end, and its guard.
   - A university, college, hospital, library, sports or community centre: people at
     each building's door (more at a university, a hospital's smokers to one side),
     bikes (not a hospital), a bench. A stadium: a crowd all round it (a match on),
@@ -1633,10 +1694,12 @@ and clear (by 0.5 m) of every other berth. What's moored goes by the mooring (an
 is the same every time, by where it is): `permit` (people living aboard)
 narrowboats, Dutch barges, cruisers and yachts; `guest` cruisers, yachts and
 narrowboats; `private` yachts, cruisers and dinghies; `commercial` the old tugs and
-barges; a pontoon whose `operator` is a ferry company, its spare ferries; anything
+barges; the docks' quays (`ship`: see "The docks' quays") cargo ships (80%) and tugs; a pontoon whose `operator` is a ferry company, its spare ferries; anything
 else, a mix with dinghies. Where the edge left is too short for the kind picked,
 one that fits. Sizes (length × beam): narrowboat 17 × 2.1 m, barge 19 × 4, cruiser
-9 × 3, yacht 10 × 3.3, dinghy 4.2 × 1.7, tug 21 × 5.5, ferry 13 × 3.8.
+9 × 3, yacht 10 × 3.3, dinghy 4.2 × 1.7, tug 21 × 5.5, ferry 13 × 3.8, ship 92 × 15
+(dark hull; its deck red or green, six hatch covers along it, the deck cranes between
+them, the white accommodation block aft with its bridge and funnel).
 
 **Ferries:** each `route=ferry` relation (not disused) calls at its stops (members
 with a `stop` role, or nodes tagged `amenity=ferry_terminal`) in order; a ferry
@@ -1648,9 +1711,9 @@ clear of the other stops; a route with the same stops as one already kept (the
 other way, say) isn't kept twice. Berths overlapping a stop (within 2 m) are dropped.
 
 **In the game** (`src/world/boats.ts`): about 80% of the berths have a boat (the
-tugs and spare ferries always), and one ferry runs each route, waiting 25 s at each
+tugs, spare ferries and ships always), and one ferry runs each route, waiting 25 s at each
 stop and going back along it from the end. About every 18 s one of the moored boats
-(not a tug or ferry) casts off for a free berth its size (or bigger) at least 80 m
+(not a tug, ferry or ship: a ship stays moored) casts off for a free berth its size (or bigger) at least 80 m
 away, up to 5 at once. Where they can go is a grid over the water, 2 m a cell: the
 water areas less the pontoons, piers, and every berth and ferry stop (half a metre
 round). Bridges aren't in it: they're over the water, and the boats go under

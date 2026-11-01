@@ -178,6 +178,9 @@ const AREAS: Partial<Record<AreaKind, string>> = {
   pier: '#b9ab92',
   pontoon: '#b9ab92',
   slipway: '#b9ab92',
+  solar: '#5d6f86',
+  coal: '#4a4743',
+  aggregate: '#b4ada0',
 };
 const WATER = '#6aa3c9';
 const BUILDING = '#a19a8f';

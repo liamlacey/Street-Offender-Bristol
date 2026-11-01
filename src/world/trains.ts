@@ -7,7 +7,8 @@
  * (you, a car at a level crossing, someone on the track), sounding its horn;
  * up onto the bridges and down into the tunnels with the track. They look
  * as each company's do: GWR's green (a Class 800 to London, Class 158s on
- * the longer routes, Class 166s on the locals), CrossCountry's Voyagers.
+ * the longer routes, Class 166s on the locals), CrossCountry's Voyagers;
+ * and on the goods lines (the docks'), freight trains, stopping nowhere.
  * Knocked hard, a carriage is damaged, and wrecked, the train stops for
  * good. Pure, so it's tested; TrainLayer.ts draws them.
  */
@@ -17,8 +18,9 @@ import { type Work, drain } from './work.ts';
 
 const M = 8;
 
-/** The kinds of unit: a GWR Class 800 (IET), Class 158 Express Sprinter, Class 166 Turbo; a CrossCountry Class 220 Voyager. */
-export type UnitKind = 'iet' | 'sprinter' | 'turbo' | 'voyager';
+/** The kinds of unit: a GWR Class 800 (IET), Class 158 Express Sprinter, Class 166 Turbo; a CrossCountry Class 220 Voyager; a freight
+ * train (a Class 66 and its wagons, all as long: see TrainLayer). */
+export type UnitKind = 'iet' | 'sprinter' | 'turbo' | 'voyager' | 'freight';
 
 /** Each kind: its carriages' length and width, px; how many; its top speed here, px/s; how heavy each carriage is (your car's 1). */
 export const UNITS: Record<UnitKind, { length: number; width: number; cars: number; top: number; mass: number }> = {
@@ -26,10 +28,12 @@ export const UNITS: Record<UnitKind, { length: number; width: number; cars: numb
   sprinter: { length: 22.6 * M, width: 2.7 * M, cars: 2, top: 22 * M, mass: 38 },
   turbo: { length: 23 * M, width: 2.8 * M, cars: 3, top: 22 * M, mass: 40 },
   voyager: { length: 23 * M, width: 2.7 * M, cars: 4, top: 26 * M, mass: 45 },
+  freight: { length: 21 * M, width: 2.7 * M, cars: 8, top: 16 * M, mass: 80 },
 };
 
 /** Which unit runs a service: CrossCountry's Voyagers; GWR's Class 800s to and from London, 158s on the longer routes, 166 Turbos on the locals. */
-export function unitFor(route: Pick<TrainRoute, 'name' | 'operator'>): UnitKind {
+export function unitFor(route: Pick<TrainRoute, 'name' | 'operator' | 'freight'>): UnitKind {
+  if (route.freight) return 'freight';
   if (/crosscountry|cross country/i.test(`${route.operator ?? ''} ${route.name}`)) return 'voyager';
   if (/paddington|london/i.test(route.name)) return 'iet';
   if (/portsmouth|weymouth|worcester|gloucester|cardiff|exeter/i.test(route.name)) return 'sprinter';
@@ -136,8 +140,8 @@ export class Trains {
   *setup(): Work {
     const { roads } = this.map;
     (this.map.trainRoutes ?? []).forEach((route, ri) => {
-      // (Not a line with no stops: a goods line's, or a heritage railway's.)
-      if (!route.stops.length) return;
+      // (Not a service with no stops (a heritage railway's), but a goods line's: its freight trains stop nowhere.)
+      if (!route.stops.length && !route.freight) return;
       let legs: number[] = [];
       const flush = () => {
         if (legs.length) this.addRun(ri, route, legs, roads);

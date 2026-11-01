@@ -16,9 +16,9 @@ import type { HomeKind } from './homes';
 export type Material = 'wood' | 'electric' | 'metal' | 'iron' | 'glass' | 'stone' | 'plant' | 'timber' | 'plastic';
 
 /** Things that stand in one place until they're knocked down. */
-export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'mooring' | 'postbox' | 'phone' | 'meter' | 'pump' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'crane' | 'stump' | 'cctv' | 'charger' | 'railsignal' | 'pylon' | 'flagpole';
+export type ThingKind = 'tree' | 'lamp' | 'signal' | 'beacon' | 'bollard' | 'mooring' | 'postbox' | 'phone' | 'meter' | 'pump' | 'clock' | 'lifering' | 'bikes' | 'fountain' | 'statue' | 'crane' | 'stump' | 'cctv' | 'charger' | 'railsignal' | 'pylon' | 'flagpole' | 'turbine';
 /** What doesn't topple like the street furniture: a tree (it splits and falls its own way), and what's left of one (low enough to drive over). */
-export type Structure = 'tree' | 'stump' | 'pylon';
+export type Structure = 'tree' | 'stump' | 'pylon' | 'turbine';
 /**
  * What's left where it stood, broken, knocked hard enough: a statue's plinth, a fountain's basin. Still in the way, but hit
  * again (much more easily: REMAINS_TOUGH), it's smashed to rubble.
@@ -29,7 +29,7 @@ export const REMAINS_TOUGH: Toughness = { material: 'stone', strength: 120, abso
 export const WRECK_EASIER = 0.6;
 
 /** Walls, by what OSM calls them (and a bridge's parapets). */
-export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing' | 'gate' | 'liftgate' | 'chain' | 'shelter' | 'parapet' | 'heras' | 'mesh' | 'prison' | 'net';
+export type WallKind = 'wall' | 'hedge' | 'fence' | 'railing' | 'gate' | 'liftgate' | 'chain' | 'shelter' | 'parapet' | 'heras' | 'mesh' | 'prison' | 'net' | 'pipe';
 
 export interface Toughness {
   material: Material;
@@ -67,6 +67,8 @@ export const THINGS: Record<Exclude<ThingKind, 'tree'>, Toughness> = {
   stump: { material: 'wood', strength: Infinity, absorb: 0 },
   // An electricity pylon: a steel lattice on concrete feet, its wires holding it up. Nothing brings one down.
   pylon: { material: 'iron', strength: Infinity, absorb: 0 },
+  // A wind turbine's tower: steel, four metres across at its foot. Nothing brings one down.
+  turbine: { material: 'iron', strength: Infinity, absorb: 0 },
   // A CCTV camera on its pole; an electric car's charging post; a railway signal on its post.
   cctv: { material: 'electric', strength: 130, absorb: 0.2 },
   charger: { material: 'electric', strength: 150, absorb: 0.25 },
@@ -96,6 +98,8 @@ export const WALLS: Record<WallKind, Toughness & { /** How much of it a hit at i
   prison: { material: 'stone', strength: 900, absorb: 0.9, gap: 2 * 8 },
   // A tennis net: brought down all at once (its posts bent over).
   net: { material: 'plastic', strength: 40, absorb: 0.05, gap: 20 * 8 },
+  // A pipeline on its rack: steel pipes on steel trestles, bent and burst open a length at a time.
+  pipe: { material: 'metal', strength: 230, absorb: 0.35, gap: 6 * 8 },
 };
 
 /**

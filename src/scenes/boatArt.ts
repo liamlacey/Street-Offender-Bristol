@@ -1,7 +1,7 @@
 /**
  * The boats' pictures, drawn in code, seen from above facing right:
- * narrowboats, Dutch barges, motor cruisers, yachts, dinghies, an old tug and
- * the harbour ferries, each in each of its colours (made when one's first
+ * narrowboats, Dutch barges, motor cruisers, yachts, dinghies, an old tug,
+ * the harbour ferries and the docks' cargo ships, each in each of its colours (made when one's first
  * needed), and their shadows on the water.
  */
 
@@ -34,7 +34,7 @@ export function boatShadow(scene: Phaser.Scene, kind: BoatKind): string {
 }
 
 /** Where the bow starts to narrow, as a fraction of the length from the stern. */
-const BOW: Record<BoatKind, number> = { narrowboat: 0.9, barge: 0.84, cruiser: 0.62, yacht: 0.55, dinghy: 0.68, tug: 0.78, ferry: 0.8 };
+const BOW: Record<BoatKind, number> = { narrowboat: 0.9, barge: 0.84, cruiser: 0.62, yacht: 0.55, dinghy: 0.68, tug: 0.78, ferry: 0.8, ship: 0.86 };
 
 /** A hull's outline: a rounded stern, straight sides, narrowing to the bow (inset by `i`). */
 function hullPath(ctx: Ctx, x: number, y: number, L: number, W: number, bow: number, stern: number, i = 0): void {
@@ -205,6 +205,38 @@ const DRAW: Record<BoatKind, (ctx: Ctx, L: number, W: number, hull: string, trim
     roundRect(ctx, L * 0.4, W / 2 - 4, 8, 8, 3, trim);
     roundRect(ctx, L * 0.4 + 1.2, W / 2 - 2.8, 5.6, 5.6, 2, '#151515');
     dot(ctx, L * 0.15, W / 2, 2.2, '#a59f8f');
+  },
+
+  /** A cargo ship: its hull, the deck (its colour) with the hatch covers along it, the cranes between them, and aft the white
+   * accommodation block, its bridge's windows, the funnel. */
+  ship(ctx, L, W, hull, trim) {
+    fillHull(ctx, L, W, 0.86, 0.35, 0, hull);
+    fillHull(ctx, L, W, 0.86, 0.35, 3, trim);
+    // The hatch covers: grey, ribbed.
+    const [h0, h1] = [L * 0.22, L * 0.86];
+    const n = 6;
+    const each = (h1 - h0) / n;
+    for (let k = 0; k < n; k++) {
+      const x = h0 + k * each + 3;
+      roundRect(ctx, x, W * 0.2, each - 6, W * 0.6, 1.5, '#6d7175');
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      for (let r = x + 4; r < x + each - 8; r += 5) ctx.fillRect(r, W * 0.2, 1, W * 0.6);
+    }
+    // Deck cranes between the hatches.
+    for (let k = 1; k < n; k += 2) {
+      const x = h0 + k * each;
+      dot(ctx, x, W * 0.5, 4.5, '#c9a227');
+      ctx.fillStyle = '#c9a227';
+      ctx.fillRect(x, W * 0.5 - 1.2, each * 0.7, 2.4);
+    }
+    // Aft: the accommodation block, its bridge across the ship, the funnel.
+    roundRect(ctx, L * 0.04, W * 0.12, L * 0.13, W * 0.76, 2, '#eeeae0');
+    roundRect(ctx, L * 0.15, W * 0.06, L * 0.025, W * 0.88, 1, GLASS);
+    roundRect(ctx, L * 0.06, W * 0.36, L * 0.05, W * 0.28, 2, '#151515');
+    roundRect(ctx, L * 0.065, W * 0.4, L * 0.04, W * 0.2, 1.5, trim);
+    // The bow's forecastle and its anchor gear.
+    dot(ctx, L * 0.93, W * 0.35, 2.2, '#2a2a2a');
+    dot(ctx, L * 0.93, W * 0.65, 2.2, '#2a2a2a');
   },
 
   /** A harbour ferry: its blue hull, the cabin's long yellow roof with its windows along the sides, and open decks fore and aft with their seats. */

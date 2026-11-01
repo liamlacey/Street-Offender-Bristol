@@ -161,7 +161,7 @@ export class GameScene extends Phaser.Scene {
   /** The street furniture that never moves, and the height of the ground under each, px. */
   private props: Shown[] = [];
   /** What's up high on the fixed things: the cranes' jibs. */
-  private raised: (Shown & { prop: number; mast?: number; turn?: [number, number] })[] = [];
+  private raised: (Shown & { prop: number; mast?: number; wide?: number; turn?: [number, number] })[] = [];
   /** What you hit on each level: the ground's, and the bridges' decks'. */
   private walls!: [SegmentGrid, SegmentGrid, SegmentGrid];
   private posts!: [CircleGrid, CircleGrid, CircleGrid];
@@ -646,6 +646,15 @@ export class GameScene extends Phaser.Scene {
         this.raised.push({ x: p.x, y: p.y, z, image: null, make: mast, prop, mast: z + height });
         const jib = () => this.add.image(p.x, p.y, TEX.towerJib).setOrigin(0.2, 0.5).setDisplaySize(CRANE_JIB * 1.25, 1.6 * 8).setDepth(DEPTH.buildings + 0.5);
         this.raised.push({ x: p.x, y: p.y, z: z + height, image: null, make: jib, prop, turn: [p.angle ?? 0, 0.05 + (Math.abs(Math.round(p.x + p.y)) % 5) / 100] });
+      } else if (p.kind === 'turbine' && p.height) {
+        // A wind turbine: its tower up from its foot, and its blades at the top, turning (each at its own speed, about a turn
+        // every four seconds).
+        const height = p.height;
+        const prop = this.props.length - 1;
+        const tower = () => this.add.image(p.x, p.y, TEX.tower).setOrigin(0, 0.5).setDepth(DEPTH.buildings + 0.4);
+        this.raised.push({ x: p.x, y: p.y, z, image: null, make: tower, prop, mast: z + height, wide: 4 * 8 });
+        const rotor = () => this.add.image(p.x, p.y, TEX.rotor).setDisplaySize(height * 1.15, height * 1.15).setDepth(DEPTH.buildings + 0.5);
+        this.raised.push({ x: p.x, y: p.y, z: z + height, image: null, make: rotor, prop, turn: [0, 1.4 + (Math.abs(Math.round(p.x + p.y)) % 7) / 20] });
       } else if (p.kind === 'crane' && p.height) {
         const height = p.height;
         // Its jib, up high, reaching out over the water from where it's pinned.
@@ -2303,7 +2312,7 @@ export class GameScene extends Phaser.Scene {
           const top = p.lift(r.mast);
           const [tx, ty] = [p.x(t.x, top), p.y(t.y, top)];
           const [fx, fy] = [p.x(t.x, s), p.y(t.y, s)];
-          t.image.setRotation(Math.atan2(ty - fy, tx - fx)).setDisplaySize(Math.max(1, Math.hypot(tx - fx, ty - fy)), 2.2 * 8);
+          t.image.setRotation(Math.atan2(ty - fy, tx - fx)).setDisplaySize(Math.max(1, Math.hypot(tx - fx, ty - fy)), r.wide ?? 2.2 * 8);
         }
         if (r.turn) t.image.setRotation(r.turn[0] + (this.time.now / 1000) * r.turn[1]);
       }
@@ -2447,7 +2456,7 @@ const REACH = 1.3 * 8;
 
 /** A kind of vehicle, for its damage. */
 /** How sturdy each kind of boat is (a car's 1): a dinghy's thin plastic, a narrowboat's steel, an old tug's heavy plate. */
-const BOAT_STIFFNESS: Record<Boat['kind'], number> = { dinghy: 0.7, cruiser: 1.1, yacht: 1.2, narrowboat: 2.4, barge: 3, ferry: 2, tug: 4 };
+const BOAT_STIFFNESS: Record<Boat['kind'], number> = { dinghy: 0.7, cruiser: 1.1, yacht: 1.2, narrowboat: 2.4, barge: 3, ferry: 2, tug: 4, ship: 12 };
 
 /** A critically damped spring: `value` (moving at `rate`) eased towards `target`, about 1/`omega` s to get most of the way, never overshooting. */
 function spring(value: number, rate: number, target: number, omega: number, dt: number): [number, number] {

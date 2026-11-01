@@ -50,6 +50,9 @@ export interface Bays {
 
 /** How likely a bay's taken: a car park's, and a street's (more, the busier the street). */
 const CAR_PARK_TAKEN = 0.65;
+/** A car terminal's yard (see osm.ts's industrySub): nearly every bay a new car's, of these kinds. */
+const TERMINAL_TAKEN = 0.96;
+const NEW_CARS = ['hatch', 'hatch', 'saloon', 'estate', 'suv', 'suv', 'small'];
 const streetTaken = (r: Road) => Math.min(0.92, 0.55 + (r.activity ?? 0) * 0.012);
 
 /**
@@ -301,6 +304,8 @@ export function* parkingWork(map: GameMap): Work<Space[]> {
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const s of lots.get(cell(b.x + i * LOT_CELL, b.y + j * LOT_CELL)) ?? []) if (Math.hypot(s.x - b.x, s.y - b.y) < BAY_DEPTH && rectsOverlap(box(s), box(b))) return false;
     return true;
   };
+  // The car terminals' yards (see osm.ts's industrySub).
+  const terminals = (map.places ?? []).filter((p) => p.kind === 'industrial' && p.sub === 'cars' && p.rings[0]).map((p) => p.rings[0]);
   // (Not over another car park's bays, either: two car parks mapped over each other, or one inside another.)
   for (const a of map.areas) {
     if (a.kind !== 'parking') continue;
@@ -308,6 +313,10 @@ export function* parkingWork(map: GameMap): Work<Space[]> {
     // (Not the trolley shelters.)
     const store = storeOf(map, a);
     const shelters = store < 0 ? [] : shelterSpaces(map, store, spaces);
+    // (A car terminal's yards: packed with the new cars off the ships.)
+    if (terminals.some((t) => pointInRing(spaces[0]?.x ?? NaN, spaces[0]?.y ?? NaN, t))) {
+      for (const s of spaces) Object.assign(s, { taken: TERMINAL_TAKEN, kind: NEW_CARS[Math.abs(Math.round(s.x * 3 + s.y * 7)) % NEW_CARS.length] });
+    }
     const kept = spaces.filter((s) => !shelters.includes(s) && free(s) && clearOfLots(s));
     for (const s of kept) keep(s);
     out.push(...kept);

@@ -30,6 +30,7 @@ export const THING_PRICE: Record<Exclude<ThingKind, 'tree'>, number> = {
   railsignal: 30_000,
   pylon: 400_000,
   flagpole: 1_500,
+  turbine: 3_000_000,
 };
 
 /** What's left of a statue's plinth or a fountain's basin, smashed to rubble after. */
@@ -55,6 +56,7 @@ export const WALL_PRICE: Record<WallKind, number> = {
   mesh: 90,
   prison: 9_000,
   net: 30,
+  pipe: 2_500,
 };
 
 /** A hut (a shed, a garage, a kiosk: see world.ts's `isHut`) knocked down. */

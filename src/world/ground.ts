@@ -80,6 +80,9 @@ export function surfacePalette(): Palette {
     slipway: s(Surface.Pavement),
     island: s(Surface.Pavement),
     platform: s(Surface.Pavement),
+    solar: s(Surface.Grass),
+    coal: s(Surface.Dirt),
+    aggregate: s(Surface.Dirt),
   };
   const pave = s(Surface.Pavement);
   return {

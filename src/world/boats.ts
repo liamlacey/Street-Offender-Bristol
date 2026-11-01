@@ -78,7 +78,7 @@ const DWELL = 25;
 /** How far ahead along its way a boat steers for, px. */
 const AHEAD = 7 * 8;
 /** Each kind's weight, against your car's 1. */
-const MASS: Record<BoatKind, number> = { narrowboat: 11, barge: 23, cruiser: 4.5, yacht: 4, dinghy: 0.15, tug: 90, ferry: 11 };
+const MASS: Record<BoatKind, number> = { narrowboat: 11, barge: 23, cruiser: 4.5, yacht: 4, dinghy: 0.15, tug: 90, ferry: 11, ship: 4000 };
 /** Adrift: how quickly it slows on the water, along it and sideways (a hull slips along easily), and its spinning. */
 const DRAG = 0.25;
 const DRAG_SIDE = 0.7;
@@ -96,6 +96,8 @@ export const BOAT_COLOURS: Record<BoatKind, [string, string][]> = {
   dinghy: [['#d94b2b', '#f2f2f2'], ['#e8c33a', '#2a2a2a'], ['#2f74b5', '#f2f2f2'], ['#f2f2f2', '#2b8c5a']],
   tug: [['#1c1c1c', '#b3261e'], ['#1d2b3a', '#c84a1d']],
   ferry: [['#f3c623', '#1f5fa8']],
+  // A cargo ship's hull, then its deck.
+  ship: [['#1f2a36', '#8a3328'], ['#7a1f1f', '#3d5a3a'], ['#203d5c', '#8a3328'], ['#2b2b2b', '#5a6a3a']],
 };
 
 /** A small, quick random number generator, for tests that want the same each time. */
@@ -540,7 +542,7 @@ export class Boats {
     const options = this.options;
     const occupied = options.occupied ?? 0.8;
     this.berths.forEach((b, i) => {
-      if (this.rand() < occupied || b.kind === 'tug' || b.kind === 'ferry') this.moor(this.add(b.kind, b.x, b.y, b.angle), i);
+      if (this.rand() < occupied || b.kind === 'tug' || b.kind === 'ferry' || b.kind === 'ship') this.moor(this.add(b.kind, b.x, b.y, b.angle), i);
     });
     // A ferry on each route, waiting at its first stop.
     this.stops.forEach((stops, route) => {
@@ -658,7 +660,7 @@ export class Boats {
 
   /** One of the moored boats casts off for a free berth elsewhere (if one can get anywhere): `already` of the way there, if it's out on the water already. */
   private castOff(already = 0): void {
-    const moored = this.boats.filter((b) => b.mode === 'moored' && !b.ferry && b.kind !== 'tug' && b.kind !== 'ferry');
+    const moored = this.boats.filter((b) => b.mode === 'moored' && !b.ferry && b.kind !== 'tug' && b.kind !== 'ferry' && b.kind !== 'ship');
     for (let tries = 0; tries < 6 && moored.length; tries++) {
       const boat = moored[Math.floor(this.rand() * moored.length)];
       const out = this.offing(boat.x, boat.y, boat.angle, boat.length, boat.beam, 1);

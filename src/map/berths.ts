@@ -8,7 +8,8 @@
  * barges where people live aboard (`permit`), cruisers and yachts on the
  * visitors' pontoons (`guest`), a yacht club's yachts (`private`), the old
  * working boats at the commercial wharves, and the ferry company's own
- * pontoon its spare ferries. The ferries run the ferry routes
+ * pontoon its spare ferries; and along the docks' quays (see osm.ts's
+ * `dockQuays`), cargo ships, and tugs. The ferries run the ferry routes
  * (`route=ferry`), calling at their stops (`amenity=ferry_terminal`, as
  * long as it isn't disused), each stop put alongside the nearest edge a
  * ferry fits against.
@@ -17,7 +18,7 @@
 import type { Area, Building, Pts } from './osm.ts';
 import { pointInRing } from './osm.ts';
 
-export type BoatKind = 'narrowboat' | 'barge' | 'cruiser' | 'yacht' | 'dinghy' | 'tug' | 'ferry';
+export type BoatKind = 'narrowboat' | 'barge' | 'cruiser' | 'yacht' | 'dinghy' | 'tug' | 'ferry' | 'ship';
 
 /** Each kind's length and beam, metres. */
 export const BOAT_SIZE: Record<BoatKind, [number, number]> = {
@@ -28,6 +29,8 @@ export const BOAT_SIZE: Record<BoatKind, [number, number]> = {
   dinghy: [4.2, 1.7],
   tug: [21, 5.5],
   ferry: [13, 3.8],
+  // A cargo ship in the docks (a bulk carrier, a coaster), moored for good.
+  ship: [92, 15],
 };
 
 /** A berth: where a boat lies (its middle), which way it points, radians, and what kind of boat it's for. */
@@ -59,6 +62,8 @@ const MIX: Record<string, [BoatKind, number][]> = {
   private: [['yacht', 0.5], ['cruiser', 0.4], ['dinghy', 0.1]],
   commercial: [['tug', 0.7], ['barge', 0.3]],
   ferry: [['ferry', 1]],
+  // The docks' quays (see osm.ts's dockQuays): cargo ships, and the tugs that bring them in.
+  ship: [['ship', 0.8], ['tug', 0.2]],
   yes: [['cruiser', 0.35], ['yacht', 0.25], ['narrowboat', 0.25], ['dinghy', 0.15]],
 };
 
