@@ -3,7 +3,8 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import type { GameMap } from '../map/osm';
 
-const bristol: GameMap = JSON.parse(readFileSync(new URL('../map/bristol.json', import.meta.url), 'utf8'));
+const bristol: GameMap = JSON.parse(new TextDecoder().decode(gunzipSync(readFileSync(new URL('../map/bristol.json.gz', import.meta.url)))));
 export default bristol;

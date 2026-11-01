@@ -4,7 +4,7 @@
  * trees, walls and street furniture, in game pixels with north up.
  *
  * Pure (no Phaser, no DOM), so it can be tested, and run by
- * `tools/build-map.ts` to make `src/map/bristol.json`.
+ * `tools/build-map.ts` to make `src/map/bristol.json.gz`.
  */
 
 import { type Berth, type FerryRoute, type MooringEdge, Water, ferryStop, findBerths, overlap } from './berths.ts';

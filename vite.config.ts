@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 import { MAPS, type MapInfo } from './src/map/maps';
@@ -12,7 +13,7 @@ import { overviewOf } from './src/world/overview';
  * map's `base` (Bristol's `map/`, the others' `map/<id>/`), `index.json`, and a
  * file a tile, `t/<i>_<j>.json`; and what the pause menu's map is drawn from,
  * `overview.json` (see src/world/overview.ts). Cut from the map's made file
- * (bristol.json, ...) when the game's built, and as asked for while
+ * (bristol.json.gz, ...) when the game's built, and as asked for while
  * developing (again whenever it changes). A map not made yet is left out.
  */
 function mapTiles(): Plugin {
@@ -23,7 +24,7 @@ function mapTiles(): Plugin {
     const at = statSync(m.file).mtimeMs;
     let cut = cuts.get(m.id);
     if (!cut || cut.at !== at) {
-      const map = JSON.parse(readFileSync(m.file, 'utf8')) as GameMap;
+      const map = JSON.parse(gunzipSync(readFileSync(m.file)).toString('utf8')) as GameMap;
       cut = { at, split: { ...splitMap(map), overview: overviewOf(map) } };
       cuts.set(m.id, cut);
     }

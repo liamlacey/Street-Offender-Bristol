@@ -1,6 +1,6 @@
 /**
  * The map in pieces, so the game only ever holds the part of it round you
- * (see src/world/streamer.ts): the whole map (bristol.json) is cut into
+ * (see src/world/streamer.ts): the whole map (bristol.json.gz) is cut into
  * square TILEs, each with what's in it, and a small index with what's
  * everywhere (the bus routes, the ferries, the traffic lights' timings, the
  * lie of the land's grid); and a region of the map (a block of tiles round

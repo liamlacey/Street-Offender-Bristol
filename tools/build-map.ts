@@ -1,5 +1,5 @@
 /**
- * Makes src/map/bristol.json: Bristol from OpenStreetMap, measured and
+ * Makes src/map/bristol.json.gz (gzipped JSON): Bristol from OpenStreetMap, measured and
  * filled in with the Environment Agency's LIDAR. See src/map/README.md for
  * how, and for how to grow the map.
  *
@@ -271,7 +271,7 @@ function nearestRoad(m: typeof map, x: number, y: number) {
 }
 
 const json = JSON.stringify(map);
-writeFileSync(MAP_INFO.file, json);
+writeFileSync(MAP_INFO.file, gzipSync(json, { level: 9 }));
 console.log(`Areas: ${sources.areas.map((a) => `${a.name} (fetched ${a.fetched}, LIDAR shift ${a.lidarShift?.join(', ')} m)`).join('; ')}`);
 console.log('LIDAR:', JSON.stringify(lidar));
 console.log(

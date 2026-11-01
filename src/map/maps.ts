@@ -12,7 +12,7 @@ export interface MapInfo {
   credit: string;
   /** Where its sources are kept (its areas.json, a folder an area), from the project's root. */
   sources: string;
-  /** The map made from them (see tools/build-map.ts). */
+  /** The map made from them (see tools/build-map.ts), gzipped (Bristol's is too big for GitHub as it is). */
   file: string;
   /** Where its tiles are fetched from, from the game's page (see vite.config.ts). */
   base: string;
@@ -24,7 +24,7 @@ export const MAPS: MapInfo[] = [
     name: 'Bristol',
     credit: '© OpenStreetMap contributors · LIDAR © Environment Agency (OGL)',
     sources: 'map-sources',
-    file: 'src/map/bristol.json',
+    file: 'src/map/bristol.json.gz',
     base: 'map/',
   },
   {
@@ -32,7 +32,7 @@ export const MAPS: MapInfo[] = [
     name: 'Llanidloes & Y Fan',
     credit: '© OpenStreetMap contributors · LIDAR © Welsh Government (OGL)',
     sources: 'map-sources/maps/llanidloes',
-    file: 'src/map/llanidloes.json',
+    file: 'src/map/llanidloes.json.gz',
     base: 'map/llanidloes/',
   },
 ];

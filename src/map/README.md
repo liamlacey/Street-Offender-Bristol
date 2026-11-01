@@ -25,7 +25,8 @@ Esri imagery may be used for editing OSM itself, in OSM's own editors).
 
 ## The data is kept
 
-`npm run map` (`tools/build-map.ts`) builds `bristol.json` from the **areas** in
+`npm run map` (`tools/build-map.ts`) builds `bristol.json.gz` (the map's JSON, gzipped:
+as it is, it's over GitHub's 100 MB a file) from the **areas** in
 `map-sources/areas.json`. Each area's downloads are kept, gzipped, in
 `map-sources/<area>/` (committed), with the date they were fetched and the newest
 OSM edit in them, so rebuilding gives exactly the same map. OSM is edited every
@@ -244,7 +245,7 @@ They're listed in `src/map/maps.ts`, each with:
 
 - its sources: `map-sources/maps/<id>/`, with its own `areas.json` (areas, start, as
   Bristol's) and a folder an area, kept as Bristol's are;
-- its map: `src/map/<id>.json`, made by `npm run map -- --map <id>` (and `--refresh
+- its map: `src/map/<id>.json.gz`, made by `npm run map -- --map <id>` (and `--refresh
   <area>` as for Bristol);
 - its tiles: served from `map/<id>/` (Bristol's from `map/`), cut by `vite.config.ts`
   from every map that's been made;
@@ -277,7 +278,7 @@ same. Its credit's "© OpenStreetMap contributors · LIDAR © Welsh Government (
    readings alike), so the streets already in the game don't change.
 4. Look at it (zoomed out, and driving round at iPhone size) and check the
    numbers the tool prints. Add any landmarks or street looks to `landmarks.ts`.
-5. Commit `map-sources/`, `bristol.json` and any changes together.
+5. Commit `map-sources/`, `bristol.json.gz` and any changes together.
 
 The map's origin is the north-west corner of all the areas together, so adding
 an area to the north or west moves every coordinate, but nothing on the ground.
@@ -1888,7 +1889,7 @@ they're in the way of traffic and people too, when there are some.
 ## In tiles: only the map round you
 
 The game never holds the whole map, so the map can keep growing without the
-phone running out of memory. `bristol.json` isn't in the game's code. When the
+phone running out of memory. `bristol.json.gz` isn't in the game's code. When the
 game's built (and as it's asked for while developing), the `map-tiles` plugin
 in `vite.config.ts` cuts it up (`regions.ts`, pure, tested in
 `regions.test.ts`) into:
@@ -1897,7 +1898,7 @@ in `vite.config.ts` cuts it up (`regions.ts`, pure, tested in
   you start, the traffic lights' timings, the bus routes (their legs by the
   roads' ids), the ferries, and the terrain grid's shape.
 - `map/t/<i>_<j>.json`: one file per 500 m tile, holding what's in it, each
-  thing with its id (its place in `bristol.json`'s list). Anything long or wide
+  thing with its id (its place in `bristol.json.gz`'s list). Anything long or wide
   (a road, a building, a park) is in every tile it reaches into. Anything at a
   point (a tree, a lamp post) is in the one tile it's in. Each tile also holds
   its block of the terrain grid.
@@ -1961,8 +1962,8 @@ first, with the loading screen up.
 - `landmarks.ts`: landmarks' colours (and heights, roof shapes), and streets' looks;
   and the corrections (`CORRECTIONS`: King Street pedestrianised).
 - `enrich.ts`, `lidar.ts`, `osgb.ts`: the LIDAR and the terrain. Tested in `lidar.test.ts`.
-- `bristol.json`: the whole map, cut into tiles for the game (see "In tiles"); and the
-  other maps' (`llanidloes.json`), with `maps.ts` listing them (see "Other maps").
+- `bristol.json.gz`: the whole map, cut into tiles for the game (see "In tiles"); and the
+  other maps' (`llanidloes.json.gz`), with `maps.ts` listing them (see "Other maps").
 - `geotiff.ts`: reading Wales's LIDAR tiles. Tested in `geotiff.test.ts`.
 - `regions.ts`, `tileStore.ts`: the tiles, regions put together from them, and fetching them.
 - `../../tools/build-map.ts`: downloads, keeps and puts it all together.
