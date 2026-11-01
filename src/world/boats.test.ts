@@ -40,7 +40,9 @@ describe('boats', () => {
 
   it('finds a way across the harbour, under the bridges, and keeps off the land', () => {
     const grid = new WaterGrid(map, map.berths);
-    const [a, b] = [map.ferries![0].stops, map.ferries![map.ferries!.length - 1].stops];
+    // (From one end of the harbour's longest waterbus route to the other: not to a ferry on the tidal river, past Netham Lock.)
+    const route = [...map.ferries!].sort((x, y) => y.stops.length - x.stops.length)[0];
+    const [a, b] = [route.stops, route.stops];
     const from = grid.open(a[0], a[1], 12 * 8)!;
     const to = grid.open(b[b.length - 3], b[b.length - 2], 12 * 8)!;
     const way = grid.way(from[0], from[1], to[0], to[1])!;

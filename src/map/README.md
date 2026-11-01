@@ -35,10 +35,10 @@ downloaded again unless asked for (`npm run map -- --refresh <area>`).
 
 Each area's LIDAR alignment (`lidarShift`, metres east and south) is worked out
 the first time it's built (see "Lining up" below) and then kept in `areas.json`.
-The areas make a grid 13 wide and 14 deep, each about 970 m by 945 m (about 12.6 km by
-13.2 km in all; rows counted from the north, columns from the west, from the first
-nine columns and ten rows: the rows added to the north are rows 0, −1, −2 and −3, the
-columns added to the west columns 0, −1, −2 and −3): `cathedral` and the first 3 by 3 round
+The areas make a grid 15 wide and 16 deep, each about 970 m by 945 m (about 14.6 km by
+15.1 km in all; rows counted from the north, columns from the west, from the first
+nine columns and ten rows: the rows added to the north are rows 0 to −5, the columns
+added to the west columns 0 to −3, and to the east columns 10 and 11): `cathedral` and the first 3 by 3 round
 it, then a ring of 16 round those, then a ring of 24 round those (the "second ring"),
 then a third ring of 41: a row and a column more to the west, east and south, and two
 rows more to the north; then a fourth of 42: two rows more to the north (all eleven
@@ -48,7 +48,11 @@ to Long Ashton); then a fifth of 50: two rows more to the north (Avonmouth's doc
 and Severnside, Hallen, Cribbs Causeway, Patchway, the Brabazon on Filton airfield,
 Little Stoke) and two columns more to the west (the Severn's shore, Royal Portbury
 Dock, Easton-in-Gordano, Failand, down to Flax Bourton), named after a place or a
-landmark in each, from OSM (most of those in the country lined up as the others are:
+landmark in each, from OSM; then a sixth of 58: two rows more to the north, across
+all fifteen columns (the Severn's marshes, Severnside's works and Seabank power
+station, Easter Compton, Almondsbury, Bradley Stoke, the Wave), and two columns more
+to the east (Hambrook and Frenchay, Fishponds, Speedwell, Kingswood's edge, Hanham,
+down to Brislington's trading estates), named the same way (most of those in the country lined up as the others are:
 see "Lining up"). Their shifts (east, south):
 
 | Area | Where | Row, column | Shift |
@@ -235,6 +239,64 @@ see "Lining up"). Their shifts (east, south):
 | `showground` | fifth ring, west | 8, −3 | 0 m, 0 m |
 | `flaxbourton` | fifth ring, west | 9, −3 | 0 m, 1 m |
 | `theconygar` | fifth ring, west | 10, −3 | −1 m, 1 m |
+| `estuarynorth` | sixth ring, north | −4, −3 | 0 m, 0 m |
+| `gravelbanks` | sixth ring, north | −4, −2 | 0 m, 0 m |
+| `chitteningnorth` | sixth ring, north | −4, −1 | 0 m, 0 m |
+| `seabank` | sixth ring, north | −4, 0 | 1 m, 0.5 m |
+| `severnsidelpg` | sixth ring, north | −4, 1 | 0 m, 0 m |
+| `centralpark` | sixth ring, north | −4, 2 | 0 m, 0 m |
+| `comptongreenfield` | sixth ring, north | −4, 3 | 0.5 m, 0 m |
+| `eastercompton` | sixth ring, north | −4, 4 | 0.5 m, −0.5 m |
+| `withybed` | sixth ring, north | −4, 5 | 0 m, 0 m |
+| `patchwaynorth` | sixth ring, north | −4, 6 | −1 m, 0.5 m |
+| `pretoriaroad` | sixth ring, north | −4, 7 | 0.5 m, −0.5 m |
+| `mstherapycentre` | sixth ring, north | −4, 8 | −0.5 m, 0 m |
+| `communityorchard` | sixth ring, north | −4, 9 | −0.5 m, 0 m |
+| `waterpark` | sixth ring, north-east corner | −4, 10 | 0 m, 0 m |
+| `oldgloucesterroad` | sixth ring, north-east corner | −4, 11 | 0 m, 0 m |
+| `estuaryedge` | sixth ring, north | −5, −3 | 0 m, 0 m |
+| `severnsidemarsh` | sixth ring, north | −5, −2 | 0 m, 0 m |
+| `severnsidenorth` | sixth ring, north | −5, −1 | 0 m, 0 m |
+| `severnsidechemical` | sixth ring, north | −5, 0 | 0 m, 0 m |
+| `westernapproach` | sixth ring, north | −5, 1 | 0 m, 0 m |
+| `chep` | sixth ring, north | −5, 2 | 0 m, 0 m |
+| `washingpoolfarm` | sixth ring, north | −5, 3 | 0 m, 0 m |
+| `thewave` | sixth ring, north | −5, 4 | 0 m, 0 m |
+| `cattybrook` | sixth ring, north | −5, 5 | 0 m, 0 m |
+| `sandaysnursery` | sixth ring, north | −5, 6 | 1.5 m, 0 m |
+| `thequadrant` | sixth ring, north | −5, 7 | 1 m, −1.5 m |
+| `orpenpark` | sixth ring, north | −5, 8 | −0.5 m, −0.5 m |
+| `apexcourt` | sixth ring, north | −5, 9 | 0 m, 0 m |
+| `woodlandsgolf` | sixth ring, north-east corner | −5, 10 | 0 m, 0 m |
+| `perrinpitroad` | sixth ring, north-east corner | −5, 11 | 0 m, 0 m |
+| `vantagecourt` | sixth ring, east | −3, 10 | 0 m, 0 m |
+| `mulgrovefarmvillage` | sixth ring, east | −2, 10 | 1 m, 0.5 m |
+| `parkwaydepot` | sixth ring, east | −1, 10 | 0 m, 0 m |
+| `frenchaycricket` | sixth ring, east | 0, 10 | 1 m, 0.5 m |
+| `frenchaycommon` | sixth ring, east | 1, 10 | 0 m, 1 m |
+| `collegeroad` | sixth ring, east | 2, 10 | 0.5 m, 0.5 m |
+| `balaclava` | sixth ring, east | 3, 10 | 0.5 m, 0.5 m |
+| `speedwell` | sixth ring, east | 4, 10 | 0.5 m, 0.5 m |
+| `thefarm` | sixth ring, east | 5, 10 | 0 m, 0.5 m |
+| `conham` | sixth ring, east | 6, 10 | 0 m, 0.5 m |
+| `dundridgepark` | sixth ring, east | 7, 10 | 0 m, 0 m |
+| `brislingtontrading` | sixth ring, east | 8, 10 | 0.5 m, 0 m |
+| `oldredcliffians` | sixth ring, east | 9, 10 | 0.5 m, 0 m |
+| `scotlandbottom` | sixth ring, east | 10, 10 | 0 m, 0 m |
+| `ferndalefarm` | sixth ring, east | −3, 11 | 0 m, 0 m |
+| `greatliveleys` | sixth ring, east | −2, 11 | 0 m, 0 m |
+| `hambrook` | sixth ring, east | −1, 11 | 0.5 m, 0 m |
+| `streamsidefarm` | sixth ring, east | 0, 11 | 0 m, 0 m |
+| `frenchaypark` | sixth ring, east | 1, 11 | 0.5 m, 0.5 m |
+| `goffentondrive` | sixth ring, east | 2, 11 | 0 m, 0.5 m |
+| `eclipseoffice` | sixth ring, east | 3, 11 | 0 m, 0 m |
+| `gbbritton` | sixth ring, east | 4, 11 | 0 m, 0.5 m |
+| `watersroad` | sixth ring, east | 5, 11 | 0 m, 0 m |
+| `hope` | sixth ring, east | 6, 11 | 0 m, 0 m |
+| `hanhamhall` | sixth ring, east | 7, 11 | −0.5 m, 0 m |
+| `hanhamcricketclub` | sixth ring, east | 8, 11 | −0.5 m, 0.5 m |
+| `devonporthouse` | sixth ring, east | 9, 11 | 0 m, 0 m |
+| `brookleaze` | sixth ring, east | 10, 11 | 0.5 m, 0.5 m |
 
 ## Other maps
 
@@ -1043,8 +1105,11 @@ front and back) or fire engines (red, a ladder on top).
   over to the kerb; not round traffic it can't get past before its lane ends (it'd be
   out on the wrong side still, turning, across it: it waits), though round something
   that's not going anywhere all the same; back in once past and there's room. Traffic ahead with one coming
-  up behind it (within 45 m) pulls over to the kerb and slows right down; people get
-  out of its way as from you.
+  up behind it (within 45 m) pulls over to the kerb and slows right down (but, where
+  the one on a call is coming up the lane inside it, on a road of two lanes or more its
+  way, it pulls over to the right, out of its way; nor is it passed on the side it's
+  pulling over to); people get out of its way as from you. One leaving its post waits
+  to pull out while anything on the move is coming up to it (within 45 m).
 - Its siren's heard up to 260 m away (the nearest one): a police car's wail, an
   ambulance's or a fire engine's two tones. You can take any of them and drive it.
 - **The army's vehicles** (parked at its bases: see Places), any of them yours to take: a

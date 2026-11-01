@@ -2917,6 +2917,934 @@
         -1,
         1
       ]
+    },
+    {
+      "name": "estuarynorth",
+      "about": "About 970 m by 945 m (sixth ring, north: row -4, column -3), named after the Severn estuary.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.7195,
+        "maxlat": 51.541,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "gravelbanks",
+      "about": "About 970 m by 945 m (sixth ring, north: row -4, column -2), named after Gravel Banks.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.7055,
+        "maxlat": 51.541,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-21T16:04:33Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "chitteningnorth",
+      "about": "About 970 m by 945 m (sixth ring, north: row -4, column -1), named after Chittening Industrial Estate.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.6915,
+        "maxlat": 51.541,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-21T16:04:33Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "seabank",
+      "about": "About 970 m by 945 m (sixth ring, north: row -4, column 0), named after Seabank Power Station.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.6775,
+        "maxlat": 51.541,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-09T15:07:16Z",
+      "lidarShift": [
+        1,
+        0.5
+      ]
+    },
+    {
+      "name": "severnsidelpg",
+      "about": "About 970 m by 945 m (sixth ring, north: row -4, column 1), named after Avonmouth LPG Storage Facility.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.6635,
+        "maxlat": 51.541,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-09-19T16:03:17Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "centralpark",
+      "about": "About 970 m by 945 m (sixth ring, north: row -4, column 2), named after Central Park Distribution Park.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.6495,
+        "maxlat": 51.541,
+        "maxlon": -2.6355
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T11:55:14Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "comptongreenfield",
+      "about": "About 970 m by 945 m (sixth ring, north: row -4, column 3), named after Compton Greenfield.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.6355,
+        "maxlat": 51.541,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T17:50:50Z",
+      "lidarShift": [
+        0.5,
+        0
+      ]
+    },
+    {
+      "name": "eastercompton",
+      "about": "About 970 m by 945 m (sixth ring, north: row -4, column 4), named after Easter Compton playing fields and playground.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.6215,
+        "maxlat": 51.541,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T17:50:50Z",
+      "lidarShift": [
+        0.5,
+        -0.5
+      ]
+    },
+    {
+      "name": "withybed",
+      "about": "About 970 m by 945 m (sixth ring, north: row -4, column 5), named after Withy Bed.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.6075,
+        "maxlat": 51.541,
+        "maxlon": -2.5935
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-27T21:20:29Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "patchwaynorth",
+      "about": "About 970 m by 945 m (sixth ring, north: row -4, column 6), named after Patchway Trading Estate.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.5935,
+        "maxlat": 51.541,
+        "maxlon": -2.5795
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-29T01:55:50Z",
+      "lidarShift": [
+        -1,
+        0.5
+      ]
+    },
+    {
+      "name": "pretoriaroad",
+      "about": "About 970 m by 945 m (sixth ring, north: row -4, column 7), named after Pretoria Road Allotment Site.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.5795,
+        "maxlat": 51.541,
+        "maxlon": -2.5655
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-11-01T12:19:18Z",
+      "lidarShift": [
+        0.5,
+        -0.5
+      ]
+    },
+    {
+      "name": "mstherapycentre",
+      "about": "About 970 m by 945 m (sixth ring, north: row -4, column 8), named after West of England MS Therapy Centre.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.5655,
+        "maxlat": 51.541,
+        "maxlon": -2.5515
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-29T01:55:50Z",
+      "lidarShift": [
+        -0.5,
+        0
+      ]
+    },
+    {
+      "name": "communityorchard",
+      "about": "About 970 m by 945 m (sixth ring, north: row -4, column 9), named after Community Orchard.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.5515,
+        "maxlat": 51.541,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-31T00:30:37Z",
+      "lidarShift": [
+        -0.5,
+        0
+      ]
+    },
+    {
+      "name": "waterpark",
+      "about": "About 970 m by 945 m (sixth ring, north-east corner: row -4, column 10), named after West Country Water Park.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.5375,
+        "maxlat": 51.541,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T11:55:14Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "oldgloucesterroad",
+      "about": "About 970 m by 945 m (sixth ring, north-east corner: row -4, column 11), named after Old Gloucester Road.",
+      "bounds": {
+        "minlat": 51.5325,
+        "minlon": -2.5235,
+        "maxlat": 51.541,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-18T17:32:56Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "estuaryedge",
+      "about": "About 970 m by 945 m (sixth ring, north: row -5, column -3), named after the Severn estuary.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.7195,
+        "maxlat": 51.5495,
+        "maxlon": -2.7055
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-08-25T22:42:18Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "severnsidemarsh",
+      "about": "About 970 m by 945 m (sixth ring, north: row -5, column -2), named after the marshes by the Severn.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.7055,
+        "maxlat": 51.5495,
+        "maxlon": -2.6915
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-17T15:19:31Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "severnsidenorth",
+      "about": "About 970 m by 945 m (sixth ring, north: row -5, column -1), named after the marshes by the Severn.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.6915,
+        "maxlat": 51.5495,
+        "maxlon": -2.6775
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-21T16:04:33Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "severnsidechemical",
+      "about": "About 970 m by 945 m (sixth ring, north: row -5, column 0), named after Severnside Chemical Works.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.6775,
+        "maxlat": 51.5495,
+        "maxlon": -2.6635
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-27T21:20:29Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "westernapproach",
+      "about": "About 970 m by 945 m (sixth ring, north: row -5, column 1), named after Western Approach Business Park.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.6635,
+        "maxlat": 51.5495,
+        "maxlon": -2.6495
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-31T00:30:34Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "chep",
+      "about": "About 970 m by 945 m (sixth ring, north: row -5, column 2), named after CHEP.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.6495,
+        "maxlat": 51.5495,
+        "maxlon": -2.6355
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-31T00:30:34Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "washingpoolfarm",
+      "about": "About 970 m by 945 m (sixth ring, north: row -5, column 3), named after Washingpool Farm.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.6355,
+        "maxlat": 51.5495,
+        "maxlon": -2.6215
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T17:50:50Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "thewave",
+      "about": "About 970 m by 945 m (sixth ring, north: row -5, column 4), named after The Wave.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.6215,
+        "maxlat": 51.5495,
+        "maxlon": -2.6075
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-09-24T16:37:48Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "cattybrook",
+      "about": "About 970 m by 945 m (sixth ring, north: row -5, column 5), named after Cattybrook.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.6075,
+        "maxlat": 51.5495,
+        "maxlon": -2.5935
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-05T17:55:21Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "sandaysnursery",
+      "about": "About 970 m by 945 m (sixth ring, north: row -5, column 6), named after Sanday's Nursery.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.5935,
+        "maxlat": 51.5495,
+        "maxlon": -2.5795
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-25T19:20:26Z",
+      "lidarShift": [
+        1.5,
+        0
+      ]
+    },
+    {
+      "name": "thequadrant",
+      "about": "About 970 m by 945 m (sixth ring, north: row -5, column 7), named after The Quadrant.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.5795,
+        "maxlat": 51.5495,
+        "maxlon": -2.5655
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-11-01T12:19:32Z",
+      "lidarShift": [
+        1,
+        -1.5
+      ]
+    },
+    {
+      "name": "orpenpark",
+      "about": "About 970 m by 945 m (sixth ring, north: row -5, column 8), named after Orpen Park.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.5655,
+        "maxlat": 51.5495,
+        "maxlon": -2.5515
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-31T00:30:34Z",
+      "lidarShift": [
+        -0.5,
+        -0.5
+      ]
+    },
+    {
+      "name": "apexcourt",
+      "about": "About 970 m by 945 m (sixth ring, north: row -5, column 9), named after Apex Court.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.5515,
+        "maxlat": 51.5495,
+        "maxlon": -2.5375
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T11:55:14Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "woodlandsgolf",
+      "about": "About 970 m by 945 m (sixth ring, north-east corner: row -5, column 10), named after Woodlands Golf & Country Club.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.5375,
+        "maxlat": 51.5495,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-09-19T16:03:17Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "perrinpitroad",
+      "about": "About 970 m by 945 m (sixth ring, north-east corner: row -5, column 11), named after Perrinpit Road.",
+      "bounds": {
+        "minlat": 51.541,
+        "minlon": -2.5235,
+        "maxlat": 51.5495,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-03-20T14:25:43Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "vantagecourt",
+      "about": "About 970 m by 945 m (sixth ring, east: row -3, column 10), named after Vantage Court Office Park.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.5375,
+        "maxlat": 51.5325,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T11:55:14Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "mulgrovefarmvillage",
+      "about": "About 970 m by 945 m (sixth ring, east: row -2, column 10), named after Mulgrove Farm Village.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.5375,
+        "maxlat": 51.524,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T11:55:14Z",
+      "lidarShift": [
+        1,
+        0.5
+      ]
+    },
+    {
+      "name": "parkwaydepot",
+      "about": "About 970 m by 945 m (sixth ring, east: row -1, column 10), named after Network Rail Bristol Parkway Depot.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.5375,
+        "maxlat": 51.5155,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T11:55:14Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "frenchaycricket",
+      "about": "About 970 m by 945 m (sixth ring, east: row 0, column 10), named after Frenchay Cricket Club.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.5375,
+        "maxlat": 51.507,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T11:55:14Z",
+      "lidarShift": [
+        1,
+        0.5
+      ]
+    },
+    {
+      "name": "frenchaycommon",
+      "about": "About 970 m by 945 m (sixth ring, east: row 1, column 10), named after Frenchay Common.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.5375,
+        "maxlat": 51.4985,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-31T00:30:34Z",
+      "lidarShift": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "collegeroad",
+      "about": "About 970 m by 945 m (sixth ring, east: row 2, column 10), named after College Road Allotments.",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.5375,
+        "maxlat": 51.49,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-31T00:30:34Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "balaclava",
+      "about": "About 970 m by 945 m (sixth ring, east: row 3, column 10), named after Balaclava Industrial Estate.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.5375,
+        "maxlat": 51.4815,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-31T00:30:34Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "speedwell",
+      "about": "About 970 m by 945 m (sixth ring, east: row 4, column 10), named after Speedwell.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.5375,
+        "maxlat": 51.473,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-11-01T13:07:42Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "thefarm",
+      "about": "About 970 m by 945 m (sixth ring, east: row 5, column 10), named after The Farm.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.5375,
+        "maxlat": 51.4645,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-11-01T13:07:42Z",
+      "lidarShift": [
+        0,
+        0.5
+      ]
+    },
+    {
+      "name": "conham",
+      "about": "About 970 m by 945 m (sixth ring, east: row 6, column 10), named after Conham.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.5375,
+        "maxlat": 51.456,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-11-01T13:07:42Z",
+      "lidarShift": [
+        0,
+        0.5
+      ]
+    },
+    {
+      "name": "dundridgepark",
+      "about": "About 970 m by 945 m (sixth ring, east: row 7, column 10), named after Dundridge Park Recreation Ground.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.5375,
+        "maxlat": 51.4475,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T12:43:02Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "brislingtontrading",
+      "about": "About 970 m by 945 m (sixth ring, east: row 8, column 10), named after Brislington Trading Estate.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.5375,
+        "maxlat": 51.439,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T12:39:59Z",
+      "lidarShift": [
+        0.5,
+        0
+      ]
+    },
+    {
+      "name": "oldredcliffians",
+      "about": "About 970 m by 945 m (sixth ring, east: row 9, column 10), named after Old Redcliffians RFC.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.5375,
+        "maxlat": 51.4305,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-11-01T13:07:42Z",
+      "lidarShift": [
+        0.5,
+        0
+      ]
+    },
+    {
+      "name": "scotlandbottom",
+      "about": "About 970 m by 945 m (sixth ring, east: row 10, column 10), named after Scotland Bottom.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.5375,
+        "maxlat": 51.422,
+        "maxlon": -2.5235
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-31T14:35:33Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "ferndalefarm",
+      "about": "About 970 m by 945 m (sixth ring, east: row -3, column 11), named after Ferndale Farm.",
+      "bounds": {
+        "minlat": 51.524,
+        "minlon": -2.5235,
+        "maxlat": 51.5325,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-04-26T10:03:50Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "greatliveleys",
+      "about": "About 970 m by 945 m (sixth ring, east: row -2, column 11), named after Great Liveleys.",
+      "bounds": {
+        "minlat": 51.5155,
+        "minlon": -2.5235,
+        "maxlat": 51.524,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T11:55:14Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "hambrook",
+      "about": "About 970 m by 945 m (sixth ring, east: row -1, column 11), named after Hambrook.",
+      "bounds": {
+        "minlat": 51.507,
+        "minlon": -2.5235,
+        "maxlat": 51.5155,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T11:55:14Z",
+      "lidarShift": [
+        0.5,
+        0
+      ]
+    },
+    {
+      "name": "streamsidefarm",
+      "about": "About 970 m by 945 m (sixth ring, east: row 0, column 11), named after Streamside Farm.",
+      "bounds": {
+        "minlat": 51.4985,
+        "minlon": -2.5235,
+        "maxlat": 51.507,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T11:55:14Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "frenchaypark",
+      "about": "About 970 m by 945 m (sixth ring, east: row 1, column 11), named after Frenchay Park.",
+      "bounds": {
+        "minlat": 51.49,
+        "minlon": -2.5235,
+        "maxlat": 51.4985,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-24T16:19:02Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "goffentondrive",
+      "about": "About 970 m by 945 m (sixth ring, east: row 2, column 11), named after Goffenton Drive Allotments.",
+      "bounds": {
+        "minlat": 51.4815,
+        "minlon": -2.5235,
+        "maxlat": 51.49,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-20T12:21:30Z",
+      "lidarShift": [
+        0,
+        0.5
+      ]
+    },
+    {
+      "name": "eclipseoffice",
+      "about": "About 970 m by 945 m (sixth ring, east: row 3, column 11), named after Eclipse Office Park.",
+      "bounds": {
+        "minlat": 51.473,
+        "minlon": -2.5235,
+        "maxlat": 51.4815,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-24T16:19:02Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "gbbritton",
+      "about": "About 970 m by 945 m (sixth ring, east: row 4, column 11), named after GB Britton Bowls Club.",
+      "bounds": {
+        "minlat": 51.4645,
+        "minlon": -2.5235,
+        "maxlat": 51.473,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-11-01T13:07:42Z",
+      "lidarShift": [
+        0,
+        0.5
+      ]
+    },
+    {
+      "name": "watersroad",
+      "about": "About 970 m by 945 m (sixth ring, east: row 5, column 11), named after Waters Road Allotments.",
+      "bounds": {
+        "minlat": 51.456,
+        "minlon": -2.5235,
+        "maxlat": 51.4645,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-31T00:30:37Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "hope",
+      "about": "About 970 m by 945 m (sixth ring, east: row 6, column 11), named after Hope.",
+      "bounds": {
+        "minlat": 51.4475,
+        "minlon": -2.5235,
+        "maxlat": 51.456,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-11-01T13:07:42Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "hanhamhall",
+      "about": "About 970 m by 945 m (sixth ring, east: row 7, column 11), named after Hanham Hall.",
+      "bounds": {
+        "minlat": 51.439,
+        "minlon": -2.5235,
+        "maxlat": 51.4475,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-25T20:49:31Z",
+      "lidarShift": [
+        -0.5,
+        0
+      ]
+    },
+    {
+      "name": "hanhamcricketclub",
+      "about": "About 970 m by 945 m (sixth ring, east: row 8, column 11), named after Hanham Cricket Club.",
+      "bounds": {
+        "minlat": 51.4305,
+        "minlon": -2.5235,
+        "maxlat": 51.439,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-30T12:39:59Z",
+      "lidarShift": [
+        -0.5,
+        0.5
+      ]
+    },
+    {
+      "name": "devonporthouse",
+      "about": "About 970 m by 945 m (sixth ring, east: row 9, column 11), named after Devonport House.",
+      "bounds": {
+        "minlat": 51.422,
+        "minlon": -2.5235,
+        "maxlat": 51.4305,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-11-01T13:07:42Z",
+      "lidarShift": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "brookleaze",
+      "about": "About 970 m by 945 m (sixth ring, east: row 10, column 11), named after Brookleaze Trading Estate.",
+      "bounds": {
+        "minlat": 51.4135,
+        "minlon": -2.5235,
+        "maxlat": 51.422,
+        "maxlon": -2.5095
+      },
+      "fetched": "2026-11-01",
+      "osmNewestEdit": "2026-10-31T14:35:33Z",
+      "lidarShift": [
+        0.5,
+        0.5
+      ]
     }
   ]
 }

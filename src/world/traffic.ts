@@ -998,6 +998,8 @@ const POST_EVERY: [number, number] = [10, 28];
 const POST_FROM: [number, number] = [80 * M, 260 * M];
 const POST_PLACES: Record<'police' | 'fire' | 'ambulance' | 'emergency' | 'taxi', number> = { police: 5, fire: 3, ambulance: 3, emergency: 6, taxi: 4 };
 const POST_FILLED = 0.7;
+/** One pulling out from its post waits for anything on the move coming up to it this near, px. */
+const PULL_OUT_CLEAR = 45 * M;
 const SIREN = 0.8;
 const SIREN_TOP = 20 * M;
 /**
@@ -1785,9 +1787,24 @@ export class Traffic {
       if (post.timer > 0) continue;
       post.timer = POST_EVERY[0] + this.rand() * (POST_EVERY[1] - POST_EVERY[0]);
       const free = post.spots.filter((p) => p.taken === null);
-      if (parked.length && (this.rand() < 0.5 || !free.length)) this.callOut(parked[Math.floor(this.rand() * parked.length)]);
+      if (parked.length && (this.rand() < 0.5 || !free.length)) {
+        // (Not out in front of something coming: it waits for the next time.)
+        const v = parked[Math.floor(this.rand() * parked.length)];
+        if (this.clearToPullOut(v)) this.callOut(v);
+      }
       else if (free.length) this.callIn(i, free[Math.floor(this.rand() * free.length)], view);
     }
+  }
+
+  /** Whether a vehicle at the kerb can pull out: nothing on the move coming up to it, within PULL_OUT_CLEAR (nor anything right by it). */
+  private clearToPullOut(v: Vehicle): boolean {
+    for (const o of this.vehicles) {
+      const [dx, dy] = [v.x - o.x, v.y - o.y];
+      const d = Math.hypot(dx, dy);
+      if (d < (v.length + o.length) / 2 + 2 * M) return false;
+      if (d < PULL_OUT_CLEAR && o.speed > 1 * M && Math.cos(o.angle) * dx + Math.sin(o.angle) * dy > 0) return false;
+    }
+    return true;
   }
 
   /** Off from its post: out from the kerb, and away (mostly on a call: blue lights, siren). */
@@ -2748,9 +2765,11 @@ export class Traffic {
     if (lane && lane.length - v.s < need && !this.obstructs(b)) return;
     // Out to the right first (the other side of the road), else left (the pavement); a little, then further.
     // (Not up the inside of something moving over to the kerb: pulling over for it, or in to park.)
-    const kerbward = b.parking || b.sideRate > 0.2 * M || (!b.siren && this.yieldingTo(b));
+    // (Nor round the right of something pulling over to the right for it, on a road of two lanes or more.)
+    const yielding = b.siren ? 0 : this.yieldSide(b);
+    const kerbward = b.parking || b.sideRate > 0.2 * M || yielding > 0;
     for (const out of [3.4 * M, -2.8 * M, 6.4 * M, -4 * M]) {
-      if ((out < 0 && kerbward) || !this.wayClear(v, -out, need, obstacles)) continue;
+      if ((out < 0 && kerbward) || (out > 0 && yielding < 0) || !this.wayClear(v, -out, need, obstacles)) continue;
       v.passing = { id: b.id, out };
       this.stats.overtakes++;
       return;
@@ -2805,15 +2824,24 @@ export class Traffic {
   }
 
   private yieldingTo(v: Vehicle): boolean {
-    if (!this.sirens.length) return false;
+    return this.yieldSide(v) !== 0;
+  }
+
+  /**
+   * Which way it pulls over for one on a call coming up behind: to the left (1, the kerb), or, the one on a call coming up
+   * its left (in the lane inside it, on a road of more than one lane its way), to the right (-1), out of its way; 0, none.
+   */
+  private yieldSide(v: Vehicle): number {
+    if (!this.sirens.length) return 0;
     const [cx, cy] = [Math.cos(v.angle), Math.sin(v.angle)];
     for (const o of this.sirens) {
       if (o === v || o.level !== v.level) continue;
       const back = (v.x - o.x) * cx + (v.y - o.y) * cy;
-      const across = Math.abs(-(v.x - o.x) * cy + (v.y - o.y) * cx);
-      if (back > 0 && back < YIELD_AT && across < 4 * M && Math.cos(o.angle - v.angle) > 0.6) return true;
+      // (How far it's over to the left of this one: + its left, as `side` goes.)
+      const left = (o.x - v.x) * cy - (o.y - v.y) * cx;
+      if (back > 0 && back < YIELD_AT && Math.abs(left) < 4 * M && Math.cos(o.angle - v.angle) > 0.6) return left > 1 * M ? -1 : 1;
     }
-    return false;
+    return 0;
   }
 
   /** Into the lane beside: it carries on along that one, from level with where it is (it moves over to it smoothly, its offset taken up). */
@@ -2898,7 +2926,7 @@ export class Traffic {
     if (v.passing) want = -v.passing.out;
     // On a call, round things quickly; and out of its way, over to the kerb, if it's coming up behind.
     if (v.siren && v.passing) rate = WEAVE_RATE;
-    else if (!v.bus && v.kind !== 'bike' && !v.siren && lane && this.yieldingTo(v)) [want, rate] = [0.9 * M, SIDLE];
+    else if (!v.bus && v.kind !== 'bike' && !v.siren && lane && this.yieldingTo(v)) [want, rate] = [0.9 * M * this.yieldSide(v), SIDLE];
     // Pulling in to its place at its post.
     if (v.parking && v.spot) [want, rate] = [v.spot.off, SIDLE];
     // A cyclist: over in the cycle lane, or near the kerb (through a turn, as they were).

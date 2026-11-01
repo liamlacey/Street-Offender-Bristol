@@ -107,7 +107,8 @@ describe('emergency services', () => {
     for (const start of [1, 2, 3]) {
       let seed = start;
       const traffic = new Traffic(map, { rand: () => (seed = (seed * 16807) % 2147483647) / 2147483647 });
-      const post = traffic.posts.find((p) => p.service.name === 'Bristol Royal Infirmary')!;
+      // (St Michael's: its ambulances' ways out are busy enough to be held up on; the Infirmary's, along the main roads, aren't.)
+      const post = traffic.posts.find((p) => p.service.name === "St Michael's Hospital")!;
       const player = { x: post.x + 40 * M, y: post.y + 40 * M, heading: 0, vx: 0, vy: 0, level: 0, length: 38, width: 18 };
       const view = { x0: post.x - 300, y0: post.y - 140, x1: post.x + 300, y1: post.y + 140 };
       for (let t = 0; t < 150; t += 1 / 30) {
